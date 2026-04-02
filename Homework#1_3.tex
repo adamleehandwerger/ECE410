@@ -1,0 +1,31 @@
+\documentclass[11pt]{article}
+\usepackage{nopageno}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{natbib}
+\usepackage{graphicx}
+
+\title{2. Iris Dataset Set Analysis Using a Voronoi Classifier}
+
+\begin{document}
+The Iris data set is a widely distributed collection of data pertaining to three common varieties of Iris,
+I. setosa, I. versicolor, and I. virginica. For each subspecies, four features where measured:
+sepal length, sepal width, petal length and petal width.
+
+Results: First, a linear classification of the setosa vs versicolor was implimented. The sepal length
+is plot against sepal width, petal length, and petal width. Then the sepal length vs sepal width is used to
+classify using both the Gaussian and Sinc kernels. The following is a table of errors determined for each plot.
+\begin{table}
+\caption{Classification Error on Test Data for each Plot (I. setosa vs I. versicolor)}
+\begin{tabular}{c c}
+\hline
+Plot      Percent Error \\
+\hline
+1           0
+2           5
+3           10
+4           0
+5           10
+
+\includegraphics{Euclidean_Voronoi_diagram.png}
+Balu Ertl, CC BY-SA 4.0 <https://creativecommons.org/licenses/by-sa/4.0>, via Wikimedia Commons
+\end{document}

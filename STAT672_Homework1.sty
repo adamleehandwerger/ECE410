@@ -1,0 +1,59 @@
+\documentclass[18pt]{article}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{natbib}
+\usepackage{booktabs}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amssymb}
+\usepackage[version=4]{mhchem}
+\usepackage{stmaryrd}
+\usepackage{bbold}
+\usepackage{nopageno}
+\usepackage{hyperref}
+\usepackage{bookmark}
+\author{Adam Handwerger}
+\pagestyle{plain}
+
+\begin{document}
+\begin{flushleft}
+Exercise 1
+Let V be a subspace of dimension d of a Hilbert space H. Show that the projection of\\
+$x \in \mathbb{R}^p$ onto V can be written as\\
+\vspace{.4cm}
+$$
+\pi_v(x)=\sum\limits_{i=1}^d \langle x_i,v_i \rangle v_i
+$$
+\vspace{.4cm}
+where $v_i$ for an orthonormal basis for V.
+\vspace{.4cm}
+The following properties hold for V:
+1. If $x\in V,\pi_V(x)=x$\\
+2. For any v\in V,x \in \mathbb{R}^p, \langle x-\pi_V(x),v\rangle=0
+\vspace{.4cm}
+Proof: Let $v_i$ be a orthonomal basis,B for V. Since $pi_V(x)\in V, \pi_V(x) can be written as\\
+$$
+\pi_V(x)=\sum\limits_i \alpha_i v_i\\
+$$
+for $alpha_i \in \mathbb{R}$.\\
+\vspace{.4cm}
+Then by property 2 and for element $$v_j \in B$ we have\\
+\vspace{.4cm}
+$\langle x-\sum\limits_i \alpha_i v_i,v_j \rangle=0 \implies\\$
+$\langle x,v_j \rangle=\langle \sum_i \alpha_i v_i,v_j\rangle=\sum_i \alpha_i \langle v_i,v_j \rangle=\sum_i alpha_i delta_{ij}=\alpha_j\\$
+\vspace{.4cm}
+Thus $alpha_j=\langle x,v_j \rangle. Hence
+$$
+\pi_V(x)=\sum\limits_i \alpha_i v_i=\sum\limits_i \langle x,v_j \rangle v_j
+$$
+
+
+
+
+
+
+
+
+
+
+\end{flushleft}
+\end{document}

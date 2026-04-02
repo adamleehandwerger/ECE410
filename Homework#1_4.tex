@@ -1,0 +1,37 @@
+\documentclass[18pt]{article}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{natbib}
+\usepackage{booktabs}
+\usepackage{stmaryrd}
+\usepackage{bbold}
+\usepackage{nopageno}
+\usepackage{bookmark}
+\pagestyle{plain}
+
+\begin{document}
+\begin{flushleft}
+    
+
+4 Perceptron
+
+\vspace{.5cm}
+1. (a) Since $f = w^{\top} x$ and writing $w=\sum \alpha_i x_i$ imples that\\
+$f = \sum \alpha_i \langle x_i, x \rangle$\\
+\vspace{.5cm}
+(b) Since update for the unkernelized update is $ w \leftarrow w+y_i x_i$ with\\
+$w = \sum \alpha_i x_i$ on the jth iteration the update becomes $\sum_i^{j-1} \alpha_i x_i+y_j x_j$.\\
+This imples that $\alpha \longleftarrow \alpha + y_j$ or in the code below if $\alpha_i^{\prime} y_i := \alpha_i$\\
+then $\alpha^{\prime}$ is the vector of mismatches that occur for point $x_i$ as the \\
+algorithm evolves.\\
+\vspace{.5cm}
+(c) For the kernelized version the calculation of $f(x)$ becomes\\
+\vspace{.5cm}
+$f = \sum \alpha_i \langle x_i, x \rangle\longmapsto \sum \alpha_i K(x_i,x)$\\
+\vspace{.5cm}
+instead of $f=w^{\top}x$.\\
+\vspace{.5cm}
+2. The code and subsequent plots are below.
+
+\end{flushleft}
+
+\end{document}

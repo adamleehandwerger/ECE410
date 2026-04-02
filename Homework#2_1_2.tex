@@ -1,0 +1,49 @@
+\documentclass[18pt]{article}
+\usepackage{geometry}
+\geometry{top=2cm}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{natbib}
+\usepackage{booktabs}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amssymb}
+\usepackage[version=4]{mhchem}
+\usepackage{stmaryrd}
+\usepackage{bbold}
+\usepackage{nopageno}
+\usepackage{hyperref}
+\usepackage{bookmark}
+\author{Adam Handwerger}
+\pagestyle{plain}
+
+\begin{document}
+\begin{flushleft}
+2. Let $(\Omega,\mathcal{A}, P)$ be a probability space\\
+\vspace{.4cm}
+(a) Show that for any two events $A,B\in \mathcal{A}$,\\
+$K(A,B)=P(A \cap B)$ is pos. definite.\\
+\vspace{.4cm}
+Choose $(\alpha_1,\dots,\alpha_n) \in \mathbb{R}^n$. Then\\
+\vspace{.4cm}
+$\sum_{ij}^n \alpha_i \alpha_j K(x_i,x_j)=\sum_{ij}^n \alpha_i \alpha_j P(A_i \cap A_j)=$\\
+$\sum_{ij}^n \alpha_i \alpha_j E(\mathbb{I}_{A_i} \mathbb{I}_{A_j})=E\left( \left(\sum_i \alpha_i \mathbb{I}_{A_i}\right)\left(\sum_j \alpha_j \mathbb{I}_{A_j}\right)\right)=$\\
+$E\left( \left(\sum_k \alpha_k \mathbb{I}_{A_k} \right)^2 \right) \geq 0$\\
+\vspace{.4cm}
+(b) Show that $K(A,B)=P(A \cap B)- P(A)P(B)$ is also pos. definite.\\
+\vspace{.4cm}
+Let $A=(A_1, A_2, ... A_n)$ be a vector of events.
+$\sum_{ij} \alpha_i \alpha_j\left( P(A \cap B)- P(A)P(B)\right) =\sum_{ij} \alpha_i \alpha_j E(\mathbb{I}_{A \cup  B})=$\\
+$\sum_{ij} \alpha_i \alpha_j \left(E(\mathbb{I}_{A_i} \mathbb{I}_{A_j} )- E(\mathbb{I}_{A_i}) E(\mathbb{I}_{A_j})\right)=$\\
+$\sum_{ij} \alpha_i \alpha_j Cov \left(\mathbb{I}_{A_i}(\omega),\mathbb{I}_{A_j}(\omega)\right)$\\
+\vspace{.4cm}
+where $\mathbb{I}_{A}(\omega)=1$ if $\omega\in A$ and $\mathbb{I}_{A}(\omega)= 0$, otherwise. Furthermore\\
+\vspace{.4cm}
+$\sum_{ij} \alpha_i \alpha_j Cov \left(\mathbb{I}_{A_i}(\omega),\mathbb{I}_{A_j}(\omega)\right)=$\\
+$\sum \alpha_i^2 Var(\mathbb{I}_{A_i}(\omega))+2 \sum_{i,j|i<j} \alpha_i \alpha_j Cov\left(\mathbb{I}_{A_i}(\omega),\mathbb{I}_{A_j}(\omega)\right)=$\\
+$\sum_i^n Var(\mathbb{I}_{A_i}(\omega)) \geq 0$.
+
+\vspace{.4cm}
+
+\end{flushleft}
+\end{document}
+

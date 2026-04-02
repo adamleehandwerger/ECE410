@@ -1,0 +1,50 @@
+\documentclass[18pt]{article}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{natbib}
+\usepackage{booktabs}
+\usepackage{stmaryrd}
+\usepackage{bbold}
+\usepackage{nopageno}
+\usepackage{bookmark}
+\usepackage{pdfpages}
+\usepackage[bb=boondox]{mathalfa}
+\pagestyle{plain}
+
+\begin{document}
+\begin{flushleft}
+4. Show that $k(A,B)=|A \cap B| \frac{1}{|A \cup B|}$ is p.d.\\
+\vspace{.4cm}
+Using the shorthand $\sum \equiv \sum\limits_{k}^{n}$ we procede as follows:\\
+For the case that $k(A,B)=|A \cap B| \frac{1}{|A \cup B|}$ we assume that $ A \cup B\neq \emptyset$\\
+\vspace{.4cm}
+To show that K is p.d it is suffient to show that$\frac{1}{|A \cup B|}$ is p.d. since have shown that\\
+$|A \cap B|$ is p.d. earlier.
+\vspace{.4cm}
+Then we can write\\
+\vspace{.3cm}
+$k(A,B)=\dfrac{\sum \mathbb{1}_{A}\cdot \mathbb{1}_{B}}{\sum \left(\mathbb{1}_{A}+\mathbb{1}_{B}-\mathbb{1}_{A}\cdot\mathbb{1}_{B}\right)}=D \left(\dfrac{1}{1-D}\right)$\\
+\vspace{.3cm}
+with $D\equiv\dfrac{\sum \mathbb{1}_{A}\cdot\mathbb{1}_{B}}{\sum(\mathbb{1}_{A} + \mathbb{1}_{B})}$\\
+\vspace{.4cm}
+$A \cup B\neq \emptyset$ implies that at least one $x_i \in A$ or $x_i \in B$.\\
+\vspace{.3cm}
+case 1: All the points are in either A and not B or visa vera. Then $D=0\implies k(A,B)=0$\\
+\vspace{.3cm}
+case 2: All the points are in $A \cap B \implies D=2\dfrac{n}{(n+n)}=1 \implies k(A,b)=1$\\
+\vspace{.3cm}
+case 3: D is such that $0< D<1$.\\
+\vspace{.4cm}
+In this case we can make use of the geometric series which allows D to be expressed as\\
+\vspace{.3cm}
+$k=D \left(\dfrac{1}{1-D}\right)=D \left(1+D+D^2+\cdots\right)$.\\
+\vspace{.3cm}
+Since the product of p.d. kernels is also p.d, it is sufficient to show that D is p.d. In fact, since $D=D_1 D_2$ with $D_1=\sum \mathbb{1}_{A}\cdot\mathbb{1}_{B}$. We need only to show\\
+that $D_2\equiv\dfrac{1}{\sum(\mathbb{1}_{A} + \mathbb{1}_{B})}$\\
+\vspace{.3cm}
+To this end we will try to express $D_2$ as an function of the intersection \\
+between A and B and see if it represents an inner product between A and B.\\
+
+
+
+\end{flushleft}
+\end{document}

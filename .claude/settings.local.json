@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python resnet_macs.py)"
+    ]
+  }
+}

@@ -1,0 +1,79 @@
+\documentclass[18pt]{article}
+\usepackage{geometry}
+\geometry{top=2cm}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{natbib}
+\usepackage{booktabs}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amssymb}
+\usepackage[version=4]{mhchem}
+\usepackage{stmaryrd}
+\usepackage{bbold}
+\usepackage{nopageno}
+\usepackage{hyperref}
+\usepackage{bookmark}
+\usepackage{accents}
+\usepackage{bbold}
+\author{Adam Handwerger}
+\pagestyle{plain}
+\begin{document}
+\begin{flushleft}
+3 Fisher Kernels\\
+\vspace{.4cm}
+Let $p_{\theta}$ be a family of probability densities indexed by $\theta \in \mathbb{R}$ and\\
+let $\mathcal(X)$ be a set of points $\{x_i\}$. Then the Fisher kernel is given as\\
+\vspace{.4cm}
+\hspace{4cm}$k(x_i,x_j)=\dfrac{\phi(x_i,\theta_0)\phi(x_i,\theta_0)}{I(\theta_0)}$\\
+\vspace{.4cm}
+where $\phi(x,\theta_0)=\frac{\partial}{\partial{\theta}} \ln p_\theta(x) |_{\theta=\theta_0}$ and\\
+\vspace{.4cm}
+\hspace{4cm} $I(\theta)=E[\phi^2(X,\theta)]$ with $X\sim p_{\theta}$\\
+\vspace{.4cm}
+1. Show that $k(x_i,x_j)$ is positive definite.*first version forgot some $\alpha_i$'s in the sums\\
+\vspace{.4cm}
+$\sum\limits_{ij}\alpha_i\alpha_j k(x_i,x_j)=\sum\limits_{ij}\alpha_i\alpha_j \dfrac{\phi(x_i)\phi(x_j)}{I(\theta_0)}=\dfrac{\sum_i \alpha_i \phi(x_i)\sum_j \alpha_j \phi(x_j)}{I(\theta_0)}=\dfrac{\left(\sum_k \alpha_k \phi(x_k,\theta_0)\right)^2}{E(\phi^2(X,\theta))|_{\theta=\theta_0}} \geq0$\\
+\vspace{.4cm}
+This follows becuase the numerator is $\geq0$ and the demoninator strictly greater than zero\\
+since otherwise this would imply that $p_{\theta}$ is independent of $\theta$ contrary to assumption.\\
+\vspace{.4cm}
+2.Let $x \in\{0,1\}$ and $X \sim$ Bernoulli$(\theta)$ with $ 0< \theta <1 $, then $p_{\theta}=\theta^{x}(1-\theta)^{(1-x)}$. \\
+Evaluating $\phi(x,\theta)$ gives\\
+\vspace{.4cm}
+$\phi(x,\theta)=\dfrac{\partial}{\partial{\theta}}(x\ln\theta+\frac{\partial}{\partial{\theta}}(1-x)\ln(1-\theta))=\dfrac{x}{\theta}+\dfrac{(1-x)}{(\theta-1)}=\dfrac{x(\theta-1+(1-x)\theta)}{\theta(\theta-1)}=$\\
+$\dfrac{(x-\theta)}{\theta(1-\theta)}$\\
+\vspace{.4cm}
+likewise for $I(\theta)$,\\
+\vspace{.4cm}
+$I(\theta_0)=E[\phi^2(X,\theta_0)]=E\left[\dfrac{(\theta-X)}{\theta(\theta-1)}\right]_{\theta=\theta_0}=$
+$\left.\dfrac{E(X-\theta)^2}{\theta^2(1-\theta)^2}\right|_{\theta=\theta_0} =\dfrac{\theta_0(1-\theta_0)}{\theta^2_0(1-\theta_0)^2}=\dfrac{1}{\theta_0(1-\theta_0)}$\\
+\vspace{.4cm}
+Therefore substituting both expressionss into $k(x_i,x_j)$ gives\\
+\vspace{.4cm}
+\hspace{2cm} $k(x_i,x_j)=\dfrac{\dfrac{(x_i-\theta_0)}{\theta_0(1-\theta_0)} \dfrac{(x_j-\theta_0)}{\theta_0(1-\theta_0)}}{(1/\theta_0(1-\theta_0))}=\dfrac{(x_i-\theta_0)(x_j-\theta_0)}{\theta_0(1-\theta_0)}$\\
+\vspace{.4cm}
+3 Now Assume $x=(x_1,x_2)$ where $x_1,x_2 \in \{0,1\}$ and are independent. Find $k(x^{(i)},x^{(j)})$.\\
+\vspace{.4cm}
+In this case $p_{\theta}=\theta^{x_1}(1-\theta)^{(1-x_1)} \theta^{x_2}(1-\theta)^{(1-x_2)}\Longrightarrow$\\
+\vspace{.4cm}
+$\phi(x,\theta)=\dfrac{\partial}{\partial\theta}\ln\left(\theta^{x_1}(1-\theta)^{(1-x_1)} \theta^{x_2}(1-\theta)^{(1-x_2)}\right)$\\
+$I(\theta_0)=E[x_1+x_2-2\theta_0]^2=E[(x_1-\theta_0)+(x_2-\theta_0)]^2=$\\
+$E[(X_1-\theta_0)]^2+E[(X_2-\theta_0)]^2+2E[(X_1-\theta_0)]E[(X_2-\theta_0)]=$\\
+$\theta_0(1-\theta_0)+\theta_0(1-\theta_0)+2(\theta_0-\theta_0)(\theta_0-\theta_0)=2\theta_0(1-\theta_0)$\\
+\vspace{.4cm}
+This follows from the independence of $x_1$ and $x_2$.\\
+\pagebreak
+Therefore $k(x^{(i)},x^{(j)})$ is given by\\
+\vspace{.4cm}
+$\dfrac{\partial}{\partial\theta}\left(x_1^{(i)}\ln\theta+(1-x_1^{(i)})\ln(1-\theta)+x_1^{(i)}\ln\theta+(1-x_2^{(i)})\ln(1-\theta)\right)\times $\\
+$\dfrac{\partial}{\partial\theta}\left(x_1^{(j)}\ln\theta+(1-x_1^{(j)})\ln(1-\theta)+(x_1^{(j)})\ln\theta+(1-x_2^{(j)})\ln(1-\theta)\right)/I(\theta_0)=$\\
+\vspace{.4cm}
+$\dfrac{\left(x_1^{(i)}+x_2^{(i)}-2\theta_0\right)\left(x_1^{(j)}+x_2^{(j)}-2\theta_0\right)}{2\theta_0(1-\theta_0)}$\\
+
+
+
+
+
+
+\end{flushleft}
+\end{document}

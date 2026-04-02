@@ -1,0 +1,455 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{listings}
+
+\geometry{margin=1in}
+
+\lstset{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    columns=fullflexible,
+    keepspaces=true,
+    showstringspaces=false,
+    frame=single,
+    backgroundcolor=\color{gray!10}
+}
+
+\title{A Brief Primer on Zsh Commands}
+\author{For macOS Terminal}
+\date{}
+
+\begin{document}
+\maketitle
+
+\tableofcontents
+\newpage
+
+% ---------------------------------------------------------------
+\section{Introduction}
+
+Zsh (Z shell) is the default shell on macOS since Catalina (10.15). It's backwards-compatible with bash while offering enhanced features like better tab completion, glob patterns, and themeable prompts.
+
+To check your current shell:
+\begin{lstlisting}
+echo $SHELL
+\end{lstlisting}
+
+% ---------------------------------------------------------------
+\section{Navigation and File Management}
+
+\subsection{Basic Navigation}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Command & Description \\
+\midrule
+\texttt{pwd} & Print working directory \\
+\texttt{ls} & List files and directories \\
+\texttt{ls -la} & List all files (including hidden) with details \\
+\texttt{cd \textasciitilde} & Change to home directory \\
+\texttt{cd ..} & Go up one directory \\
+\texttt{cd -} & Go to previous directory \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{File Operations}
+
+\begin{lstlisting}
+# Create files and directories
+touch filename.txt          # Create empty file
+mkdir dirname               # Create directory
+mkdir -p path/to/nested/dir # Create nested directories
+
+# Copy, move, delete
+cp file.txt copy.txt        # Copy file
+cp -r dir/ newdir/          # Copy directory recursively
+mv oldname.txt newname.txt  # Rename/move file
+rm file.txt                 # Remove file
+rm -r dirname/              # Remove directory recursively
+rm -rf dirname/             # Force remove (use carefully!)
+\end{lstlisting}
+
+% ---------------------------------------------------------------
+\section{Viewing and Editing Files}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Command & Description \\
+\midrule
+\texttt{cat file.txt} & Display entire file \\
+\texttt{less file.txt} & View file page by page (q to quit) \\
+\texttt{head file.txt} & Show first 10 lines \\
+\texttt{tail file.txt} & Show last 10 lines \\
+\texttt{tail -f log.txt} & Follow file updates in real-time \\
+\texttt{nano file.txt} & Edit file with nano editor \\
+\texttt{vim file.txt} & Edit file with vim editor \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ---------------------------------------------------------------
+\section{Search and Find}
+
+\begin{lstlisting}
+# Find files
+find . -name "*.txt"           # Find all .txt files
+find . -type d -name "dirname" # Find directories
+
+# Search within files
+grep "search term" file.txt    # Search for text in file
+grep -r "term" .               # Recursive search in directory
+grep -i "term" file.txt        # Case-insensitive search
+grep -n "term" file.txt        # Show line numbers
+\end{lstlisting}
+
+% ---------------------------------------------------------------
+\section{Zsh-Specific Features}
+
+\subsection{Advanced Globbing}
+
+Zsh offers powerful pattern matching:
+
+\begin{lstlisting}
+# Extended globbing
+ls **/*.txt                # Recursively find all .txt files
+ls *.{jpg,png}             # Files ending in .jpg or .png
+ls file<1-100>.txt         # file1.txt through file100.txt
+
+# Qualifiers
+ls *(.)                    # Only files
+ls *(/)                    # Only directories
+ls *(m-7)                  # Modified in last 7 days
+ls *(.L+1m)                # Files larger than 1MB
+\end{lstlisting}
+
+\subsection{Directory Stack}
+
+\begin{lstlisting}
+# Navigate between directories
+pushd /path/to/dir         # Push directory onto stack
+popd                       # Pop and return to previous
+dirs -v                    # View directory stack
+cd ~3                      # Jump to 3rd directory in stack
+\end{lstlisting}
+
+\subsection{Tab Completion}
+
+Zsh has intelligent tab completion:
+\begin{itemize}
+    \item Type partial command + \texttt{Tab} to complete
+    \item \texttt{Tab} again to cycle through options
+    \item Works for files, directories, commands, and arguments
+    \item Case-insensitive by default
+\end{itemize}
+
+% ---------------------------------------------------------------
+\section{Process Management}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Command & Description \\
+\midrule
+\texttt{ps aux} & List all running processes \\
+\texttt{top} & Interactive process viewer \\
+\texttt{htop} & Enhanced process viewer (if installed) \\
+\texttt{kill PID} & Terminate process by ID \\
+\texttt{killall name} & Kill all processes by name \\
+\texttt{command \&} & Run command in background \\
+\texttt{jobs} & List background jobs \\
+\texttt{fg} & Bring background job to foreground \\
+\texttt{Ctrl+Z} & Suspend current process \\
+\texttt{bg} & Resume suspended job in background \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ---------------------------------------------------------------
+\section{Permissions and Ownership}
+
+\begin{lstlisting}
+# View permissions
+ls -l file.txt             # Shows: -rw-r--r--
+
+# Change permissions
+chmod 755 script.sh        # rwxr-xr-x (executable)
+chmod +x script.sh         # Add execute permission
+chmod -w file.txt          # Remove write permission
+
+# Change ownership
+chown user:group file.txt  # Change owner and group
+sudo chown root file.txt   # Change owner to root
+\end{lstlisting}
+
+\textbf{Permission notation:}
+\begin{itemize}
+    \item r (read) = 4
+    \item w (write) = 2
+    \item x (execute) = 1
+    \item 755 = rwxr-xr-x (owner: all, group/others: read+execute)
+    \item 644 = rw-r--r-- (owner: read+write, others: read only)
+\end{itemize}
+
+% ---------------------------------------------------------------
+\section{Input/Output Redirection}
+
+\begin{lstlisting}
+# Redirection operators
+command > file.txt         # Redirect output to file (overwrite)
+command >> file.txt        # Append output to file
+command < input.txt        # Read input from file
+command 2> error.log       # Redirect errors to file
+command &> all.log         # Redirect both output and errors
+
+# Pipes
+ls -l | grep ".txt"        # Pipe output to grep
+cat file.txt | wc -l       # Count lines
+history | tail -20         # Last 20 commands
+\end{lstlisting}
+
+% ---------------------------------------------------------------
+\section{Variables and Environment}
+
+\begin{lstlisting}
+# Variables
+NAME="value"               # Set variable (no spaces!)
+echo $NAME                 # Use variable
+export PATH=$PATH:/new/path # Add to PATH
+
+# Common environment variables
+echo $HOME                 # Home directory
+echo $USER                 # Current username
+echo $SHELL                # Current shell
+echo $PATH                 # Executable search path
+
+# Zsh-specific
+echo $ZSH_VERSION          # Zsh version
+\end{lstlisting}
+
+% ---------------------------------------------------------------
+\section{Aliases and Functions}
+
+\subsection{Aliases}
+
+Add to \texttt{\textasciitilde/.zshrc} file:
+
+\begin{lstlisting}
+# Common aliases
+alias ll='ls -lah'
+alias ..='cd ..'
+alias ...='cd ../..'
+alias gs='git status'
+alias gp='git push'
+alias gc='git commit'
+
+# After editing .zshrc, reload:
+source ~/.zshrc
+\end{lstlisting}
+
+\subsection{Functions}
+
+\begin{lstlisting}
+# Define function in .zshrc
+mkcd() {
+    mkdir -p "$1" && cd "$1"
+}
+
+# Usage:
+mkcd new/nested/directory
+\end{lstlisting}
+
+% ---------------------------------------------------------------
+\section{History and Shortcuts}
+
+\subsection{Command History}
+
+\begin{lstlisting}
+history                    # Show command history
+!!                         # Repeat last command
+!-2                        # Repeat 2nd-to-last command
+!123                       # Repeat command #123
+!grep                      # Repeat last grep command
+^old^new                   # Replace 'old' with 'new' in last command
+\end{lstlisting}
+
+\subsection{Keyboard Shortcuts}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Shortcut & Action \\
+\midrule
+\texttt{Ctrl+A} & Go to beginning of line \\
+\texttt{Ctrl+E} & Go to end of line \\
+\texttt{Ctrl+U} & Clear line before cursor \\
+\texttt{Ctrl+K} & Clear line after cursor \\
+\texttt{Ctrl+W} & Delete word before cursor \\
+\texttt{Ctrl+L} & Clear screen \\
+\texttt{Ctrl+R} & Reverse search history \\
+\texttt{Ctrl+C} & Cancel current command \\
+\texttt{Ctrl+D} & Exit shell / EOF \\
+\texttt{Tab} & Auto-complete \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ---------------------------------------------------------------
+\section{Network and System}
+
+\begin{lstlisting}
+# Network
+ping google.com            # Test connectivity
+curl https://example.com   # Fetch URL content
+wget https://file.com/file # Download file (if installed)
+ifconfig                   # Network interface info
+netstat -an                # Network connections
+
+# System information
+uname -a                   # System information
+df -h                      # Disk usage
+du -sh *                   # Directory sizes
+free -h                    # Memory usage (Linux)
+uptime                     # System uptime
+date                       # Current date/time
+
+# macOS specific
+sw_vers                    # macOS version
+system_profiler            # Detailed system info
+open .                     # Open current directory in Finder
+open file.txt              # Open file with default app
+pbcopy < file.txt          # Copy file contents to clipboard
+pbpaste > file.txt         # Paste clipboard to file
+\end{lstlisting}
+
+% ---------------------------------------------------------------
+\section{Package Management}
+
+macOS uses Homebrew for package management:
+
+\begin{lstlisting}
+# Install Homebrew (if not installed)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Common Homebrew commands
+brew install package_name  # Install package
+brew uninstall package     # Remove package
+brew update                # Update Homebrew
+brew upgrade               # Upgrade all packages
+brew list                  # List installed packages
+brew search query          # Search for packages
+brew info package          # Package information
+\end{lstlisting}
+
+% ---------------------------------------------------------------
+\section{Customizing Zsh}
+
+\subsection{Configuration File}
+
+Your Zsh configuration lives in \texttt{\textasciitilde/.zshrc}. Edit with:
+\begin{lstlisting}
+nano ~/.zshrc
+# or
+vim ~/.zshrc
+\end{lstlisting}
+
+After editing, reload:
+\begin{lstlisting}
+source ~/.zshrc
+\end{lstlisting}
+
+\subsection{Oh My Zsh (Optional)}
+
+Oh My Zsh is a popular framework for managing Zsh configuration:
+
+\begin{lstlisting}
+# Install Oh My Zsh
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+
+# Configuration file becomes: ~/.zshrc
+# Themes directory: ~/.oh-my-zsh/themes/
+# Plugins directory: ~/.oh-my-zsh/plugins/
+\end{lstlisting}
+
+Popular plugins to add to \texttt{.zshrc}:
+\begin{lstlisting}
+plugins=(git sudo z zsh-autosuggestions zsh-syntax-highlighting)
+\end{lstlisting}
+
+% ---------------------------------------------------------------
+\section{Quick Reference Table}
+
+\begin{center}
+\small
+\begin{tabular}{lll}
+\toprule
+Category & Command & Description \\
+\midrule
+Navigation & \texttt{cd} & Change directory \\
+& \texttt{pwd} & Print working directory \\
+& \texttt{ls} & List contents \\
+\midrule
+Files & \texttt{touch} & Create file \\
+& \texttt{cp} & Copy \\
+& \texttt{mv} & Move/rename \\
+& \texttt{rm} & Remove \\
+\midrule
+Viewing & \texttt{cat} & Display file \\
+& \texttt{less} & Page through file \\
+& \texttt{head/tail} & First/last lines \\
+\midrule
+Search & \texttt{find} & Find files \\
+& \texttt{grep} & Search in files \\
+\midrule
+Help & \texttt{man command} & Manual for command \\
+& \texttt{command --help} & Quick help \\
+& \texttt{which command} & Find command location \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ---------------------------------------------------------------
+\section{Tips and Best Practices}
+
+\begin{enumerate}
+    \item \textbf{Use tab completion} --- save time and avoid typos
+    \item \textbf{Be careful with \texttt{rm -rf}} --- it deletes permanently
+    \item \textbf{Use \texttt{man} pages} --- \texttt{man command} shows documentation
+    \item \textbf{Test commands with \texttt{echo}} --- verify before execution
+    \item \textbf{Use \texttt{Ctrl+R}} --- search command history interactively
+    \item \textbf{Create aliases} --- for frequently used commands
+    \item \textbf{Comment your scripts} --- use \texttt{\#} for comments
+    \item \textbf{Use quotes} --- for filenames with spaces: \texttt{"my file.txt"}
+\end{enumerate}
+
+\section{Getting Help}
+
+\begin{lstlisting}
+man command                # Full manual page
+command --help             # Quick help
+command -h                 # Short help (sometimes)
+which command              # Find command location
+whence -v command          # Zsh: command type and location
+type command               # Show how command will be interpreted
+\end{lstlisting}
+
+% ---------------------------------------------------------------
+\section{Conclusion}
+
+This primer covers the essential Zsh commands for macOS terminal use. For more advanced topics, explore:
+\begin{itemize}
+    \item Shell scripting
+    \item Regular expressions
+    \item Process substitution
+    \item Zsh parameter expansion
+    \item Custom completion functions
+\end{itemize}
+
+Practice regularly, and the command line will become second nature!
+
+\end{document}

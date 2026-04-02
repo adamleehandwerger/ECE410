@@ -1,0 +1,179 @@
+\documentclass[18pt]{article}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{natbib}
+\usepackage{booktabs}
+%\usepackage[utf8]{inputenc}
+%\usepackage[T1]{fontenc}
+\usepackage{amssymb}
+%\usepackage[version=4]{mhchem}
+\usepackage{stmaryrd}
+%\usepackage[bb=boondox]{mathalfa}
+%\usepackage{bbold}
+\usepackage{nopageno}
+\usepackage{hyperref}
+\usepackage{bookmark}
+\usepackage{mathtools}
+\usepackage{pdfpages}
+\usepackage{geometry}
+\usepackage{relsize}
+%\usepackage{graphicx}
+\usepackage{xfrac}
+\usepackage{dsfont}
+%\usepackage[utf8]{inputenc}
+
+
+
+\geometry{top=2cm}
+\author{Adam Handwerger}
+
+\pagestyle{plain}
+%\NewDocumentCommand{\angled}{me{^_}}{%
+  %\langle #1\rangle
+  %^{\smash[t]{\mathstrut}\IfValueT{#2}{#2}}% superscript
+  %_{\smash[b]{\mathstrut}\IfValueT{#3}{\!#3}}% subscript
+%}
+%\DeclareMathAlphabet{\bbold}{U}{bbold}{m}{n}
+\begin{document}
+\begin{flushleft}
+Exercise 1\\
+Show that $Cov[x,x]$ is symmetric and positive definite.\\
+\vspace{.4cm}
+Since each $X_i$ is random real number:
+\vspace{.4cm}
+$[Cov[x,x]]_{ij}=E[X_i X_j]-E[X_i]E[X_j]=E[X_j X_i]-E[X_j]E[X_i]=[Cov[x,x]]_{ji}$\\
+\vspace{.4cm}
+Therefore $Cov[X,X]$ is symmetric\\
+\vspace{.4cm}
+$\sum\limits_{ij} \alpha_i \alpha_j [Cov[X,X]]_{ij}=\sum\limits_{ij} \alpha_i \alpha_j (E[X_i X_j]-E[X_i]E[X_j])=$\\
+$\sum\limits_{ij} \alpha_i \alpha_j E[X_i X_j]-\sum\limits_{i} \alpha_i E[X_i] \sum\limits_{j}\alpha_j E[X_j]=
+E\left[ \sum\limits_{i} \alpha_i X_i \sum\limits_{j} \alpha_j X_j\right]-E\left[\sum\limits_{i} X_i \right]E\left[\sum\limits_{j} X_j\right]=$\\
+\vspace{.4cm}
+$E[Y^2]-(E[Y])^2 \geq0$ by Jensen's inequality.\\
+\vspace{.4cm}
+Exercise 2\\
+\vspace{.4cm}
+Let $X \sim  MVN(\mu,\Sigma)$ and $\Sigma=U \Lambda U^T$ and let $Y_i=(X-\mu)^T u_i$\\
+\vspace{.4cm}
+where the $u_i$ are columns of $U$.\\
+\vspace{.4cm}
+1. Show that the $Y_i$ as defined are independent.\\
+\vspace{.4cm}
+Since X is normally distributed this implies that Y is as well. Hence it is sufffient to show that\\
+for each i and j, $Y_i$ and $Y_j$ are uncorrelated.\\
+\vspace{.4cm}
+$[Cov[Y_i,Y_j]]_{ij}=Cov[Y_i,Y_j]=Cov[(X-\mu)^T u_i,(X-\mu)^T u_j]=u_i Cov[(X-\mu)^T,(X-\mu)^T]u_j=$\\
+$u_i \Sigma u_j= u_i \lambda_j u_j=\lambda_j \delta_{ij} \implies$
+\vspace{.4cm}
+$Y_i$ and $Y_j$ are uncorrelated and hence independent.\\
+\vspace{.4cm}
+2. Show that $Y_i \sim N(0,\lambda_i)$\\
+\vspace{.4cm}
+Since $E[Y_i]=(E[X]-\mu)^T u_i=(\mu-\mu)^T u_i=0$ and $1. \implies (diag(\Sigma))_i=\lambda_i \implies Y_i \sim N(0,\lambda_i)$\\
+\vspace{.4cm}
+3. Show X can bee written is the form $X=\mu+Y_1 u_1+\cdots+Y_k u_k$\\
+\vspace{.4cm}
+$E[X]=E[\mu]+E[Y_1]u_1+\cdots+E[Y_k]u_k=\mu$\\
+\vspace{.4cm}
+With $U=(u_1,...u_k)$ we have\\
+\vspace{.4cm}
+$Var[X]=Var[UY+\mu]=Cov[UY+\mu,UY+\mu]=Cov[UY,UY]=U Cov[Y,Y] U^T=$\\
+\vspace{.4cm}
+$U\begin{bmatrix}
+    \lambda_0 & & \\
+    & \ddots & \\
+    & &  \lambda_k
+\end{bmatrix}U^T=\Sigma$\\
+
+\vspace{.4cm}
+Hence $X \sim MVN(\mu,\Sigma)$\\
+\pagebreak
+Exercise 3\\
+\vspace{.4cm}
+Bayesian Inference\\
+\vspace{.4cm}
+1. Show that $X \sim Beta(\alpha,\beta) \implies P(X|y)= Beta(a,b)$ for some a,b.\\
+Let $S_n=\sum\limits_{i=1}^{n}$. Then\\
+\vspace{.4cm}
+$P(x|y)=\dfrac{P(y|x)P(x)}{P(y)}=\Pi_{i=1}^{n} x^{y_i}(1-x)^{(1-y_i)} x^{(\alpha-1)} (1-x)^{(\beta-1)}\hspace{.1cm}{\mathds{1}}_{[0,1]} (x)=$\\
+$\left(x^{\sum y_i} (1-x)^{(n-\sum y_i)}\right) \left(x^{(\alpha-1)} (1-x)^{(\beta-1)}\right)\hspace{.1cm}{\mathds{1}}_{[0,1]} (x)=$\\
+$x^{(\sum y_i+\alpha-1)} (1-x)^{(n-\sum y_i+\beta-1)}\hspace{.1cm}{\mathds{1}}_{[0,1]} (x)=x^{(a-1)} (1-x^{b-1})\hspace{.1cm}{\mathds{1}}_{[0,1]} (x)$ with $a=\sum y_i+\alpha$ and $b=n-\sum y_i+\beta$\\
+\vspace{.4cm}
+This implies\\
+\vspace{.4cm}
+$E[X|y]=\dfrac{a}{(a+b)}=\dfrac{(\sum y_i+\alpha)}{(\sum y_i+\alpha+n-\sum y_i+\beta)}=\dfrac{(n \bar{y}+\alpha)}{(\alpha+\beta+n)} \implies$\\
+\vspace{.4cm}
+$w(n)=\dfrac{n}{(\alpha+\beta+n)}$ and $1-w(n)=\dfrac{(\alpha+\beta)}{(\alpha+\beta+n)}$ and \\
+\vspace{.4cm}
+$E[X|y]=w\bar{y}+(1-w)\alpha /(\alpha+\beta)$\\
+\vspace{.4cm}
+Exercise 4\\
+\vspace{.4cm}
+$X \sim N(\mu_0,\lambda_0^{-1})$,$Y_i=X+\epsilon_i$,$\epsilon_i \sim N(0,\lambda^{-1}), D=\lambda_0/\lambda$\\
+\vspace{.4cm}
+1. Show that $\left( I+\frac{\mathbb{I}\mathbb{I}^T}{D} \right)^{-1}=I-\left(n+D\right)^{-1}\mathbb{I}\mathbb{I}^T$\\
+\vspace{.4cm}
+Using the Sherman-Morrison formula with $u=\frac{\mathbb{I}}{D}$ and $v=\mathbb{I}$ gives\\
+\vspace{.4cm}
+$\left(I+uv^T\right)^{-1}=I-\dfrac{uv^T}{1+v^T u}=I-\dfrac{uv^T}{\left(1+n/D\right)}=I-\left(\dfrac{1}{D(1+n/D)}\right) \mathbb{I}\mathbb{I}^T=$\\
+$I-(n+D)^{-1} \mathbb{I}\mathbb{I}^T$\\
+\vspace{.4cm}
+2. Verify that $E[X|y]=w\mu_0+(1-w)\bar{y}$ with $w=\lambda_0(n\lambda_{0}+\lambda)^{-1}$\\
+\vspace{.4cm}
+$\Sigma_{11}=\lambda_0^{-1},\Sigma_{12}=\lambda_0^{-1} \mathbb{I}^T$,\\
+\vspace{.4cm}
+$\Sigma_{22}=$
+$
+\begin{bmatrix}
+   \lambda_0^{-1}+\lambda^{-1} & & & & &\lambda_0^{-1}\\ 
+   &   \ddots & & & \\
+   &  &  & \ddots  \\
+   &  &  &  & & \ddots &\\
+   &\lambda_0^{-1} &  &  &  & & & \lambda_0^{-1}+\lambda^{-1}
+\end{bmatrix}
+$\\
+\vspace{.4cm}
+And using the inversion formula above gives\\
+\vspace{.4cm}
+$\Sigma_{22}^{-1}=\left(\lambda^{-1} I+\lambda_0^{-1} \mathbb{I}\mathbb{I}^T\right)^{-1}=\left(\lambda^{-1}(I+\frac{1}{D}\mathbb{I}\mathbb{I}^T)\right)^{-1}=$\\
+$\lambda\left(I-(n+D)^{-1} \mathbb{I}\mathbb{I}^T\right)$\\
+\vspace{.4cm}
+$\Sigma_{12} \Sigma_{22}^{-1} y=\lambda_0^{-1} \mathbb{I}^T \lambda\left(I-(n+D)^{-1} \mathbb{I}\mathbb{I}^T \right)y=$\\
+$\dfrac{\mathbb{I}^T y}{D}-\dfrac{\mathbb{I}^T \mathbb{I}\sum y_i}{D(n+D)}=\dfrac{\sum y_i}{D}-\dfrac{n \sum y_i}{D(n+D)}=\dfrac{n\bar{y}}{D}-\dfrac{n^2\bar{y}}{D(n+D)}=$\\
+$\dfrac{n \bar{y}}{D}\left(1-\dfrac{n}{n+D}\right)=\dfrac{n \bar{y}}{D} \left(\dfrac{D}{n+D}\right)=\bar{y}\dfrac{n}{(n+D)}=\dfrac{n \bar{y}\lambda}{(n \lambda+\lambda_0)}$\\
+\vspace{.4cm}
+Setting $1-w=\dfrac{n \lambda}{(n \lambda+\lambda_0)} \implies w=\dfrac{D}{(n+D)}=\dfrac{\lambda_0}{(n\lambda+\lambda_0)} \implies$\\
+\vspace{.4cm}
+$\hat{X}=w(n) \mu_0+(1-w(n))\bar{y}$\\
+\vspace{.4cm}
+$Cov[X|y]=\Sigma_{11}-\Sigma_{12}\Sigma_{22}^{-1}\Sigma_{12}^T$\\
+\vspace{.4cm}
+$\Sigma_{11}=\lambda_0^{-1},\Sigma_{12}=\lambda_0^{-1} \mathbb{I}^T$,\\
+$\Sigma_{22}^{-1}=\lambda\left(I-(n+D)^{-1} \mathbb{I}\mathbb{I}^T\right) \implies$\\
+\vspace{.4cm}
+$Cov(X|y)=\lambda_0^{-1}-\lambda_0^{-1} \mathbb{I}^T \lambda\left((I+\frac{1}{D}\mathbb{I}\mathbb{I}^T)\right)^{-1}\lambda_0^{-1} \mathbb{I}=$
+$\lambda_0^{-1}-\dfrac{\lambda_0^{-1} \mathbb{I}^T \mathbb{I}}{D}+ \dfrac{\lambda_0^{-1} \mathbb{I}^T \mathbb{I} \mathbb{I}^T \mathbb{I}}{D(n+D)}=\lambda_0^{-1}\left(1-\dfrac{n}{D}+\dfrac{n^2}{D(n+D)}\right)=$\\
+$\lambda_0^{-1}\left(\dfrac{nD+D^2-n^2-nD+n^2}{D(n+D)}\right)=\lambda_0^{-1}\left(\dfrac{D}{(n+D)}\right)=\lambda_0^{-1}\left(\dfrac{\lambda_0}{n\lambda+\lambda_0}\right)=\lambda_0^{-1}w$\\
+\vspace{.4cm}
+$Var[X|y]=Cov[X|y,X|y]=Cov[\lambda_0^{-1}w,\lambda_0^{-1}w]=\lambda_0^{-1}w$\\
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+\end{flushleft}
+\end{document}
+

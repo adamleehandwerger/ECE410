@@ -1,0 +1,77 @@
+\documentclass[18pt]{article}
+\usepackage{geometry}
+\geometry{top=2cm}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{natbib}
+\usepackage{booktabs}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amssymb}
+\usepackage[version=4]{mhchem}
+\usepackage{stmaryrd}
+\usepackage{bbold}
+\usepackage{nopageno}
+\usepackage{hyperref}
+\usepackage{bookmark}
+\author{Adam Handwerger}
+\pagestyle{plain}
+
+\begin{document}
+\begin{flushleft}
+1 Kernels\\
+\vspace{.4cm}
+1. Let $\chi=\mathbb{R}^{+} $\\
+\vspace{.4cm}
+(a) Verify that $ \min(x,y)=\int_{0}^\infty (\mathbb{I}_{t<x}) (\mathbb{I}_{t<y}) \,dt $\\
+\vspace{.4cm}
+Choose $x,y \in \mathbb{R}^{+}$.\\
+\vspace{.4cm}
+Case 1, $x \geq y$\\
+\vspace{.4cm}
+$\int_{0}^{\infty} (\mathbb{I}_{t<x}) (\mathbb{I}_{t<y}) \,dt=\int_{0}^{y} (\mathbb{I}_{t<x}) (\mathbb{I}_{t<y}) \,dt+$\\
+$\int_{y}^{\infty} (\mathbb{I}_{t<x}) (\mathbb{I}_{t<y})=\int_{0}^{y} (1)(1) \,dt +0= \int_{0}^{y} \,dt=y$\\
+\vspace{.4cm}
+Case 2, $ x\leq y$\\
+\vspace{.4cm}
+$\int_{0}^{\infty} (\mathbb{I}_{t<x}) (\mathbb{I}_{t<y}) \,dt=\int_{0}^{x} (\mathbb{I}_{t<x}) (\mathbb{I}_{t<y}) \,dt+$\\
+$\int_{x}^{\infty} (\mathbb{I}_{t<x}) (\mathbb{I}_{t<y})=\int_{0}^{x} (1)(1) \,dt +0= \int_{0}^{x} \,dt=x$\\
+\vspace{.4cm}
+Combining both cases gives the desired result.\\
+\vspace{.4cm}
+(b) Show that $K(x,y)=\min(x,y)$ is pos. definite over $\mathbb{R}^{+}$.\\
+\vspace{.4cm}
+Case 1, $x_i \leq x_j$ and $\alpha\in\mathbb{R}^n$\\
+\vspace{.4cm}
+In the same manner as above\\
+\vspace{.4cm}
+$\sum_{ij}^n \alpha_i \alpha_j \int_{0}^{\infty} (\mathbb{I}_{t<x_i}) (\mathbb{I}_{t<x_j}) \,dt=\int_{0}^{x_i} (\sum_i \alpha_i \mathbb{I}_{t<x_i}) (\sum_j \alpha_j \mathbb{I}_{t<x_j}) \,dt=$\\
+$\int_0^{x_i} (\sum_i \alpha_i)(\sum_j \alpha_j) \,dt=(\sum_k \alpha_k)^2 x_i \geq 0$ for $x_i \in \mathbb{R}^{+}$.\\
+\vspace{.4cm}
+Likewise for $ x_i \geq x_j$,\\
+\vspace{.4cm}
+$\sum_{ij}^n \alpha_i \alpha_j \int_{0}^{\infty} (\mathbb{I}_{t<x_i}) (\mathbb{I}_{t<x_j}) \,dt=\int_{0}^{x_j} (\sum_i \alpha_i \mathbb{I}_{t<x_i}) (\sum_j \alpha_j \mathbb{I}_{t<x_j}) \,dt=$\\
+$\int_0^{x_j} (\sum_i \alpha_i)(\sum_j \alpha_j) \,dt=(\sum_k \alpha_k)^2 x_j \geq 0$ for $x_k \in \mathbb{R}^{+}$.\\
+\vspace{.4cm}
+Hence K is pos. definite.\\
+\vspace{.4cm}
+(c) Show that $\max(x,y)$ is not pos. definite over $\mathbb{R}^{+}$.\\
+\vspace{.4cm}
+Consider the case when n=2. Let $v=(\alpha_1,\alpha_2)$ and $\gamma=\max(x_1,x_2)$. Then\\
+\end{flushleft}
+$$ v^T K v=
+\begin{bmatrix} \alpha_1 & \alpha_2 \end{bmatrix}
+    \begin{bmatrix} x_1 & \gamma\\
+                    \gamma & x_2 \end{bmatrix}
+\begin{bmatrix} \alpha_1 \\ \alpha_2 \end{bmatrix}\\
+$$
+$\hspace{4.5cm} =\alpha_1^2 x_1 + 2 \alpha_1 \alpha_2 \gamma + \alpha_2^2 x_2$\\
+\vspace{.4cm}
+\\
+Since this must hold for any $v \in \mathbb{R}^2$, choose $\alpha_1=-\alpha_2$.\\
+\\
+Then the expression above becomes\\
+\begin{flushleft}
+$\alpha_1^2 x_1 + 2 \alpha_1 \alpha_2 \gamma + \alpha_2^2 x_2 = \alpha_1^2 (x_1 + x_2 -2\gamma)=$\\
+$\alpha_1^2(x_1+x_2-2 \max(x_1,x_2)) \leq 0$
+\end{flushleft}
+\end{document}

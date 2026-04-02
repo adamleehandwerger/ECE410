@@ -1,0 +1,188 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\usepackage{hyperref}
+
+\geometry{margin=1in}
+
+\definecolor{boxblue}{RGB}{238,244,251}
+\definecolor{titleblue}{RGB}{22,33,62}
+
+\tcbuselibrary{skins}
+\newtcolorbox{mathbox}{
+  colback=boxblue, colframe=titleblue!40,
+  boxrule=0.5pt, arc=3pt, left=8pt, right=8pt, top=6pt, bottom=6pt
+}
+
+\title{\Large RKHS of $K(x,y)=(c+\langle x,y\rangle)^3$}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+\thispagestyle{empty}
+
+%--------------------------------------------------------------
+\section*{1.\quad Expansion via Binomial Theorem}
+
+Applying the binomial theorem with $p=3$:
+\[
+  K(x,y) = (c + x^\top y)^3
+          = c^3 + 3c^2(x^\top y) + 3c(x^\top y)^2 + (x^\top y)^3.
+\]
+Each power of $x^\top y$ lifts to a tensor inner product.  Using the
+Frobenius\,/\,tensor inner product
+\[
+  \langle A,B\rangle_F = \operatorname{tr}(A^\top B),
+  \qquad
+  (x^\top y)^k = \langle x^{\otimes k},\, y^{\otimes k}\rangle,
+\]
+where $x^{\otimes k}=x\otimes\cdots\otimes x$ ($k$ times) is a rank-1
+symmetric tensor of order $k$.
+
+%--------------------------------------------------------------
+\section*{2.\quad Feature Map}
+
+The explicit feature map $\phi:\mathbb{R}^d\to\mathcal{H}$ stacks four
+tensor components:
+\[
+  \phi(x)
+  =\begin{pmatrix}
+      c^{3/2}\\[4pt]
+      \sqrt{3c^2}\;x\\[4pt]
+      \sqrt{3c}\;x^{\otimes 2}\\[4pt]
+      x^{\otimes 3}
+    \end{pmatrix},
+\]
+where $x^{\otimes 2}=xx^\top\in\mathbb{R}^{d\times d}$ and
+$x^{\otimes 3}\in\mathbb{R}^{d\times d\times d}$, both flattened.
+The inner product recovers the kernel:
+\[
+  \langle\phi(x),\phi(y)\rangle
+  = c^3 + 3c^2(x^\top y) + 3c(x^\top y)^2 + (x^\top y)^3
+  = K(x,y).\quad\checkmark
+\]
+
+%--------------------------------------------------------------
+\section*{3.\quad The RKHS as a Tensor Space}
+
+Every $f\in\mathcal{H}_K$ is parametrised by $(a,b,C,\mathcal{T})$ with
+\[
+  a\in\mathbb{R},\quad
+  b\in\mathbb{R}^d,\quad
+  C\in\mathbb{R}^{d\times d},\quad
+  \mathcal{T}\in\mathbb{R}^{d\times d\times d},
+\]
+and evaluated as:
+\begin{mathbox}
+\[
+  f(x) = a + b^\top x + \operatorname{tr}(C^\top xx^\top)
+        + \langle \mathcal{T},\, x^{\otimes 3}\rangle.
+\]
+\end{mathbox}
+
+The cubic term contracts $\mathcal{T}$ against $x^{\otimes 3}$.
+Using the mode-1 matricisation $\mathcal{T}_{(1)}\in\mathbb{R}^{d\times d^2}$:
+\[
+  \langle \mathcal{T},\,x^{\otimes 3}\rangle
+  = x^\top \mathcal{T}_{(1)}(x\otimes x).
+\]
+This yields a fully matrix-algebraic evaluation with no explicit index loops.
+
+%--------------------------------------------------------------
+\section*{4.\quad RKHS Inner Product}
+
+For $f\leftrightarrow(a,b,C,\mathcal{T})$ and
+$g\leftrightarrow(a',b',C',\mathcal{T}')$:
+\begin{mathbox}
+\[
+  \langle f,g\rangle_{\mathcal{H}}
+  = \frac{aa'}{c^3}
+  + \frac{b^\top b'}{3c^2}
+  + \frac{\langle C,C'\rangle_F}{3c}
+  + \langle\mathcal{T},\mathcal{T}'\rangle_F,
+\]
+\end{mathbox}
+where the tensor Frobenius inner product is
+$\langle\mathcal{T},\mathcal{T}'\rangle_F
+ =\operatorname{tr}(\mathcal{T}_{(1)}^\top\mathcal{T}'_{(1)})$.
+The RKHS norm is therefore:
+\[
+  \|f\|_{\mathcal{H}}^2
+  = \frac{a^2}{c^3}
+  + \frac{\|b\|^2}{3c^2}
+  + \frac{\|C\|_F^2}{3c}
+  + \|\mathcal{T}\|_F^2.
+\]
+
+%--------------------------------------------------------------
+\section*{5.\quad Representer in Tensor Form}
+
+The kernel section $K(\cdot,x)$---the representer of evaluation at
+$x$---corresponds to:
+\[
+  K(\cdot,x)\;\leftrightarrow\;
+  \bigl(c^3,\;\;3c^2 x,\;\;3c\,xx^\top,\;\;x^{\otimes 3}\bigr).
+\]
+The reproducing property is verified cleanly:
+\begin{align*}
+  \langle f,K(\cdot,x)\rangle_{\mathcal{H}}
+  &= \frac{a\cdot c^3}{c^3}
+   + \frac{b^\top(3c^2 x)}{3c^2}
+   + \frac{\langle C,3c\,xx^\top\rangle_F}{3c}
+   + \langle\mathcal{T},x^{\otimes 3}\rangle_F\\[4pt]
+  &= a + b^\top x + x^\top Cx + \langle\mathcal{T},x^{\otimes 3}\rangle
+   = f(x).\quad\checkmark
+\end{align*}
+
+%--------------------------------------------------------------
+\section*{6.\quad Kernel Matrix (No Loops)}
+
+On a dataset $X=[x_1|\cdots|x_n]\in\mathbb{R}^{d\times n}$, define the
+shifted Gram matrix $\mathbf{G}=c\,\mathbf{1}\mathbf{1}^\top+X^\top X$.
+The full kernel matrix is the Hadamard cube:
+\begin{mathbox}
+\[
+  \mathbf{K} = \mathbf{G}\circ\mathbf{G}\circ\mathbf{G}.
+\]
+\end{mathbox}
+No loops required---assembled from one BLAS matrix multiply and two
+elementwise products.
+
+%--------------------------------------------------------------
+\section*{7.\quad General Degree-$p$ Pattern}
+
+The structure generalises to $K(x,y)=(c+x^\top y)^p$ via the binomial
+theorem:
+\[
+  K(x,y)
+  =\sum_{k=0}^{p}\binom{p}{k}c^{p-k}
+    \langle x^{\otimes k},y^{\otimes k}\rangle.
+\]
+
+\medskip
+\begin{center}
+\begin{tabular}{cccc}
+\toprule
+Degree $k$ & Feature & Weight in $\|f\|_{\mathcal{H}}^2$ & Parameter \\
+\midrule
+$0$ & $1$ & $c^{-p}$ & $a\in\mathbb{R}$ \\[2pt]
+$1$ & $x$ & $\displaystyle\left[\tbinom{p}{1}c^{p-1}\right]^{-1}$ & $b\in\mathbb{R}^d$ \\[8pt]
+$2$ & $x^{\otimes 2}$ & $\displaystyle\left[\tbinom{p}{2}c^{p-2}\right]^{-1}$ & $C\in\mathbb{R}^{d\times d}$ \\[8pt]
+$\vdots$ & $\vdots$ & $\vdots$ & $\vdots$ \\[2pt]
+$k$ & $x^{\otimes k}$ & $\displaystyle\left[\tbinom{p}{k}c^{p-k}\right]^{-1}$ & $\mathcal{T}^{(k)}\in\mathbb{R}^{d^k}$ \\[8pt]
+$p$ & $x^{\otimes p}$ & $1$ & $\mathcal{T}^{(p)}\in\mathbb{R}^{d^p}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\medskip
+The RKHS is the space of \textbf{polynomials of degree $\leq p$} on
+$\mathbb{R}^d$, with geometry determined entirely by symmetric tensor
+algebra and Frobenius inner products---no index gymnastics needed.
+
+\end{document}
