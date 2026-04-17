@@ -15,8 +15,8 @@
 
 
 ## Function 1: dist_matrix()
-Dominant Kernel accounting for 21% of runtime
-Purpose: Compute distance between N points of dimension M and D support vectors
+Dominant Kernel accounting for 21% of runtime\
+Purpose: Compute the distance between N points of dimension M and D support vectors
 
 
 ### Line-by-Line Analysis
@@ -42,7 +42,7 @@ Purpose: Compute distance between N points of dimension M and D support vectors
 
 
 ## Function 2: horner()
-Secondary Kernel: Accounting for 14% of runtime
+Secondary Kernel: Accounting for 14% of runtime\
 Purpose: RBF kernel approximation using Horner's method
 
 
