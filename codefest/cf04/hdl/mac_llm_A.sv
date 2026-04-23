@@ -1,3 +1,4 @@
+// LLM Sonnet 4.5
 module mac (
     input  logic        clk,
     input  logic        rst,
