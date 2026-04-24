@@ -1,0 +1,48 @@
+# ===========================================================================
+# Cocotb Makefile for SVM Compute Core
+# ===========================================================================
+
+# Simulator
+SIM ?= icarus
+
+# RTL source files
+VERILOG_SOURCES = $(PWD)/svm_compute_core.sv
+
+# Top-level module
+TOPLEVEL = svm_compute_core
+
+# Python test module
+MODULE = test_svm_compute_core
+
+# Cocotb parameters
+COCOTB_HDL_TIMEUNIT = 1ns
+COCOTB_HDL_TIMEPRECISION = 1ps
+
+# Simulation parameters
+COMPILE_ARGS += -g2012
+COMPILE_ARGS += -Wall
+
+# Extra options
+EXTRA_ARGS += --trace --trace-structs
+
+# Wave file format
+WAVES = 1
+
+# Include cocotb makefiles
+include $(shell cocotb-config --makefiles)/Makefile.sim
+
+# Custom targets
+.PHONY: view clean-all
+
+view:
+	@if [ -f dump.vcd ]; then \
+		gtkwave dump.vcd &; \
+	else \
+		echo "No VCD file found. Run 'make' first."; \
+	fi
+
+clean-all: clean
+	rm -rf __pycache__
+	rm -rf sim_build
+	rm -f *.vcd
+	rm -f results.xml

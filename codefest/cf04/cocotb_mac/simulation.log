@@ -1,0 +1,17 @@
+Testing Distance Matrix...
+Testing Input FIFO...
+========================================
+SVM Compute Core Testbench
+========================================
+VCD info: dumpfile svm_compute_core.vcd opened for output.
+Computed distance: 1.000
+Expected: ~14.0
+[130000] Reset complete
+  Default gamma: 0.009766
+  Default C: 1.000000
+[130000] Initializing support vector memory...
+[130000] Support vector memory initialized
+
+[TEST 1] Field-Programmable Parameters
+[170000] Programmed gamma = 0.005000
+tb_svm_compute_core.sv:538: $finish called at 185000 (1ps)
