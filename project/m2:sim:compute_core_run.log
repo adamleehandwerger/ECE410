@@ -1,0 +1,108 @@
+=========================================
+ SVM Compute Core Testbench
+=========================================
+VCD info: dumpfile svm_compute_core.vcd opened for output.
+[130000] Reset complete
+  Default gamma : 0.009766
+  Default C     : 1.000000
+  SVs per class : 60 45 55 50 40 (total=250)
+[130000] Initializing support vector memory...
+[130000] Support vector memory initialized
+
+[TEST 1] Field-Programmable Parameters
+[170000] Programmed gamma = 0.005000
+[250000] Programmed C     = 2.000000
+[330000] Programmed gamma = 0.010000
+[410000] Programmed C     = 1.000000
+[TEST 1] PASSED
+
+[TEST 2] Variable SV Counts Per Class
+[TEST 2] PASSED - SV counts: 60 45 55 50 40 = 250 total
+
+[TEST 3] Input FIFO Basic Operation
+[590000] Reset complete
+  Default gamma : 0.009766
+  Default C     : 1.000000
+  SVs per class : 60 45 55 50 40 (total=250)
+  Loading 256 features via QSPI...
+  Feature vector loaded
+[TEST 3] PASSED
+
+[TEST 4] Distance Matrix - Single Sample
+[11090000] Reset complete
+  Default gamma : 0.009766
+  Default C     : 1.000000
+  SVs per class : 60 45 55 50 40 (total=250)
+[TEST 4] PASSED - Distance computation complete
+
+[TEST 5] Horner Engine - Variable Gamma
+[1426790000] Reset complete
+  Default gamma : 0.009766
+  Default C     : 1.000000
+  SVs per class : 60 45 55 50 40 (total=250)
+[1426830000] Programmed gamma = 0.001000
+  gamma=0.0010  dist=100.0  expected_K=0.904837
+[1427010000] Reset complete
+  Default gamma : 0.009766
+  Default C     : 1.000000
+  SVs per class : 60 45 55 50 40 (total=250)
+[1427050000] Programmed gamma = 0.010000
+  gamma=0.0100  dist=100.0  expected_K=0.367879
+[1427230000] Reset complete
+  Default gamma : 0.009766
+  Default C     : 1.000000
+  SVs per class : 60 45 55 50 40 (total=250)
+[1427270000] Programmed gamma = 0.100000
+  gamma=0.1000  dist=100.0  expected_K=0.000045
+[TEST 5] PASSED
+
+[TEST 6] Full Pipeline - 3-Heartbeat Batch
+[1427450000] Reset complete
+  Default gamma : 0.009766
+  Default C     : 1.000000
+  SVs per class : 60 45 55 50 40 (total=250)
+  Batch: 3 heartbeats × 10 SVs
+    Kernel [1/30] = 0.943359
+    Kernel [2/30] = 0.942383
+    Kernel [3/30] = 0.934570
+    Kernel [4/30] = 0.918945
+    Kernel [5/30] = 0.897461
+    Kernel [6/30] = 0.870117
+    Kernel [7/30] = 0.837891
+    Kernel [8/30] = 0.800781
+    Kernel [9/30] = 0.760742
+    Kernel [10/30] = 0.717773
+    Kernel [11/30] = 0.936523
+    Kernel [12/30] = 0.942383
+    Kernel [13/30] = 0.934570
+    Kernel [14/30] = 0.918945
+    Kernel [15/30] = 0.897461
+    Kernel [16/30] = 0.870117
+    Kernel [17/30] = 0.837891
+    Kernel [18/30] = 0.800781
+    Kernel [19/30] = 0.760742
+    Kernel [20/30] = 0.717773
+    Kernel [21/30] = 0.936523
+    Kernel [22/30] = 0.942383
+    Kernel [23/30] = 0.934570
+    Kernel [24/30] = 0.918945
+    Kernel [25/30] = 0.897461
+    Kernel [26/30] = 0.870117
+    Kernel [27/30] = 0.837891
+    Kernel [28/30] = 0.801758
+    Kernel [29/30] = 0.760742
+    Kernel [30/30] = 0.718750
+[TEST 6] PASSED - 30 kernel values seen, done asserted
+
+[TEST 7] FIFO Overflow Protection
+[1641970000] Reset complete
+  Default gamma : 0.009766
+  Default C     : 1.000000
+  SVs per class : 60 45 55 50 40 (total=250)
+  FIFO full detected at entry 0
+[TEST 7] PASSED - FIFO overflow blocked (8292 writes rejected)
+
+=========================================
+ SIMULATION GRADE: PASS  (7/7 tests, 0 failures)
+=========================================
+tb_svm_compute_core.sv:429: $finish called at 1642970000 (1ps)

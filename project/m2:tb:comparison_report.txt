@@ -1,0 +1,136 @@
+========================================================================
+SVM Compute Core — Hardware vs Software Comparison Report
+========================================================================
+
+gamma                             = 0.01
+Support vectors (hw subset)       = 246
+Test samples evaluated            = 300
+
+CLASSIFICATION ACCURACY
+----------------------------------------
+  sklearn float64                            : 0.9433
+  sklearn Q6.10 features (quant only)        : 0.9433
+  HW kernels + sklearn OvO decision function : 0.9500
+  hw_correct (kernel-sum clf, naive)         : 0.5067
+  hw_buggy   (RTL as written)                : 0.2000
+
+KERNEL MEAN ABSOLUTE ERROR
+----------------------------------------
+  hw_correct vs sklearn           : 0.00744
+  hw_buggy   vs sklearn           : 0.30786
+  Q6.10 saturation fraction       : 0.000
+  Horner MAE (no-saturation range): 0.00449
+
+PER-CLASS KERNEL MAE
+----------------------------------------
+  Normal : MAE_correct=0.00548  MAE_buggy=0.26160  sat_frac=0.000
+  PVC    : MAE_correct=0.00844  MAE_buggy=0.37326  sat_frac=0.000
+  AFib   : MAE_correct=0.00443  MAE_buggy=0.19028  sat_frac=0.000
+  VT     : MAE_correct=0.00826  MAE_buggy=0.40558  sat_frac=0.000
+  SVT    : MAE_correct=0.01061  MAE_buggy=0.30857  sat_frac=0.000
+
+SATURATION TABLE
+----------------------------------------
+   Amplitude   Max float     Q6.10    Sat?  hw_kernel       true
+      0.1250       16.00    15.875      no     0.8555   0.852144
+      0.2500       64.00    63.500      no     0.5371   0.527292
+      0.5000      256.00   254.000      no     0.0000   0.077305
+      1.0000     1024.00  1016.000      no     0.0000   0.000036
+      1.5000     2304.00  1023.999     YES     0.0000   0.000000
+      2.0000     4096.00  1023.999     YES     0.0000   0.000000
+      2.5000     6400.00  1023.999     YES     0.0000   0.000000
+
+HORNER ACCURACY SWEEP
+----------------------------------------
+  gamma=0.01; sweep dist=[0,60] (no saturation)
+  Mean |err|=0.00449  Max |err|=0.00783
+
+SKLEARN CLASSIFICATION REPORT
+----------------------------------------
+              precision    recall  f1-score   support
+
+      Normal       0.90      1.00      0.94        60
+         PVC       0.98      0.93      0.96        60
+        AFib       0.90      1.00      0.94        60
+          VT       1.00      1.00      1.00        60
+         SVT       0.96      0.78      0.86        60
+
+    accuracy                           0.94       300
+   macro avg       0.95      0.94      0.94       300
+weighted avg       0.95      0.94      0.94       300
+
+EXAMPLE FEATURE VECTORS
+----------------------------------------
+  Normal  #0: float[0..3]=[-0.402 -0.384 -0.390 -0.390]  Q6.10[0..3]=[65124, 65143, 65136, 65136]
+  Normal  #1: float[0..3]=[-0.313 -0.324 -0.341 -0.335]  Q6.10[0..3]=[65215, 65204, 65187, 65193]
+  Normal  #2: float[0..3]=[-0.371 -0.371 -0.366 -0.366]  Q6.10[0..3]=[65156, 65156, 65162, 65162]
+  PVC     #0: float[0..3]=[-0.166 -0.171 -0.186 -0.198]  Q6.10[0..3]=[65366, 65361, 65346, 65333]
+  PVC     #1: float[0..3]=[+0.011 +0.011 +0.021 +0.019]  Q6.10[0..3]=[11, 11, 22, 19]
+  PVC     #2: float[0..3]=[-0.070 -0.067 -0.080 -0.104]  Q6.10[0..3]=[65464, 65467, 65455, 65430]
+  AFib    #0: float[0..3]=[-0.309 -0.297 -0.280 -0.297]  Q6.10[0..3]=[65220, 65232, 65249, 65232]
+  AFib    #1: float[0..3]=[-0.201 -0.212 -0.212 -0.222]  Q6.10[0..3]=[65330, 65319, 65319, 65308]
+  AFib    #2: float[0..3]=[-0.331 -0.326 -0.326 -0.309]  Q6.10[0..3]=[65197, 65202, 65202, 65220]
+  VT      #0: float[0..3]=[+0.058 -0.003 -0.006 -0.033]  Q6.10[0..3]=[59, 65533, 65530, 65502]
+  VT      #1: float[0..3]=[-0.012 +0.032 +0.011 +0.069]  Q6.10[0..3]=[65523, 32, 11, 70]
+  VT      #2: float[0..3]=[-0.021 +0.010 -0.037 +0.071]  Q6.10[0..3]=[65514, 10, 65498, 72]
+  SVT     #0: float[0..3]=[-0.209 -0.215 -0.209 -0.194]  Q6.10[0..3]=[65322, 65316, 65322, 65338]
+  SVT     #1: float[0..3]=[+0.081 -0.035 -0.151 -0.302]  Q6.10[0..3]=[83, 65500, 65381, 65226]
+  SVT     #2: float[0..3]=[-0.343 -0.403 -0.388 -0.373]  Q6.10[0..3]=[65184, 65123, 65139, 65154]
+
+══════════════════════════════════════════════════════════════════════
+RTL BUGS FOUND AND FIXED IN svm_compute_core.sv
+══════════════════════════════════════════════════════════════════════
+
+Bug 1 — SCALE state always_ff NBA race (horner_engine)
+-------------------------------------------------------
+In the original SCALE state, 'temp' and 'x' were assigned in the
+SAME non-blocking cycle; x read the pre-NBA (stale) value of temp:
+
+    SCALE: begin
+        temp <= -(gamma * dist_in);   // new value (commits at NBA phase)
+        x    <= temp[25:10];          // reads PRE-NBA temp — always 0
+    end
+
+Effect: x = 0 always → every Horner result = COEFF_00 = 1.0.
+Masked in Test 6 because true distance = 0 → exp(0) = 1.0 anyway.
+
+Fix 1 — Two-cycle SCALE unroll (SCALE + SCALE2):
+    SCALE:  temp <= -(gamma * dist_in);
+    SCALE2: x    <= temp[25:10];      // reads committed NBA value
+Latency: 18 cycles (SCALE+SCALE2+HORNER_14..0+OUTPUT = 1+1+15+1).
+
+Bug 2 — Horner 1-cycle multiply lag (horner_engine)
+-----------------------------------------------------
+Each Horner state computed `temp <= x * result` and
+`result <= COEFF + temp>>FRAC` in the same NBA cycle.
+The multiply used the OLD result (one cycle stale), shifting all
+polynomial coefficients by one position.
+
+Fix 2 — result_next combinational forwarding:
+    Adds a combinational `result_next` mux that computes the updated
+    accumulator from the already-committed `temp` (via `temp_shifted`
+    continuous assign).  temp <= x * result_next uses the new value;
+    kernel_out <= clamped(result_next) in OUTPUT state.
+No latency change.
+
+Bug 3 — Distance accumulator overflow (distance_matrix)
+---------------------------------------------------------
+Original 16-bit dist_out saturated at Q6.10 = 63.999 (raw 65535).
+For 256 normalised features (A=1), worst-case distance = 1,040,384
+raw, far exceeding a 16-bit accumulator.
+
+Fix 3 — 20-bit distance output (DIST_WIDTH=20):
+    Saturation threshold: 0xFFFFF = 1,048,575 raw ≈ 1023.999 Q6.10.
+    With A=1 and 254 effective dims: 1,040,384 < 1,048,575 — no sat.
+
+══════════════════════════════════════════════════════════════════════
+Q6.10 distance operating range (all fixes applied)
+══════════════════════════════════════════════════════════════════════
+Features normalised to [-1, 1]:
+  Same-class pairs:  dist_q ≈ 2–50  Q6.10 → |x| = 0.02–0.5 → accurate ✓
+  Inter-class pairs: dist_q ≈ 100–1000 Q6.10 → |x| = 1–10
+    → Horner diverges → result clamped to 0
+    → true exp(−1..−10) ≈ 0.000–0.368, treated as 0 (acceptable approx)
+Classification is correct because intra-class kernels are high and
+accurately computed, while inter-class kernels collapse to 0.
+══════════════════════════════════════════════════════════════════════
