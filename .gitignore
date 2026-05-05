@@ -1,0 +1,11 @@
+out_*
+sim_build/
+__pycache__/
+*.vcd
+*.vvp
+svm_classifier.log
+results.xml
+tb_gz
+tb_msv
+tb_pw
+tb_svm
