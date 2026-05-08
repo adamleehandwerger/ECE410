@@ -81,7 +81,7 @@ module svm_compute_core #(
     input  logic [DATA_WIDTH-1:0]   sv_ram_rdata,
     output logic                    sv_ram_ren,
 
-    output logic [17:0]             work_ram_addr,
+    output logic [18:0]             work_ram_addr,
     output logic [DATA_WIDTH-1:0]   work_ram_wdata,
     input  logic [DATA_WIDTH-1:0]   work_ram_rdata,
     output logic                    work_ram_wen,
@@ -110,6 +110,7 @@ module svm_compute_core #(
     localparam logic [3:0] ERR_GAMMA_SAT     = 4'h4; // gamma > saturation threshold
     localparam logic [3:0] ERR_FIFO_OVERFLOW = 4'h5; // QSPI data dropped (FIFO full)
     localparam logic [3:0] ERR_GAMMA_ZERO    = 4'h6; // gamma = 0 → all kernels = 1.0 (silent classifier failure)
+    localparam logic [3:0] ERR_NUM_SAMPLES_ZERO = 4'h7; // num_samples = 0 → last_heartbeat underflows, batch never ends
 
     // gamma > 8.0 (Q6.10 = 8192) means exp(-I) = 0 for I>=8; all kernels zero
     localparam logic [DATA_WIDTH-1:0] GAMMA_SAT_THRESH = 16'd8192;
@@ -513,7 +514,7 @@ module svm_compute_core #(
     end
 
     // ── Error priority encoder (combinational) ────────────────────────────────
-    // Priority: illegal-state > SV-zero > SV-overflow > gamma-sat > gamma-zero > FIFO-overflow
+    // Priority: illegal-state > SV-zero > SV-overflow > num-samples-zero > gamma-sat > gamma-zero > FIFO-overflow
     always_comb begin
         if (state == ERROR_STATE)
             err_detect = ERR_ILLEGAL_STATE;
@@ -521,6 +522,8 @@ module svm_compute_core #(
             err_detect = ERR_SV_ZERO;
         else if ((state != IDLE) && (total_sv_check > NUM_SV))
             err_detect = ERR_SV_OVERFLOW;
+        else if ((state != IDLE) && (num_samples == 0))
+            err_detect = ERR_NUM_SAMPLES_ZERO;
         else if ((state != IDLE) && (gamma_int > GAMMA_SAT_THRESH))
             err_detect = ERR_GAMMA_SAT;
         else if ((state != IDLE) && (gamma_int == '0))

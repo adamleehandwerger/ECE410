@@ -267,7 +267,7 @@ endinterface : svm_work_ram_if
 //   logic [15:0] kernel_out;
 //   logic        kernel_valid, kernel_ready;
 //   logic [17:0] sv_ram_addr;  logic [15:0] sv_ram_rdata;  logic sv_ram_ren;
-//   logic [17:0] work_ram_addr; logic [15:0] work_ram_wdata, work_ram_rdata;
+//   logic [18:0] work_ram_addr; logic [15:0] work_ram_wdata, work_ram_rdata;
 //   logic        work_ram_wen, work_ram_ren;
 //
 //   svm_compute_core dut (
