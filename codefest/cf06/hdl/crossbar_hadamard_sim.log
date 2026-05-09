@@ -1,0 +1,24 @@
+=== crossbar_hadamard simulation log ===
+DUT: crossbar_hadamard  --  Hadamard W.T @ v  (4x4, entries +/-1, full rank)
+W.T:  i0=[+1,+1,+1,+1]  i1=[+1,-1,+1,-1]  i2=[+1,+1,-1,-1]  i3=[+1,-1,-1,+1]
+det(W) = 16  =>  full rank  =>  trivial null space
+
+--- 1. Basis vector tests ---
+PASS                                e0  v=[1,0,0,0]  i=[1,1,1,1]
+PASS                                e1  v=[0,1,0,0]  i=[1,-1,1,-1]
+PASS                                e2  v=[0,0,1,0]  i=[1,1,-1,-1]
+PASS                                e3  v=[0,0,0,1]  i=[1,-1,-1,1]
+
+--- 2. Superposition test  (a=[10,0,0,0], b=[0,20,0,0]) ---
+PASS                     superposition  v=[10,20,0,0]  i=[30,-10,30,-10]
+
+--- 3. Overflow boundary tests ---
+PASS                           max all  v=[127,127,127,127]  i=[508,0,0,0]
+PASS                           min all  v=[-128,-128,-128,-128]  i=[-512,0,0,0]
+PASS                           i1 peak  v=[127,-128,127,-128]  i=[-2,510,0,0]
+PASS                           i2 peak  v=[127,127,-128,-128]  i=[-2,0,510,0]
+PASS                           i3 peak  v=[127,-128,-128,127]  i=[-2,0,0,510]
+
+Result: 10 passed, 0 failed
+
+=== simulation complete ===
