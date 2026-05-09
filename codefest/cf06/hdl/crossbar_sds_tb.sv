@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 
-module tb_crossbar_sds_bench;
+module tb_crossbar_sds;
 
     reg  signed [7:0] v0, v1, v2, v3;
     wire signed [9:0] i0, i1, i2, i3;
