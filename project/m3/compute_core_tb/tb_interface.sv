@@ -1,5 +1,5 @@
 // ============================================================================
-// tb_interface.sv  —  ECE410 SVM Compute Core  pre-netlist suite
+// tb_interface.sv  —  ECE410_project_tb_netlist  pre-netlist suite
 // ============================================================================
 // Verifies the svm_host_if interface contract defined in svm_interfaces.sv.
 //
