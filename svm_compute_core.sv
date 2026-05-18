@@ -81,11 +81,14 @@ module svm_compute_core #(
     input  logic [DATA_WIDTH-1:0]   sv_ram_rdata,
     output logic                    sv_ram_ren,
 
-    output logic [17:0]             work_ram_addr,
+    output logic [18:0]             work_ram_addr,
     output logic [DATA_WIDTH-1:0]   work_ram_wdata,
     input  logic [DATA_WIDTH-1:0]   work_ram_rdata,
     output logic                    work_ram_wen,
     output logic                    work_ram_ren,
+
+    input  logic                    vbatt_warn,  // battery below soft threshold (warn; still operational)
+    input  logic                    vbatt_ok,    // battery above hard threshold (sufficient for compute)
 
     input  logic                    start,
     input  logic [9:0]              num_samples,
@@ -110,6 +113,11 @@ module svm_compute_core #(
     localparam logic [3:0] ERR_GAMMA_SAT     = 4'h4; // gamma > saturation threshold
     localparam logic [3:0] ERR_FIFO_OVERFLOW = 4'h5; // QSPI data dropped (FIFO full)
     localparam logic [3:0] ERR_GAMMA_ZERO    = 4'h6; // gamma = 0 → all kernels = 1.0 (silent classifier failure)
+    localparam logic [3:0] ERR_NUM_SAMPLES_ZERO = 4'h7; // num_samples = 0 → last_heartbeat underflows, batch never ends
+    localparam logic [3:0] ERR_WARMING_UP       = 4'h8; // fewer than 100 heartbeats since reset — RR/mean features unreliable (non-sticky)
+    localparam logic [3:0] ERR_INTERRUPTED      = 4'h9; // reset fired mid-warm-up (heartbeat_count was in [1,99]) — restart required (non-sticky)
+    localparam logic [3:0] ERR_LOW_BATTERY      = 4'hA; // vbatt_warn asserted: battery below soft threshold; recharge soon (non-sticky advisory)
+    localparam logic [3:0] ERR_POWER_FAIL       = 4'hB; // vbatt_ok deasserted: power too low to classify; start is blocked (non-sticky advisory)
 
     // gamma > 8.0 (Q6.10 = 8192) means exp(-I) = 0 for I>=8; all kernels zero
     localparam logic [DATA_WIDTH-1:0] GAMMA_SAT_THRESH = 16'd8192;
@@ -168,9 +176,21 @@ module svm_compute_core #(
     logic [DATA_WIDTH-1:0]   horner_kernel_out;
     logic                    horner_valid_out;
 
+    logic [6:0]              heartbeat_count; // saturates at 100; persists across batches, clears on rst_n
+    logic                    interrupted;     // set on rst_n when heartbeat_count was in [1,99]; cleared at beat 100
+    logic                    arm_interrupted = 1'b0; // gated mirror of (count in [1,99]); only updates when
+                                                     // rst_n=1 so it freezes at the pre-reset value while
+                                                     // the reset pulse is held low
+
     logic                    dist_valid_latch;
 
+    // Input synchronizers (2-FF) for async analog comparator outputs
+    logic                    vbatt_ok_s;   // synchronized vbatt_ok  (reset=1: assume power OK)
+    logic                    vbatt_warn_s; // synchronized vbatt_warn (reset=0: no warning)
+
     logic [DATA_WIDTH-1:0]   feature_bank [FEATURE_DIM];
+
+    logic [9:0]              num_samples_latched; // shadow: captured at start; immune to mid-batch writes
 
     logic [7:0]              feat_wr_addr;
     logic                    feat_wr_en_r;
@@ -210,7 +230,7 @@ module svm_compute_core #(
 
     wire last_sv        = (sv_counter >= sv_count_reg[class_counter] - 1);
     wire last_class     = (class_counter >= 3'd4);
-    wire last_heartbeat = (sample_counter >= num_samples - 1);
+    wire last_heartbeat = (sample_counter >= num_samples_latched - 1);
 
     // =========================================================================
     // Sub-module Instances
@@ -237,6 +257,14 @@ module svm_compute_core #(
         .start(dist_start),
         .feature_in(dist_feature_in), .sv_in(dist_sv_in), .valid_in(dist_valid_in),
         .dist_out(dist_out), .valid_out(dist_valid_out), .done(dist_done)
+    );
+
+    // 2-FF synchronizers for vbatt pins (async inputs from analog comparators)
+    sync_ff #(.RESET_VAL(1'b1)) u_sync_vbatt_ok (
+        .clk(clk), .rst_n(rst_n), .d(vbatt_ok),   .q(vbatt_ok_s)
+    );
+    sync_ff #(.RESET_VAL(1'b0)) u_sync_vbatt_warn (
+        .clk(clk), .rst_n(rst_n), .d(vbatt_warn), .q(vbatt_warn_s)
     );
 
     horner_engine #(
@@ -296,7 +324,7 @@ module svm_compute_core #(
     always_comb begin
         next_state = state;
         case (state)
-            IDLE:          if (start) next_state = LOAD_FIFO;
+            IDLE:          if (start && vbatt_ok_s) next_state = LOAD_FIFO;
             LOAD_FIFO:     if (fifo_count >= FEATURE_DIM) next_state = LOAD_FEATURES;
             LOAD_FEATURES: if (feat_wr_count == FEATURE_DIM) next_state = COMPUTE_DIST;
             COMPUTE_DIST:  if (dist_done) next_state = COMPUTE_KERNEL;
@@ -437,10 +465,11 @@ module svm_compute_core #(
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            sample_counter <= '0;
-            sv_counter     <= '0;
-            class_counter  <= '0;
-            gamma_latched  <= GAMMA_DEFAULT;
+            sample_counter     <= '0;
+            sv_counter         <= '0;
+            class_counter      <= '0;
+            gamma_latched      <= GAMMA_DEFAULT;
+            num_samples_latched <= 10'd1;
             for (int i = 0; i < 5; i++) sv_count_reg[i] <= '0;
         end else begin
             case (state)
@@ -448,12 +477,13 @@ module svm_compute_core #(
                     sample_counter <= '0;
                     sv_counter     <= '0;
                     class_counter  <= '0;
-                    if (start) begin
+                    if (start && vbatt_ok_s) begin
                         for (int i = 0; i < 5; i++)
                             sv_count_reg[i] <= num_sv_per_class[i];
                         // Latch gamma at the start of each batch so a mid-compute
                         // param_write_en cannot corrupt in-flight kernel values.
-                        gamma_latched <= gamma_int;
+                        gamma_latched       <= gamma_int;
+                        num_samples_latched <= num_samples;
                     end
                 end
                 LOAD_FIFO: begin
@@ -477,6 +507,34 @@ module svm_compute_core #(
                 default: begin end
             endcase
         end
+    end
+
+    // =========================================================================
+    // Warm-up Counter + Interrupted Flag
+    // =========================================================================
+    // arm_interrupted only updates while rst_n=1.  It freezes as soon as rst_n
+    // falls and holds the pre-reset value through the entire reset pulse.
+    // When rst_n rises again, the interrupted block reads arm_interrupted at
+    // the negedge-rst_n event, getting the correct pre-reset snapshot.
+    // (Icarus non-standard NBA order: both heartbeat_count and interrupted in
+    // one reset clause cause interrupted to read heartbeat_count=0 instead of
+    // its pre-reset value; gating arm_interrupted bypasses that race entirely.)
+    always_ff @(posedge clk)
+        if (rst_n) arm_interrupted <= (heartbeat_count > 7'd0 && heartbeat_count < 7'd100);
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            heartbeat_count <= 7'd0;
+        else if ((state == OUTPUT_RESULT) && kernel_valid && kernel_ready
+                 && last_sv && last_class && (heartbeat_count < 7'd100))
+            heartbeat_count <= heartbeat_count + 7'd1;
+    end
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            interrupted <= arm_interrupted; // reads pre-reset value (no NBA race)
+        else if (heartbeat_count == 7'd100)
+            interrupted <= 1'b0;
     end
 
     // =========================================================================
@@ -513,7 +571,9 @@ module svm_compute_core #(
     end
 
     // ── Error priority encoder (combinational) ────────────────────────────────
-    // Priority: illegal-state > SV-zero > SV-overflow > gamma-sat > gamma-zero > FIFO-overflow
+    // Priority: illegal-state > SV-zero > SV-overflow > num-samples-zero >
+    //           gamma-sat > gamma-zero > FIFO-overflow >
+    //           power-fail > low-battery > warming-up (all advisory)
     always_comb begin
         if (state == ERROR_STATE)
             err_detect = ERR_ILLEGAL_STATE;
@@ -521,12 +581,20 @@ module svm_compute_core #(
             err_detect = ERR_SV_ZERO;
         else if ((state != IDLE) && (total_sv_check > NUM_SV))
             err_detect = ERR_SV_OVERFLOW;
+        else if ((state != IDLE) && (num_samples == 0))
+            err_detect = ERR_NUM_SAMPLES_ZERO;
         else if ((state != IDLE) && (gamma_int > GAMMA_SAT_THRESH))
             err_detect = ERR_GAMMA_SAT;
         else if ((state != IDLE) && (gamma_int == '0))
             err_detect = ERR_GAMMA_ZERO;
         else if (fifo_overflow_r)
             err_detect = ERR_FIFO_OVERFLOW;
+        else if (!vbatt_ok_s)
+            err_detect = ERR_POWER_FAIL;
+        else if (vbatt_warn_s)
+            err_detect = ERR_LOW_BATTERY;
+        else if (heartbeat_count > 0 && heartbeat_count < 7'd100)
+            err_detect = interrupted ? ERR_INTERRUPTED : ERR_WARMING_UP;
         else
             err_detect = ERR_NONE;
     end
@@ -542,10 +610,27 @@ module svm_compute_core #(
         end else begin
             done  <= (state == OUTPUT_RESULT) && kernel_valid && kernel_ready
                       && last_sv && last_class && last_heartbeat;
-            // error / error_code are sticky: latch first fault, hold until reset
-            if (err_detect != ERR_NONE && error_code == ERR_NONE) begin
-                error      <= 1'b1;
-                error_code <= err_detect;
+            // Codes 0x1–0x7 are real faults: sticky (latch first, hold until rst_n).
+            // Codes 0x8+ are advisory (ERR_WARMING_UP, ERR_INTERRUPTED): non-sticky,
+            // auto-clear when err_detect returns ERR_NONE (heartbeat_count >= 100).
+            if (err_detect != ERR_NONE && err_detect < 4'h8) begin
+                // Real fault: latch first occurrence; overrides any advisory showing.
+                if (error_code == ERR_NONE || error_code >= 4'h8) begin
+                    error      <= 1'b1;
+                    error_code <= err_detect;
+                end
+            end else if (err_detect >= 4'h8) begin
+                // Advisory: show only while no real fault is latched.
+                if (error_code == ERR_NONE || error_code >= 4'h8) begin
+                    error      <= 1'b1;
+                    error_code <= err_detect;
+                end
+            end else begin
+                // ERR_NONE: clear advisory; real faults stay latched.
+                if (error_code >= 4'h8) begin
+                    error      <= 1'b0;
+                    error_code <= ERR_NONE;
+                end
             end
             // Latch kernel_out when Horner produces a new result; hold stable.
             if (horner_valid_out)
@@ -661,6 +746,11 @@ module distance_matrix #(
     logic [2*DATA_WIDTH-1:0]   diff_squared;
     logic [2*DATA_WIDTH+8-1:0] accumulator;
     logic [8:0]                dim_counter;
+    // drain_cnt flushes the 2-cycle diff→diff_squared→accumulator pipeline after
+    // the last valid_in so all FEATURE_DIM contributions are accumulated.
+    //   drain_cnt=1: square the last diff (feature[255]-sv[255])
+    //   drain_cnt=2: add that square to accumulator; then transition to OUTPUT
+    logic [1:0]                drain_cnt;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) state <= IDLE;
@@ -671,7 +761,7 @@ module distance_matrix #(
         next_state = state;
         case (state)
             IDLE:       if (start) next_state = ACCUMULATE;
-            ACCUMULATE: if (dim_counter >= FEATURE_DIM - 1 && valid_in) next_state = OUTPUT;
+            ACCUMULATE: if (drain_cnt == 2'd2) next_state = OUTPUT;
             OUTPUT:     next_state = DONE_STATE;
             DONE_STATE: next_state = IDLE;
             default:    next_state = IDLE;
@@ -692,11 +782,38 @@ module distance_matrix #(
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
+            drain_cnt <= 2'd0;
+        end else begin
+            case (state)
+                IDLE: drain_cnt <= 2'd0;
+                ACCUMULATE: begin
+                    if (dim_counter >= FEATURE_DIM - 1 && valid_in && drain_cnt == 2'd0)
+                        drain_cnt <= 2'd1;
+                    else if (drain_cnt != 2'd0)
+                        drain_cnt <= drain_cnt + 2'd1;
+                end
+                default: drain_cnt <= 2'd0;
+            endcase
+        end
+    end
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
             diff         <= '0;
             diff_squared <= '0;
-        end else if (valid_in && state == ACCUMULATE) begin
-            diff         <= $signed(feature_in) - $signed(sv_in);
-            diff_squared <= $signed(diff) * $signed(diff);
+        end else if (state == IDLE) begin
+            // Reset pipeline registers between SVs so stale values don't
+            // contaminate the first accumulation of the next computation.
+            diff         <= '0;
+            diff_squared <= '0;
+        end else if (state == ACCUMULATE) begin
+            if (valid_in) begin
+                diff         <= $signed(feature_in) - $signed(sv_in);
+                diff_squared <= $signed(diff) * $signed(diff);
+            end else if (drain_cnt == 2'd1) begin
+                // Flush last diff through squaring stage
+                diff_squared <= $signed(diff) * $signed(diff);
+            end
         end
     end
 
@@ -706,7 +823,7 @@ module distance_matrix #(
         end else begin
             case (state)
                 IDLE:       accumulator <= '0;
-                ACCUMULATE: if (valid_in)
+                ACCUMULATE: if (valid_in || drain_cnt != 2'd0)
                     accumulator <= accumulator + (diff_squared >>> FRAC_BITS);
                 default:    accumulator <= accumulator;
             endcase
@@ -1029,4 +1146,29 @@ module horner_engine #(
         end
     end
 
+endmodule
+
+// ===========================================================================
+// 2-FF Synchronizer  —  metastability barrier for async digital inputs
+//
+// RESET_VAL selects the reset-time state of the pipeline:
+//   1'b1 for vbatt_ok  (assume power OK at POR)
+//   1'b0 for vbatt_warn (no warning at POR)
+// ===========================================================================
+
+module sync_ff #(
+    parameter int STAGES    = 2,
+    parameter bit RESET_VAL = 1'b0
+) (
+    input  logic clk,
+    input  logic rst_n,
+    input  logic d,
+    output logic q
+);
+    logic [STAGES-1:0] pipe;
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) pipe <= {STAGES{RESET_VAL}};
+        else        pipe <= {pipe[STAGES-2:0], d};
+    end
+    assign q = pipe[STAGES-1];
 endmodule

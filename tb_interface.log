@@ -1,0 +1,50 @@
+=== tb_interface.sv — SVM Compute Core Interface Tests ===
+    FEATURE_DIM=8  NUM_SV=5  MAX_BATCH_SIZE=4
+
+--- Section 1: Register Map ---
+  1.1  Default values after reset
+  [PASS] gamma_reg  default  0.25 = 0x0100            got=0x0100
+  [PASS] c_reg      default  1.0  = 0x0400            got=0x0400
+  [PASS] bias_reg[0] default 0.0  = 0x0000            got=0x0000
+  [PASS] bias_reg[4] default 0.0  = 0x0000            got=0x0000
+  1.2  Write / readback (param_addr 0–6)
+  [PASS] addr=0 gamma_reg  write 0x0200               got=0x0200
+  [PASS] addr=1 c_reg      write 0x0800               got=0x0800
+  [PASS] addr=2 bias_reg[0] write 0x0100              got=0x0100
+  [PASS] addr=3 bias_reg[1] write 0x0200              got=0x0200
+  [PASS] addr=4 bias_reg[2] write 0x0300              got=0x0300
+  [PASS] addr=5 bias_reg[3] write 0x0400              got=0x0400
+  [PASS] addr=6 bias_reg[4] write 0x0500              got=0x0500
+  1.3  Reserved address (addr=7) — writes ignored
+  [PASS] gamma_reg   unchanged after reserved write   got=0x0200
+  [PASS] c_reg       unchanged after reserved write   got=0x0800
+  [PASS] bias_reg[0] unchanged after reserved write   got=0x0100
+  1.4  Gamma saturation: write accepted; ERR_GAMMA_SAT fires when FSM active
+  [PASS] gamma_reg written to 9000 (write not blocked in IDLE) got=0x2328
+  [PASS] ERR_GAMMA_SAT (0x4) fires when FSM leaves IDLE error_code=0x4
+
+--- Section 2: Error Code Values ---
+  2.1  ERR_SV_ZERO (0x1): all sv_counts = 0
+  [PASS] ERR_SV_ZERO                                  error_code=0x1
+  2.2  ERR_SV_OVERFLOW (0x2): sum sv_counts > NUM_SV
+  [PASS] ERR_SV_OVERFLOW                              error_code=0x2
+  2.3  ERR_GAMMA_SAT (0x4): gamma > 0x2000 then FSM activated
+  [PASS] ERR_GAMMA_SAT                                error_code=0x4
+  2.4  ERR_GAMMA_ZERO (0x6): gamma=0 while FSM not IDLE
+  [PASS] ERR_GAMMA_ZERO                               error_code=0x6
+  2.5  ERR_NUM_SAMPLES_ZERO (0x7): num_samples = 0 at start
+  [PASS] ERR_NUM_SAMPLES_ZERO                         error_code=0x7
+  2.6  Sticky: error_code holds after 20 idle cycles
+  [PASS] error_code sticky (0x7)                      error_code=0x7
+
+--- Section 3: Start Protocol ---
+  3.1  start in IDLE triggers batch (done fires)
+  [PASS] done fires after valid start                 got=0
+  3.2  start outside IDLE ignored (done fires exactly once)
+  [PASS] done fires exactly once (not twice)          got=1
+  3.3  num_samples=2 batch: done fires once after 2 heartbeats
+  [PASS] done fires once for 2-sample batch           got=1
+
+=== Results: 25 passed  0 failed / 25 total ===
+tb_interface: PASS
+/Users/user/Desktop/ECE_project_tb_netlist/tb_interface.sv:354: $finish called at 49726000 (1ps)

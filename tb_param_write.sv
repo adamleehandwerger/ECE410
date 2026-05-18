@@ -11,14 +11,14 @@
 //
 // Test uses feature=0x0600, sv=0x0400 so distance is non-zero and gamma
 // actually affects the output:
-//   diff=512 per dim, accumulator=16×256=4096, dist_out=4096
+//   diff=512 per dim; drain flush accumulates all 16 dims: 16×256=4096
 //   P = 256×4096 = 0x100000 → I=1 → lut_val=377, F_q=0 → Horner=1024
-//   expected kernel_out = (377×1024)>>10 = 376
+//   expected kernel_out = (377×1024)>>10 = 377
 //
 // Sequence:
-//   1. Run baseline: gamma=256, no mid-write → expect kernel=376.
+//   1. Run baseline: gamma=256, no mid-write → expect kernel=377.
 //   2. Run with mid-write: gamma=256 at start, write gamma=9000 mid-pipeline.
-//      With fix: gamma_latched=256 throughout → kernel still 376.
+//      With fix: gamma_latched=256 throughout → kernel still 377.
 //      Without fix: Horner would use gamma=9000 → P overflows → kernel=0.
 //   3. Verify ERR_GAMMA_SAT fires after write (correct: illegal write detected).
 //   4. Check both runs produce the same kernel output.
@@ -73,6 +73,7 @@ svm_compute_core #(
     .work_ram_addr(work_ram_addr), .work_ram_wdata(work_ram_wdata),
     .work_ram_rdata(work_ram_rdata), .work_ram_wen(work_ram_wen),
     .work_ram_ren(work_ram_ren),
+    .vbatt_warn(1'b0), .vbatt_ok(1'b1),
     .start(start), .num_samples(num_samples),
     .done(done), .error(error), .error_code(error_code),
     .kernel_out(kernel_out), .kernel_valid(kernel_valid),
@@ -154,11 +155,10 @@ endtask
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 // Expected kernel: feature=0x0600, sv=0x0400, gamma=256
-//   diff=512/dim, diff²>>10=256; distance_matrix 2-cycle pipeline means
-//   only FEATURE_DIM-1=15 dims land in the accumulator: 15×256=3840
-//   P=256×3840=0x0F0000 → I=0, lut=1024, F_q=0x3C0=960, x=-960
-//   Horner(x=-960) → kernel_out = 387 per SV
-localparam int EXPECTED_KERNEL = 387;
+//   diff=512/dim, diff²>>10=256; drain flush captures all FEATURE_DIM=16 dims
+//   accumulator=16×256=4096, P=256×4096=0x100000 → I=1, lut=377, F_q=0, x=0
+//   Horner(x=0)=1024, kernel_out=(377×1024)>>10=377 per SV
+localparam int EXPECTED_KERNEL = 377;
 
 initial begin
     int ksum_baseline, ksum_midwrite;

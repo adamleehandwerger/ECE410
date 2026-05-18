@@ -29,6 +29,8 @@ def from_fixed(raw) -> float:
 
 async def reset_dut(dut):
     dut.rst_n.value          = 0
+    dut.vbatt_warn.value     = 0
+    dut.vbatt_ok.value       = 1
     dut.qspi_valid.value     = 0
     dut.qspi_data.value      = 0
     dut.start.value          = 0
