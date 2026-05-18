@@ -1,5 +1,5 @@
 // ============================================================================
-// tb_min_sv.sv  —  ECE410_project_LUT  pre-netlist suite
+// tb_min_sv.sv  —  ECE410_project_tb_netlist  pre-netlist suite
 // ============================================================================
 // Verifies minimum-SV configuration: 1 SV per class = 5 total SVs.
 //

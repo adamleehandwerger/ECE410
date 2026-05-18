@@ -1,5 +1,5 @@
 // ============================================================================
-// tb_svm_classifier.sv  —  ECE410_project_LUT
+// tb_svm_classifier.sv  —  ECE410_project_tb_netlist
 // ============================================================================
 // Full-pipeline classification testbench for svm_compute_core.
 //
