@@ -1,5 +1,5 @@
 // ============================================================================
-// tb_param_write.sv  —  ECE410_project_LUT  pre-netlist suite
+// tb_param_write.sv  —  ECE410_project_tb_netlist  pre-netlist suite
 // ============================================================================
 // Verifies the gamma shadow-register fix for mid-compute param writes.
 //

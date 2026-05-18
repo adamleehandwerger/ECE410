@@ -1,5 +1,5 @@
 // ============================================================================
-// tb_dist_boundary.sv  —  ECE410_project_LUT  pre-netlist suite
+// tb_dist_boundary.sv  —  ECE410_project_tb_netlist  pre-netlist suite
 // ============================================================================
 // Verifies accumulator saturation in distance_matrix.
 //

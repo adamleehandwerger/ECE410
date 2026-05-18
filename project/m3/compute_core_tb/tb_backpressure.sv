@@ -1,5 +1,5 @@
 // ============================================================================
-// tb_backpressure.sv  —  ECE410_project_LUT  pre-netlist suite
+// tb_backpressure.sv  —  ECE410_project_tb_netlist  pre-netlist suite
 // ============================================================================
 // Verifies kernel_ready / kernel_valid handshake.
 //
