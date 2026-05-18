@@ -114,9 +114,8 @@ Range: −32.000 to +31.999, LSB ≈ 0.000977
 | `0x4` | `ERR_GAMMA_SAT` | `gamma_int` > 8192 during param write |
 | `0x5` | `ERR_FIFO_OVERFLOW` | QSPI data arrived when FIFO full (data dropped) |
 | `0x6` | `ERR_GAMMA_ZERO` | `gamma_int` = 0 while FSM not IDLE (silent classifier failure) |
-| `0x7` | `ERR_NUM_SAMPLES_ZERO` | `num_samples` = 0 at `start` — `last_heartbeat` underflows to 1023; batch never terminates |
 
-Priority (highest wins): `ERR_SV_ZERO` > `ERR_SV_OVERFLOW` > `ERR_NUM_SAMPLES_ZERO` > `ERR_ILLEGAL_STATE` > `ERR_GAMMA_SAT` > `ERR_GAMMA_ZERO` > `ERR_FIFO_OVERFLOW`
+Priority (highest wins): `ERR_SV_ZERO` > `ERR_SV_OVERFLOW` > `ERR_ILLEGAL_STATE` > `ERR_GAMMA_SAT` > `ERR_GAMMA_ZERO` > `ERR_FIFO_OVERFLOW`
 
 ---
 
