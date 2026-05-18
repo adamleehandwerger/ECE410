@@ -65,6 +65,7 @@ svm_compute_core #(
     .work_ram_addr(work_ram_addr), .work_ram_wdata(work_ram_wdata),
     .work_ram_rdata(work_ram_rdata), .work_ram_wen(work_ram_wen),
     .work_ram_ren(work_ram_ren),
+    .vbatt_warn(1'b0), .vbatt_ok(1'b1),
     .start(start), .num_samples(num_samples),
     .done(done), .error(error), .error_code(error_code),
     .kernel_out(kernel_out), .kernel_valid(kernel_valid),

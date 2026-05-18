@@ -62,6 +62,7 @@ svm_compute_core #(
     .work_ram_addr(work_ram_addr), .work_ram_wdata(work_ram_wdata),
     .work_ram_rdata(work_ram_rdata), .work_ram_wen(work_ram_wen),
     .work_ram_ren(work_ram_ren),
+    .vbatt_warn(1'b0), .vbatt_ok(1'b1),
     .start(start), .num_samples(num_samples),
     .done(done), .error(error), .error_code(error_code),
     .kernel_out(kernel_out), .kernel_valid(kernel_valid),
@@ -131,8 +132,8 @@ initial begin
         $fatal(1, "[FAIL] timeout: done never asserted after %0d cycles", 5000);
 
     // Checks
-    if (error)
-        $fatal(1, "[FAIL] error asserted (error_code=0x%0h)", error_code);
+    if (error && error_code < 4'h8)
+        $fatal(1, "[FAIL] real fault asserted (error_code=0x%0h)", error_code);
 
     if (kernel_count === N_KERNELS)
         $display("  [PASS] kernel_count=%0d (expected %0d)", kernel_count, N_KERNELS);

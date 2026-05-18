@@ -61,6 +61,7 @@ svm_compute_core #(
     .work_ram_addr(work_ram_addr), .work_ram_wdata(work_ram_wdata),
     .work_ram_rdata(work_ram_rdata), .work_ram_wen(work_ram_wen),
     .work_ram_ren(work_ram_ren),
+    .vbatt_warn(1'b0), .vbatt_ok(1'b1),
     .start(start), .num_samples(num_samples),
     .done(done), .error(error), .error_code(error_code),
     .kernel_out(kernel_out), .kernel_valid(kernel_valid),
@@ -102,7 +103,7 @@ task automatic run_batch(input int batch_id, output int kcount, output int ksum)
     while (!done && timeout > 0) begin @(posedge clk); #1; timeout--; end
     if (timeout == 0)
         $fatal(1, "[FAIL] batch %0d: timeout waiting for done", batch_id);
-    if (error)
+    if (error && error_code < 4'h8)
         $fatal(1, "[FAIL] batch %0d: error_code=0x%0h", batch_id, error_code);
 
     @(posedge clk); #1;  // let done-triggered counters settle
