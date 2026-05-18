@@ -2,7 +2,7 @@
 
 RTL file: `svm_compute_core.sv`  
 Simulator: Icarus Verilog 13.0 / cocotb 2.0.1  
-Date: 2026-05-05
+Date: 2026-05-18
 
 ---
 
@@ -44,8 +44,9 @@ iverilog -g2012 -o <out> <tb>.sv svm_compute_core.sv && vvp <out>
 | `tb_warmup.sv` | 14 | **PASS** | `ERR_WARMING_UP` (0x8) clean start; `ERR_INTERRUPTED` (0x9) after mid-warm-up reset; real fault overrides advisory; auto-clear at beat 100; reset after completed warm-up shows 0x8 not 0x9 |
 | `tb_power.sv` | 16 | **PASS** | `ERR_LOW_BATTERY` (0xA) advisory while `vbatt_warn` high; `ERR_POWER_FAIL` (0xB) blocks start while `vbatt_ok` low; FSM completes mid-run; real fault overrides; auto-clear on pin restore |
 | `tb_svm_classifier.sv` | 5/5 correct | **PASS** | Full 5-class cardiac arrhythmia classification (Normal/PVC/AFib/VT/SVT); kernel MAE < 0.003; no error flag |
+| `tb_interface.sv` | 25 | **PASS** | Interface contract: register map defaults/writes/reserved; ERR_GAMMA_SAT/SV_ZERO/SV_OVERFLOW/GAMMA_ZERO/NUM_SAMPLES_ZERO; sticky hold; start-triggers-batch; start-outside-IDLE ignored; 2-sample batch |
 
-**iverilog total: 12/12 PASS** (all tests revalidated after fixes 7–10)
+**iverilog total: 13/13 PASS** (all tests revalidated after fixes 7–10; tb_interface vbatt ports connected)
 
 ---
 

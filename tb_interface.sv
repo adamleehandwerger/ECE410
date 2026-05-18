@@ -55,6 +55,8 @@ logic        sv_ram_ren;
 logic [18:0] work_ram_addr;
 logic [DW-1:0] work_ram_wdata, work_ram_rdata;
 logic        work_ram_wen, work_ram_ren;
+logic        vbatt_warn = 1'b0;   // no low-battery warning
+logic        vbatt_ok   = 1'b1;   // battery OK
 logic        start;
 logic [9:0]  num_samples;
 logic        done, error;
@@ -76,6 +78,7 @@ svm_compute_core #(
     .sv_ram_addr(sv_ram_addr), .sv_ram_rdata(sv_ram_rdata), .sv_ram_ren(sv_ram_ren),
     .work_ram_addr(work_ram_addr), .work_ram_wdata(work_ram_wdata),
     .work_ram_rdata(work_ram_rdata), .work_ram_wen(work_ram_wen), .work_ram_ren(work_ram_ren),
+    .vbatt_warn(vbatt_warn), .vbatt_ok(vbatt_ok),
     .start(start), .num_samples(num_samples),
     .done(done), .error(error), .error_code(error_code),
     .kernel_out(kernel_out), .kernel_valid(kernel_valid), .kernel_ready(kernel_ready)
