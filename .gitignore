@@ -1,11 +1,23 @@
-out_*
-sim_build/
-__pycache__/
-*.vcd
-*.vvp
-svm_classifier.log
-results.xml
-tb_gz
-tb_msv
-tb_pw
-tb_svm
+# Ignore everything at repo root except the two sanctioned directories.
+# Any new scratch file/folder is invisible to git by default.
+/*
+
+# Keep these
+!.gitignore
+!/project/
+!/codefest/
+
+# Compiled simulation binaries and build artifacts inside codefest/
+codefest/**/sim_*
+codefest/**/obj_dir/
+codefest/**/sim_build/
+codefest/**/out_*
+codefest/**/*.vcd
+codefest/**/*.vvp
+codefest/**/svm_classifier.log
+codefest/**/results.xml
+codefest/**/tb_gz
+codefest/**/tb_msv
+codefest/**/tb_pw
+codefest/**/tb_svm
+codefest/**/__pycache__/
