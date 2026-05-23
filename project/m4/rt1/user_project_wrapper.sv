@@ -255,8 +255,10 @@ module user_project_wrapper #(
     endcase
 
     reg wb_ack_r;
-    always @(posedge clk or negedge rst_n)
-        wb_ack_r <= rst_n ? wb_valid : 1'b0;
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) wb_ack_r <= 1'b0;
+        else        wb_ack_r <= wb_valid;
+    end
 
     assign wbs_ack_o = wb_ack_r;
     assign wbs_dat_o = wb_rdata;
