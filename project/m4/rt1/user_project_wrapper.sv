@@ -77,27 +77,20 @@ module user_project_wrapper #(
 
     wire core_warming = (svm_error_code == 4'h8);
 
-    reg        svm_clk_en;
-    reg [5:0]  drain_cnt;
+    reg [5:0] drain_cnt;
 
     always @(posedge clk) begin
-        if (!rst_n) begin
-            svm_clk_en <= 1'b1;
-            drain_cnt  <= 6'd0;
-        end else if (qspi_valid_r || reg_control[0] || core_warming) begin
-            svm_clk_en <= 1'b1;
-            drain_cnt  <= 6'd0;
-        end else if (svm_done && svm_clk_en) begin
-            svm_clk_en <= 1'b1;
-            drain_cnt  <= 6'd32;
-        end else if (drain_cnt > 6'd1) begin
-            svm_clk_en <= 1'b1;
-            drain_cnt  <= drain_cnt - 6'd1;
-        end else if (drain_cnt == 6'd1) begin
-            svm_clk_en <= 1'b0;
-            drain_cnt  <= 6'd0;
-        end
+        if (!rst_n)
+            drain_cnt <= 6'd0;
+        else if (qspi_valid_r || reg_control[0] || core_warming)
+            drain_cnt <= 6'd0;
+        else if (svm_done)
+            drain_cnt <= 6'd32;
+        else if (drain_cnt > 0)
+            drain_cnt <= drain_cnt - 6'd1;
     end
+
+    wire svm_clk_en = !rst_n | qspi_valid_r | reg_control[0] | core_warming | (drain_cnt > 0);
 
     wire svm_gclk;
 `ifdef SIMULATION
