@@ -260,11 +260,7 @@ module user_project_wrapper #(
     // =========================================================================
     // svm_compute_core
     // =========================================================================
-    svm_compute_core #(
-        .DATA_WIDTH(16), .FRAC_BITS(10), .DIST_WIDTH(20),
-        .FEATURE_DIM(128), .NUM_SV(256), .MAX_BATCH_SIZE(1000),
-        .FIFO_DEPTH(4096), .ADDR_WIDTH(12)
-    ) u_svm (
+    svm_compute_core u_svm (
         .clk             (svm_gclk),
         .rst_n           (rst_n),
         .param_write_en  (reg_param_wr[19]),
