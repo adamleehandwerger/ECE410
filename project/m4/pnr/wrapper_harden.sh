@@ -56,6 +56,9 @@ NIX_STORE=$SCRATCH/.nix/.nix-portable/nix
 NIX_YOSYS=$(ls -d $SCRATCH/.nix/.nix-portable/nix/store/*-yosys-with-plugins/bin/yosys 2>/dev/null | head -1)
 cat > $TOOL_WRAPPERS/yosys << WRAP
 #!/bin/bash
+# Expose venv site-packages so yosys embedded Python can find click and other
+# openlane deps (nix yosys uses its own Python; PYTHONPATH bridges the gap)
+export PYTHONPATH=$OL2_VENV/lib/python3.13/site-packages\${PYTHONPATH:+:\$PYTHONPATH}
 exec $PROOT -b $NIX_STORE:/nix $NIX_YOSYS "\$@"
 WRAP
 chmod +x $TOOL_WRAPPERS/yosys
