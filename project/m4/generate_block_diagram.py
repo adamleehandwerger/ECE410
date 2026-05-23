@@ -323,9 +323,9 @@ ACY_TOP = QY            # 12.55 — start just below QSPI
 
 ACY_H   = 1.72          # Arrhythmia Classes
 LEG_H   = 2.00          # Legend
-ERR_H   = 5.15          # Error Codes (single box, no sub-box)
+ERR_H   = 4.60          # Error Codes (shortened to give Revisions more room)
 # Derive REV_H from the remaining space
-REV_H   = (ACY_TOP - REV_BOT) - ACY_H - LEG_H - ERR_H - 3*GAP  # ≈ 1.53
+REV_H   = (ACY_TOP - REV_BOT) - ACY_H - LEG_H - ERR_H - 3*GAP  # ≈ 2.58
 
 LEG_TOP = ACY_TOP - ACY_H - GAP
 ERR_TOP = LEG_TOP - LEG_H - GAP
