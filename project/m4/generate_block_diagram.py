@@ -323,7 +323,7 @@ ACY_TOP = QY            # 12.55 — start just below QSPI
 
 ACY_H   = 1.72          # Arrhythmia Classes
 LEG_H   = 2.00          # Legend
-ERR_H   = 4.60          # Error Codes (shortened to give Revisions more room)
+ERR_H   = 4.40          # Error Codes (shortened to give Revisions more room)
 # Derive REV_H from the remaining space
 REV_H   = (ACY_TOP - REV_BOT) - ACY_H - LEG_H - ERR_H - 3*GAP  # ≈ 2.58
 
@@ -430,7 +430,7 @@ ax.plot([LX+0.22, LX+LW-0.22], [REV_TOP-0.40, REV_TOP-0.40],
         color="#bbbbbb", lw=0.7, zorder=3)
 
 revisions = [
-    ("v7", "2026-05-23", "m4: 128-dim (64+32+32), off-chip SV RAM via GPIO/LA, hardened GDS sky130A  DRT 0 DRC"),
+    ("v7", "2026-05-23", "128-dim (64+32+32), SV RAM off-chip GPIO/LA, sky130A DRT 0 DRC"),
     ("v6", "2026-05-18", "fix 11 (arm_interrupted ASIC reset, ifdef SYNTHESIS)  13/13 PASS"),
     ("v5", "2026-05-18", "fixes 4-10 (power pins, sync_ff, drain flush)"),
     ("v4", "2026-05-05", "fixes 1-3 (kernel_valid, gamma shadow, ERR_GAMMA_ZERO)"),
