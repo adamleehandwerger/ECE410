@@ -22,9 +22,7 @@
     "EXTRA_GDS_FILES": [
         "dir::../../gds/svm_compute_core.gds"
     ],
-    "EXTRA_LIBS": [
-        "dir::../../lib/svm_compute_core.lib"
-    ],
+    "EXTRA_LIBS": [],
     "EXTRA_SPEFS": [],
     "BASE_SDC_FILE": "dir::base_user_project_wrapper.sdc",
     "IO_SYNC": 0,
