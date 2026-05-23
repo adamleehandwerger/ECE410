@@ -1,0 +1,347 @@
+// SPDX-FileCopyrightText: 2024 Adam Handwerger
+// SPDX-License-Identifier: Apache-2.0
+//
+// Caravel user_project_wrapper — 5-class RBF-SVM Cardiac Arrhythmia Classifier
+// ECE410, Portland State University
+//
+// Clock gating strategy:
+//   - svm_compute_core receives a gated clock (svm_gclk) via sky130 ICG cell
+//   - Gate is OPEN (clock runs) when: warming up, receiving data, classifying
+//   - Gate is CLOSED (clock stopped) when: fully idle between heartbeats
+//   - ERR_WARMING_UP (error_code=0x8) from core keeps gate open during warmup
+//     so the internal heartbeat counter is never starved
+//   - Expected average power: ~1-2 mW at 1 Hz inference rate (vs 985 mW without gating)
+//
+// ┌─────────────────────────────────────────────────────────┐
+// │  Wishbone Memory Map  (base 0x3000_0000)                │
+// │  0x00 WO  FIFO_DATA    write 16-bit feature word       │
+// │  0x04 RW  CONTROL      [0]=start [1]=vbatt_ok          │
+// │                         [2]=vbatt_warn [3]=kern_ready   │
+// │  0x08 RO  STATUS       [0]=done [1]=error              │
+// │                         [5:2]=error_code [8:6]=class    │
+// │  0x0C RW  NUM_SAMPLES  [9:0]                           │
+// │  0x10–0x20 RW  NUM_SV_0–4  [7:0] SVs per class        │
+// │  0x24 WO  PARAM_WR    [19]=en [18:16]=addr [15:0]=data │
+// │  0x30 WO  SV_ADDR     set sv_ram write pointer (18b)   │
+// │  0x34 WO  SV_DATA     write 16-bit word, auto-incr ptr │
+// │  0x38 WO  WORK_RD     [10:0]=addr to read from work_ram│
+// │  0x3C RO  STATUS2     work_ram read data [15:0]        │
+// └─────────────────────────────────────────────────────────┘
+//
+// GPIO[2:0] = class_out (0=Normal 1=PVC 2=AFib 3=VT 4=SVT)
+// GPIO[3]   = done    GPIO[4] = error    GPIO[8:5] = error_code
+// GPIO[9]   = fifo_ready    IRQ[0] = done pulse
+
+`default_nettype none
+
+module user_project_wrapper #(
+    parameter BITS = 32
+) (
+`ifdef USE_POWER_PINS
+    inout vdda1, inout vdda2, inout vssa1, inout vssa2,
+    inout vccd1, inout vccd2, inout vssd1, inout vssd2,
+`endif
+    input  wb_clk_i, input  wb_rst_i,
+    input  wbs_stb_i, input  wbs_cyc_i, input  wbs_we_i,
+    input  [3:0]  wbs_sel_i,
+    input  [31:0] wbs_dat_i,
+    input  [31:0] wbs_adr_i,
+    output wbs_ack_o,
+    output [31:0] wbs_dat_o,
+    input  [127:0] la_data_in,
+    output [127:0] la_data_out,
+    output [127:0] la_oenb,
+    input  [`MPRJ_IO_PADS-1:0] io_in,
+    output [`MPRJ_IO_PADS-1:0] io_out,
+    output [`MPRJ_IO_PADS-1:0] io_oeb,
+    inout  [`MPRJ_IO_PADS-10-1:0] analog_io,
+    input  user_clock2,
+    output [2:0] user_irq
+);
+
+    wire clk   = wb_clk_i;
+    wire rst_n = ~wb_rst_i;
+
+    // =========================================================================
+    // Clock gate — sky130 ICG (latch-based, glitch-free)
+    // svm_gclk is the gated clock delivered to svm_compute_core.
+    //
+    // OPEN conditions (svm_clk_en = 1):
+    //   1. Core is warming up (error_code == ERR_WARMING_UP = 0x8) — heartbeat
+    //      counter must run freely; never gate during warmup
+    //   2. Feature data arriving (qspi_valid_r) — FIFO must accept data
+    //   3. Start pulsed — FSM must see the rising edge
+    //   4. Post-done linger (32 cycles) — allow pipeline drain
+    //
+    // CLOSED otherwise: all SVM flip-flops frozen, zero switching power
+    // =========================================================================
+    wire [3:0] svm_error_code;   // forward-declared; driven by u_svm below
+    wire       svm_done;
+
+    // Warming-up: core reports ERR_WARMING_UP (4'h8) non-sticky until 100 beats
+    wire core_warming = (svm_error_code == 4'h8);
+
+    reg        svm_clk_en;
+    reg [5:0]  drain_cnt;       // post-done drain counter (32 cycles)
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            svm_clk_en <= 1'b1; // enabled at reset — warmup must run immediately
+            drain_cnt  <= 6'd0;
+        end else begin
+            // Re-open gate: data arriving, start pulse, or still warming up
+            if (qspi_valid_r || reg_control[0] || core_warming) begin
+                svm_clk_en <= 1'b1;
+                drain_cnt  <= 6'd0;
+            // Done: start drain countdown, then close gate
+            end else if (svm_done && svm_clk_en) begin
+                drain_cnt  <= 6'd32;
+            end else if (drain_cnt > 0) begin
+                drain_cnt  <= drain_cnt - 1;
+                if (drain_cnt == 6'd1) svm_clk_en <= 1'b0;
+            end
+            // Gate stays closed until next qspi_valid / start / warming
+        end
+    end
+
+    // sky130 ICG: GATE sampled on falling CLK edge → glitch-free enable
+    wire svm_gclk;
+`ifdef SIMULATION
+    assign svm_gclk = clk & svm_clk_en;  // behavioral model for sim
+`else
+    sky130_fd_sc_hd__dlclkp_1 u_icg (
+  `ifdef USE_POWER_PINS
+        .VPWR(vccd1), .VPB(vccd1), .VGND(vssd1), .VNB(vssd1),
+  `endif
+        .CLK(clk), .GATE(svm_clk_en), .GCLK(svm_gclk)
+    );
+`endif
+
+    // =========================================================================
+    // Wishbone decode — 0x3000_0000–0x3000_00FF
+    // =========================================================================
+    wire       wb_valid = wbs_cyc_i && wbs_stb_i && (wbs_adr_i[31:8] == 24'h300000);
+    wire       wb_wr    = wb_valid && wbs_we_i;
+    wire [5:0] wb_reg   = wbs_adr_i[7:2];
+
+    // =========================================================================
+    // Registers (on ungated clk — always accessible from Wishbone)
+    // =========================================================================
+    reg [31:0] reg_control;
+    reg [9:0]  reg_num_samples;
+    reg [7:0]  reg_num_sv [0:4];
+    reg [19:0] reg_param_wr;
+    reg [17:0] sv_wr_ptr;
+    reg        qspi_valid_r;
+    reg [15:0] qspi_data_r;
+    reg [15:0] work_rd_latch;
+
+    integer c;
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            reg_control     <= 32'd8;  // kern_ready=1 by default
+            reg_num_samples <= 0;
+            reg_param_wr    <= 0;
+            sv_wr_ptr       <= 0;
+            qspi_valid_r    <= 0;
+            qspi_data_r     <= 0;
+            for (c = 0; c < 5; c = c+1) reg_num_sv[c] <= 8'd50;
+        end else begin
+            qspi_valid_r     <= 1'b0;
+            reg_control[0]   <= 1'b0;     // start: self-clearing pulse
+            reg_param_wr[19] <= 1'b0;     // param_write_en: self-clearing
+            if (wb_wr) case (wb_reg)
+                6'h00: begin
+                    qspi_data_r  <= wbs_dat_i[15:0];
+                    qspi_valid_r <= 1'b1;
+                end
+                6'h01: reg_control        <= wbs_dat_i;
+                6'h03: reg_num_samples    <= wbs_dat_i[9:0];
+                6'h04: reg_num_sv[0]      <= wbs_dat_i[7:0];
+                6'h05: reg_num_sv[1]      <= wbs_dat_i[7:0];
+                6'h06: reg_num_sv[2]      <= wbs_dat_i[7:0];
+                6'h07: reg_num_sv[3]      <= wbs_dat_i[7:0];
+                6'h08: reg_num_sv[4]      <= wbs_dat_i[7:0];
+                6'h09: reg_param_wr       <= wbs_dat_i[19:0];
+                6'h0C: sv_wr_ptr          <= wbs_dat_i[17:0];
+                6'h0D: sv_wr_ptr          <= sv_wr_ptr + 1;
+                6'h0E: work_rd_latch      <= work_ram[wbs_dat_i[10:0]];
+                default: ;
+            endcase
+        end
+    end
+
+    // =========================================================================
+    // sv_ram: 64KB support vector storage (4× sky130 16KB SRAM macros)
+    // 256 SVs × 128 features × 2 bytes = 65,536 bytes = 64 KB
+    // Port 0 (RW) = Wishbone weight loader  |  Port 1 (RO) = SVM core read
+    // =========================================================================
+    wire [14:0] sv_ram_addr_w;
+    wire        sv_ram_ren_w;
+    wire [15:0] sv_ram_rdata_w;
+    wire        sv_wr_en = wb_wr && (wb_reg == 6'h0D);
+
+    svm_sv_ram u_sv_ram (
+        .clk     (clk),                    // always-on: Wishbone loads anytime
+        .rd_addr (sv_ram_addr_w),
+        .rd_en   (sv_ram_ren_w),
+        .rd_data (sv_ram_rdata_w),
+        .wr_addr (sv_wr_ptr[14:0]),
+        .wr_data (wbs_dat_i[15:0]),
+        .wr_en   (sv_wr_en)
+    );
+
+    // =========================================================================
+    // work_ram: ~2KB scratch for kernel outputs (register-based, small)
+    // =========================================================================
+    reg [15:0] work_ram [0:2047];
+    wire [18:0] work_ram_addr_w;
+    wire [15:0] work_ram_wdata_w;
+    wire        work_ram_wen_w, work_ram_ren_w;
+    reg  [15:0] work_ram_rdata_r;
+
+    always @(posedge clk) begin
+        if (work_ram_wen_w && work_ram_addr_w[10:0] < 2048)
+            work_ram[work_ram_addr_w[10:0]] <= work_ram_wdata_w;
+        if (work_ram_ren_w && work_ram_addr_w[10:0] < 2048)
+            work_ram_rdata_r <= work_ram[work_ram_addr_w[10:0]];
+    end
+
+    // =========================================================================
+    // Argmax unit (ungated clk — monitors kernel stream, trivial power)
+    // Tracks 5 accumulated class scores, latches winner on done
+    // =========================================================================
+    wire [15:0] svm_kernel_out;
+    wire        svm_kernel_valid;
+    wire        fifo_ready;
+    wire        svm_error;
+
+    reg [31:0] class_score [0:4];
+    reg [2:0]  class_out_r;
+    reg [2:0]  kern_class_idx;
+    reg [7:0]  kern_sv_idx;
+    reg [7:0]  sv_snap [0:4];
+
+    // ── Score accumulation and counter advance ────────────────────────────────
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            kern_class_idx <= 0; kern_sv_idx <= 0;
+            for (c = 0; c < 5; c = c+1) begin
+                class_score[c] <= 0; sv_snap[c] <= 50;
+            end
+        end else begin
+            if (reg_control[0]) begin  // start
+                kern_class_idx <= 0; kern_sv_idx <= 0;
+                for (c = 0; c < 5; c = c+1) begin
+                    class_score[c] <= 0; sv_snap[c] <= reg_num_sv[c];
+                end
+            end else if (svm_kernel_valid && reg_control[3]) begin
+                class_score[kern_class_idx] <=
+                    class_score[kern_class_idx] + {{16{svm_kernel_out[15]}}, svm_kernel_out};
+                if (kern_sv_idx >= sv_snap[kern_class_idx] - 1) begin
+                    kern_sv_idx    <= 0;
+                    kern_class_idx <= kern_class_idx + 1;
+                end else kern_sv_idx <= kern_sv_idx + 1;
+            end
+        end
+    end
+
+    // ── Combinational argmax (blocking assignments update running winner) ─────
+    // Fix: non-blocking <= in a clocked block cannot update class_out_r mid-block,
+    // so all comparisons would use the stale registered value from the prior cycle.
+    reg [2:0] argmax_comb;
+    always @(*) begin
+        argmax_comb = 3'd0;
+        if (class_score[1] > class_score[argmax_comb]) argmax_comb = 3'd1;
+        if (class_score[2] > class_score[argmax_comb]) argmax_comb = 3'd2;
+        if (class_score[3] > class_score[argmax_comb]) argmax_comb = 3'd3;
+        if (class_score[4] > class_score[argmax_comb]) argmax_comb = 3'd4;
+    end
+
+    // ── Register argmax on done ───────────────────────────────────────────────
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) class_out_r <= 3'd0;
+        else if (svm_done) class_out_r <= argmax_comb;
+    end
+
+    // =========================================================================
+    // Wishbone read mux
+    // =========================================================================
+    reg [31:0] wb_rdata;
+    always @(*) case (wb_reg)
+        6'h01: wb_rdata = reg_control;
+        6'h02: wb_rdata = {23'd0, class_out_r, svm_error_code, svm_error, svm_done};
+        6'h03: wb_rdata = {22'd0, reg_num_samples};
+        6'h04: wb_rdata = {24'd0, reg_num_sv[0]};
+        6'h05: wb_rdata = {24'd0, reg_num_sv[1]};
+        6'h06: wb_rdata = {24'd0, reg_num_sv[2]};
+        6'h07: wb_rdata = {24'd0, reg_num_sv[3]};
+        6'h08: wb_rdata = {24'd0, reg_num_sv[4]};
+        6'h0F: wb_rdata = {16'd0, work_rd_latch};
+        default: wb_rdata = 32'd0;
+    endcase
+
+    reg wb_ack_r;
+    always @(posedge clk or negedge rst_n)
+        wb_ack_r <= rst_n ? wb_valid : 1'b0;
+
+    assign wbs_ack_o = wb_ack_r;
+    assign wbs_dat_o = wb_rdata;
+
+    // =========================================================================
+    // svm_compute_core — receives GATED clock (svm_gclk)
+    // All 135K FFs inside freeze when idle → zero switching power
+    // =========================================================================
+    svm_compute_core #(
+        .DATA_WIDTH(16), .FRAC_BITS(10), .DIST_WIDTH(20),
+        .FEATURE_DIM(128), .NUM_SV(256), .MAX_BATCH_SIZE(1000),
+        .FIFO_DEPTH(4096), .ADDR_WIDTH(12)
+    ) u_svm (
+        .clk             (svm_gclk),          // <<< GATED CLOCK
+        .rst_n           (rst_n),
+        .param_write_en  (reg_param_wr[19]),
+        .param_addr      (reg_param_wr[18:16]),
+        .param_data      (reg_param_wr[15:0]),
+        .gamma_reg       (),
+        .c_reg           (),
+        .bias_reg        (),
+        .num_sv_per_class({reg_num_sv[4], reg_num_sv[3], reg_num_sv[2],
+                           reg_num_sv[1], reg_num_sv[0]}),
+        .qspi_valid      (qspi_valid_r),
+        .qspi_data       (qspi_data_r),
+        .qspi_ready      (fifo_ready),
+        .sv_ram_addr     (sv_ram_addr_w),
+        .sv_ram_rdata    (sv_ram_rdata_w),
+        .sv_ram_ren      (sv_ram_ren_w),
+        .work_ram_addr   (work_ram_addr_w),
+        .work_ram_wdata  (work_ram_wdata_w),
+        .work_ram_rdata  (work_ram_rdata_r),
+        .work_ram_wen    (work_ram_wen_w),
+        .work_ram_ren    (work_ram_ren_w),
+        .vbatt_warn      (reg_control[2]),
+        .vbatt_ok        (reg_control[1]),
+        .start           (reg_control[0]),
+        .num_samples     (reg_num_samples),
+        .done            (svm_done),
+        .error           (svm_error),
+        .error_code      (svm_error_code),
+        .kernel_out      (svm_kernel_out),
+        .kernel_valid    (svm_kernel_valid),
+        .kernel_ready    (reg_control[3])
+    );
+
+    // =========================================================================
+    // GPIO and Logic Analyzer outputs
+    // =========================================================================
+    assign io_out  = {{`MPRJ_IO_PADS-10{1'b0}}, fifo_ready,
+                       svm_error_code, svm_error, svm_done, class_out_r};
+    assign io_oeb  = {{`MPRJ_IO_PADS-10{1'b1}}, 10'b0};
+
+    assign la_data_out = {class_score[3], class_score[2],
+                          class_score[1], class_score[0]};
+    assign la_oenb     = 128'hFFFF_FFFF_FFFF_FFFF_FFFF_FFFF_0000_0000;
+
+    assign user_irq    = {2'b0, svm_done};
+
+endmodule
+`default_nettype wire

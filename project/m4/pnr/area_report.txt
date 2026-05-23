@@ -1,0 +1,31 @@
+Design Area Report — svm_compute_core (sky130A, OpenROAD DRT complete)
+========================================================================
+
+Design Name  : svm_compute_core
+PDK          : sky130A (sky130_fd_sc_hd)
+Clock Period : 10.0 ns (100 MHz target)
+Tool         : OpenROAD b16bda7e / TritonRoute (jobs 91870 drt_v12 / 91871 drt_v13)
+Parameters   : FEATURE_DIM=128, NUM_SV=256, FIFO_DEPTH=4096, DATA_WIDTH=16, FRAC_BITS=10
+
+Area
+----
+  Design area   : 2,894,769 µm²  (2.895 mm²)
+  Utilization   : 50%
+  Core util set : 45% (FP_CORE_UTIL)
+  PL density    : 0.50 (PL_TARGET_DENSITY)
+
+Cell Count (approximate)
+------------------------
+  Standard cells (post-repair) : ~139,000 synthesis + ~23,000 repair buffers
+  SRAM macros                   : 4 × sky130_sram_1kbyte_1rw1r_32x256_8
+                                  (total 4 KB on-chip, used as 4096-word×16-bit FIFO)
+
+Notes
+-----
+  DRT completed successfully with 0 DRC violations.
+  Two DRT runs produced consistent results:
+    - drt_v12 (job 91870): natural completion, 0 violations at final iteration
+    - drt_v13 (job 91871): layer-adjustment run, 0 violations; used as authoritative DEF
+  DRT DEF: svm_compute_core_128/svm_compute_core_drt.def (168 MB)
+  GL netlist: svm_compute_core_128/svm_compute_core_gl.v (20 MB)
+  Abstract LEF: svm_compute_core_128/svm_compute_core.lef (37 MB)

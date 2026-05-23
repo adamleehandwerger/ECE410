@@ -1,0 +1,46 @@
+{
+  "DESIGN_NAME": "svm_compute_core",
+  "PDK": "sky130A",
+  "STD_CELL_LIBRARY": "sky130_fd_sc_hd",
+  "PDK_VERSION": "c6d73a35f524070e85faff4a6a9eef49553ebc2b",
+
+  "CLOCK_PORT": "clk",
+  "CLOCK_PERIOD": 10.0,
+
+  "FP_CORE_UTIL": 45,
+  "PL_TARGET_DENSITY": 0.50,
+
+  "ROUTING_LAYERS_SIGNAL": "li1-met4",
+  "ROUTING_LAYERS_CLOCK": "met3-met4",
+  "DRT_BOTTOM_ROUTING_LAYER": "li1",
+  "DRT_TOP_ROUTING_LAYER": "met4",
+
+  "GRT_CONGESTION_ITERATIONS": 50,
+  "GRT_LAYER_ADJUSTMENTS": {
+    "li1": 0.5,
+    "met1": 0.5,
+    "met2": 0.3
+  },
+
+  "PROBE_CELL_FIX": "sed -e 's/sky130_fd_sc_hd__probe_p_8/sky130_fd_sc_hd__buf_8/g' -e 's/sky130_fd_sc_hd__probec_p_8/sky130_fd_sc_hd__buf_8/g' -e '/TRACKS.*LAYER met5/d'",
+
+  "SRAM_MACROS": [
+    "sky130_sram_1kbyte_1rw1r_32x256_8"
+  ],
+  "SRAM_MACRO_COUNT": 4,
+
+  "TOOL": "OpenROAD b16bda7e",
+  "CONTAINER": "openlane2.sif",
+  "SLURM_PARTITION": "normal",
+  "SLURM_CPUS": 8,
+  "SLURM_MEM_GB": 48,
+  "SLURM_TIME": "1-00:00:00",
+
+  "NOTES": [
+    "probe_p_8 and probec_p_8 cells must be replaced with buf_8 before DRT — met5 pin causes TritonRoute OOB crash",
+    "met5 TRACKS line must be stripped from DEF TRACKS section to prevent FastRoute using met5",
+    "-max_drc_iterations flag not valid in OpenROAD b16bda7e (throws STA-0562)",
+    "estimate_parasitics -global_routing requires global_route in same session; skip if reading DRT DEF directly",
+    "GDS export requires: gds read sky130_fd_sc_hd.gds BEFORE def read to get full cell geometry"
+  ]
+}
