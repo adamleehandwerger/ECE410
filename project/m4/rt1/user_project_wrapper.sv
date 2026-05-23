@@ -89,10 +89,17 @@ module user_project_wrapper #(
                 svm_clk_en <= 1'b1;
                 drain_cnt  <= 6'd0;
             end else if (svm_done && svm_clk_en) begin
+                svm_clk_en <= 1'b1;
                 drain_cnt  <= 6'd32;
-            end else if (drain_cnt > 0) begin
-                drain_cnt  <= drain_cnt - 1;
-                if (drain_cnt == 6'd1) svm_clk_en <= 1'b0;
+            end else if (drain_cnt > 6'd1) begin
+                svm_clk_en <= 1'b1;
+                drain_cnt  <= drain_cnt - 6'd1;
+            end else if (drain_cnt == 6'd1) begin
+                svm_clk_en <= 1'b0;
+                drain_cnt  <= 6'd0;
+            end else begin
+                svm_clk_en <= svm_clk_en;
+                drain_cnt  <= drain_cnt;
             end
         end
     end
