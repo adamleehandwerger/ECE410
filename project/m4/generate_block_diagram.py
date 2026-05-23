@@ -292,8 +292,10 @@ tx(ax, WRX+WRW/2, WRY+0.22,
    "Wishbone 0x38/0x3C  |  Read / Write", sz=9, color="#555")
 
 SV_CX = SVX + SVW/2
-tip(ax, SV_CX, FCY, SV_CX, SVY+SVH, C["offchip_edge"], lw=1.3)
-tx(ax, SV_CX+0.12, (FCY + SVY+SVH)/2,
+# Route arrow at left side of SV RAM (x≈7.7) to stay left of Workspace RAM (x starts 8.8)
+SV_ARR_X = SVX + 0.5
+tip(ax, SV_ARR_X, FCY, SV_ARR_X, SVY+SVH, C["offchip_edge"], lw=1.3)
+tx(ax, SV_ARR_X+0.12, (FCY + SVY+SVH)/2,
    "sv_ram_addr[14:0]\nsv_ram_ren", sz=10, color=C["tg"], ha="left")
 
 WR_CX = WRX + WRW/2
