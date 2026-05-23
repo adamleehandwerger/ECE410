@@ -107,15 +107,15 @@ tx(ax, HX+HW/2, HY+0.20+0.20,
    "Concatenate  →  128 × Q6.10  |  64+32+32 dims  |  256 B per heartbeat",
    sz=10, color="#333")
 
-# ── QSPI  (left side, below HOST MCU) ────────────────────────────
+# ── WISHBONE FIFO WRITE  (left side, below HOST MCU) ────────────────
 QX, QY, QW, QH = 0.25, 12.55, 6.0, 2.0
 bx(ax, QX, QY, QW, QH, C["qspi_face"], C["qspi_edge"], lw=1.5)
-tx(ax, QX+QW/2, QY+QH-0.32, "QSPI Interface",
+tx(ax, QX+QW/2, QY+QH-0.32, "Wishbone Interface",
    sz=13, color="#4a3080", weight="bold")
 tx(ax, QX+QW/2, QY+QH/2+0.05,
-   "Mode 0  ·  4-lane  ·  4 MHz SCK", sz=11, color="#444")
+   "32-bit Wishbone  ·  base 0x3000_0000", sz=11, color="#444")
 tx(ax, QX+QW/2, QY+QH/2-0.38,
-   "128 µs per heartbeat  @  2 MB/s", sz=11, color="#444")
+   "FIFO_DATA 0x00: write 16-bit feature word per cycle", sz=11, color="#444")
 
 tip(ax, HX+HW/2, HY, HX+HW/2, QY+QH, C["feat_edge"])
 
@@ -279,15 +279,16 @@ tx(ax, SVX+SVW/2, SVY+SVH/2-0.05,
    "GPIO[24:10]=addr  GPIO[25]=ren  LA[15:0]=rdata",
    sz=10, color="#333")
 
-# ── WORKSPACE RAM ─────────────────────────────────────────────────
-WRX, WRY, WRW, WRH = 12.3, 1.2, 4.5, 2.35
+# ── WORKSPACE RAM  (on-chip, inside chip boundary) ────────────────
+# Chip boundary bottom = 3.8; FSM bottom = 5.6 → place here: y 4.0–5.4
+WRX, WRY, WRW, WRH = 11.9, 4.05, 5.5, 1.35
 bx(ax, WRX, WRY, WRW, WRH, C["feat_face"], C["feat_edge"], lw=1.5)
-tx(ax, WRX+WRW/2, WRY+WRH-0.30,
-   "Workspace RAM  (ON-CHIP, regs)", sz=12, color=C["tgr"], weight="bold")
-tx(ax, WRX+WRW/2, WRY+WRH/2-0.05,
-   "2048 × 16-bit  =  4 KB  (register array)\n"
-   "Wishbone 0x38/0x3C  |  Read / Write",
-   sz=10, color="#333")
+tx(ax, WRX+WRW/2, WRY+WRH-0.28,
+   "Workspace RAM  (ON-CHIP, regs)", sz=11, color=C["tgr"], weight="bold")
+tx(ax, WRX+WRW/2, WRY+WRH/2-0.10,
+   "2048 × 16-bit  =  4 KB  (register array)", sz=10, color="#333")
+tx(ax, WRX+WRW/2, WRY+0.22,
+   "Wishbone 0x38/0x3C  |  Read / Write", sz=9, color="#555")
 
 SV_CX = SVX + SVW/2
 tip(ax, SV_CX, FCY, SV_CX, SVY+SVH, C["offchip_edge"], lw=1.3)
@@ -295,15 +296,9 @@ tx(ax, SV_CX+0.12, (FCY + SVY+SVH)/2,
    "sv_ram_addr[14:0]\nsv_ram_ren", sz=10, color=C["tg"], ha="left")
 
 WR_CX = WRX + WRW/2
-tip(ax, WR_CX, FCY, WR_CX, WRY+WRH, C["feat_edge"], lw=1.3)
+tip(ax, WR_CX, FCY, WR_CX, WRY+WRH, C["feat_edge"], lw=1.3, shrink=0)
 tx(ax, WR_CX+0.12, (FCY + WRY+WRH)/2,
    "work_ram_addr[10:0]\nwork_ram_wen/ren", sz=10, color=C["tgr"], ha="left")
-
-_wr_cx = 6.44
-seg(ax, [WR_CX, _wr_cx, _wr_cx], [WRY+WRH, WRY+WRH, 16.0], C["offchip_edge"], lw=1.2)
-tip(ax, _wr_cx, 16.0, HX+HW, 16.0, C["offchip_edge"], lw=1.2)
-tx(ax, _wr_cx-0.08, 9.5, "kernel results\n→ HOST (OvO classify)", sz=9,
-   color=C["tg"], ha="right")
 
 DM_RX  = DMX + DMW
 DM_CY  = DMY + DMH/2
@@ -355,7 +350,7 @@ tx(ax, LX+LW/2, LEG_TOP-0.25, "Legend", sz=11, color="#333", weight="bold")
 legend_items = [
     (C["host_face"],    C["host_edge"],    "-",  "Host MCU"),
     (C["feat_face"],    C["feat_edge"],    "-",  "Feature extract/bank"),
-    (C["qspi_face"],    C["qspi_edge"],    "-",  "QSPI interface"),
+    (C["qspi_face"],    C["qspi_edge"],    "-",  "Wishbone interface"),
     (C["mem_face"],     C["mem_edge"],     "-",  "On-chip SRAM"),
     (C["compute_face"], C["compute_edge"], "--", "Compute engine (RTL)"),
     (C["config_face"],  C["config_edge"],  "-",  "Config registers"),
