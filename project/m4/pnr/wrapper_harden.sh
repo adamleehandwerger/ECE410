@@ -1,71 +1,103 @@
 #!/bin/bash
 #SBATCH --job-name=wrapper_harden
-#SBATCH --partition=gpu
+#SBATCH --partition=normal
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
-#SBATCH --time=4:00:00
-#SBATCH --output=/scratch/funphin/wrapper_harden_%j.log
+#SBATCH --time=24:00:00
+#SBATCH --output=%x_%j.out
+#SBATCH --error=%x_%j.err
+#SBATCH --mail-type=END,FAIL
+#SBATCH --mail-user=handwerg@pdx.edu
+# Orca: use "long" partition (up to 7 days); "gpu" partition not available
 
-# ============================================================
-# user_project_wrapper hardening — OpenLane 2 (Caravel sky130A)
-# Requires:
-#   /scratch/funphin/openlane2.sif
-#   /scratch/funphin/pdk/sky130A   (PDK_ROOT=/scratch/funphin/pdk)
-#   caravel repo at /scratch/funphin/caravel_svm_project
-# ============================================================
+set -e
 
-set -euo pipefail
-
-SCRATCH=/scratch/funphin
-CARAVEL=$SCRATCH/caravel_svm_project
-OL2_SIF=$SCRATCH/openlane2.sif
+SCRATCH=$(ws_find openlane_svm)
 PDK_ROOT=$SCRATCH/pdk
+CARAVEL=$SCRATCH/caravel_svm_project
 DESIGN_DIR=$CARAVEL/openlane/user_project_wrapper
 
-echo "[wrapper_harden] Starting at $(date)"
-echo "[wrapper_harden] Design dir : $DESIGN_DIR"
-echo "[wrapper_harden] PDK root   : $PDK_ROOT"
+echo "=== wrapper_harden: user_project_wrapper on $(hostname) at $(date) ==="
+echo "SCRATCH=$SCRATCH"
 
-# Pull latest caravel changes before running
-cd $CARAVEL
-git pull --ff-only || echo "[wrapper_harden] WARNING: git pull failed, continuing with local state"
+# --- Pull latest caravel changes ---
+echo "--- git pull caravel ---"
+git -C $CARAVEL pull --ff-only || echo "WARNING: git pull failed, using local state"
 
-# Run OpenLane 2 inside the Singularity container
-singularity exec \
-    --bind $CARAVEL:$CARAVEL \
-    --bind $PDK_ROOT:$PDK_ROOT \
-    --env PDK_ROOT=$PDK_ROOT \
-    --env PDK=sky130A \
-    $OL2_SIF \
-    python3 -m openlane \
-        --pdk-root $PDK_ROOT \
-        --pdk sky130A \
-        $DESIGN_DIR/config.json
+# --- Activate the existing ol2 venv ---
+OL2_VENV=$SCRATCH/ol2_venv_mf
+source $OL2_VENV/bin/activate
+echo "OpenLane2: $(openlane --version 2>/dev/null || echo 'version check failed')"
 
-echo "[wrapper_harden] Finished at $(date)"
+# --- Load apptainer and set up EDA tool wrappers ---
+module load apptainer/1.4.1-gcc-13.4.0
 
-# Copy outputs to a timestamped results directory
-RESULTS=$SCRATCH/wrapper_results_$(date +%Y%m%d_%H%M%S)
-mkdir -p $RESULTS
+OL2_SIF=$SCRATCH/openlane2.sif
+echo "SIF: $(ls -lh $OL2_SIF 2>/dev/null || echo 'SIF NOT FOUND')"
 
-# Find the latest run directory OpenLane 2 created
-LATEST_RUN=$(ls -td $DESIGN_DIR/runs/* 2>/dev/null | head -1)
-if [ -n "$LATEST_RUN" ]; then
-    echo "[wrapper_harden] OpenLane run dir: $LATEST_RUN"
+TOOL_WRAPPERS=$SCRATCH/eda-wrappers
+mkdir -p $TOOL_WRAPPERS
 
-    # Copy GDS/LEF/GL to caravel artifact directories
-    GDS=$(find $LATEST_RUN -name "*.gds" | head -1)
-    LEF=$(find $LATEST_RUN -name "*.lef" | grep -v "pdn" | head -1)
-    GL=$(find $LATEST_RUN -name "*.nl.v" -o -name "*.v" | grep -i "final\|gl" | head -1)
+# All tools except yosys come from the SIF (openroad, magic, etc.)
+for TOOL in openroad magic klayout netgen verilator iverilog opensta; do
+    cat > $TOOL_WRAPPERS/$TOOL << WRAP
+#!/bin/bash
+exec apptainer exec --bind /scratch,/tmp $OL2_SIF $TOOL "\$@"
+WRAP
+    chmod +x $TOOL_WRAPPERS/$TOOL
+done
 
-    [ -n "$GDS" ] && cp $GDS $CARAVEL/gds/user_project_wrapper.gds  && echo "GDS -> $CARAVEL/gds/"
-    [ -n "$LEF" ] && cp $LEF $CARAVEL/lef/user_project_wrapper.lef  && echo "LEF -> $CARAVEL/lef/"
-    [ -n "$GL"  ] && cp $GL  $CARAVEL/verilog/gl/user_project_wrapper.v && echo "GL  -> $CARAVEL/verilog/gl/"
+# yosys: use nix yosys-with-plugins (0.46) via proot — supports PyOSYS (-y flag)
+# SIF yosys 0.38 does not support -y, which OpenLane v2.3.10 requires for JsonHeader
+PROOT=$SCRATCH/.nix/.nix-portable/bin/proot
+NIX_STORE=$SCRATCH/.nix/.nix-portable/nix
+NIX_YOSYS=$(ls -d $SCRATCH/.nix/.nix-portable/nix/store/*-yosys-with-plugins/bin/yosys 2>/dev/null | head -1)
+cat > $TOOL_WRAPPERS/yosys << WRAP
+#!/bin/bash
+exec $PROOT -b $NIX_STORE:/nix $NIX_YOSYS "\$@"
+WRAP
+chmod +x $TOOL_WRAPPERS/yosys
 
-    cp -r $LATEST_RUN $RESULTS/openlane_run
-fi
+export PATH=$TOOL_WRAPPERS:$PATH
+echo "yosys:    $(yosys --version 2>&1 | grep 'Yosys' | head -1)"
+echo "openroad: $(openroad --version 2>&1 | head -1)"
+echo "magic:    $(magic --version 2>&1 | head -1 || echo n/a)"
 
-echo "[wrapper_harden] Results saved to $RESULTS"
-echo "[wrapper_harden] Done."
+# --- Confirm key files exist ---
+echo "--- Design inputs ---"
+ls -lh $DESIGN_DIR/config.json
+ls -lh $DESIGN_DIR/macro.cfg
+ls -lh $CARAVEL/lef/svm_compute_core.lef
+ls -lh $CARAVEL/gds/svm_compute_core.gds
+ls -lh $CARAVEL/verilog/gl/svm_compute_core.v
+ls -lh $CARAVEL/verilog/rtl/user_project_wrapper.sv
+
+# --- Run OpenLane 2 ---
+echo "--- Running openlane ---"
+openlane \
+    --pdk sky130A \
+    --pdk-root $PDK_ROOT \
+    --run-tag wrapper_harden \
+    --jobs $SLURM_CPUS_PER_TASK \
+    $DESIGN_DIR/config.json 2>&1
+
+echo "=== Done at $(date) ==="
+
+# --- Collect outputs ---
+OUT_BASE=$DESIGN_DIR/runs/wrapper_harden
+echo "=== Output files ==="
+find $OUT_BASE -name "*.gds" -o -name "*.lef" -o -name "*.def" 2>/dev/null | grep -i final | head -10
+ls -lh $OUT_BASE 2>/dev/null || echo "No output dir found at $OUT_BASE"
+
+# --- Copy GDS/LEF/GL to caravel artifact dirs ---
+FINAL_GDS=$(find $OUT_BASE -name "*.gds" 2>/dev/null | grep -i final | head -1)
+FINAL_LEF=$(find $OUT_BASE -name "*.lef" 2>/dev/null | grep -i "final\|abstract" | grep -v pdn | head -1)
+FINAL_GL=$(find $OUT_BASE -name "*.nl.v" -o -name "*.v" 2>/dev/null | grep -i final | head -1)
+
+[ -n "$FINAL_GDS" ] && cp $FINAL_GDS $CARAVEL/gds/user_project_wrapper.gds  && echo "GDS -> gds/"
+[ -n "$FINAL_LEF" ] && cp $FINAL_LEF $CARAVEL/lef/user_project_wrapper.lef  && echo "LEF -> lef/"
+[ -n "$FINAL_GL"  ] && cp $FINAL_GL  $CARAVEL/verilog/gl/user_project_wrapper.v && echo "GL  -> verilog/gl/"
+
+echo "=== wrapper_harden complete ==="
