@@ -4,6 +4,11 @@
 **Verification status:** 13/13 unit testbenches PASS  
 **Milestone:** m3 (ASIC-ready, v6)
 
+> **m4 / Caravel note:** In the Caravel integration, error codes are accessed via
+> Wishbone registers rather than direct RTL ports. See the
+> [Wishbone Access section](#wishbone--caravel-access-m4) at the bottom of this file,
+> or `m4/README_errorcodes.md` for the full m4 picture.
+
 Error codes are reported on the 4-bit `error_code[3:0]` output and the 1-bit `error` flag.  
 Two categories exist: **sticky faults** (0x1–0x7) and **advisory codes** (0x8–0xB).
 
@@ -265,6 +270,88 @@ gamma written to 9000    → ERR_GAMMA_SAT fires mid-compute
 vbatt_warn deasserts     → error_code stays 0x4 (sticky holds)
 rst_n pulsed             → error_code = 0x0 (cleared)
 ```
+
+---
+
+## Wishbone / Caravel Access (m4)
+
+In the Caravel `user_project_wrapper`, all error code signals are exposed through
+Wishbone memory-mapped registers (base `0x30000000`). The RISC-V management core
+reads them the same way it reads any peripheral.
+
+### Register Map
+
+| Address | Name | Width | Direction | Description |
+|---------|------|-------|-----------|-------------|
+| `+0x04` | CONTROL | 32 | RW | `[0]`=start `[1]`=vbatt_ok `[2]`=vbatt_warn `[3]`=kern_ready |
+| `+0x08` | STATUS | 32 | RO | `[0]`=done `[1]`=error `[5:2]`=error_code `[8:6]`=class_out |
+
+### Bit Layout — STATUS (`0x30000008`)
+
+```
+ 31        9  8   6  5    2  1     0
+ ┌──────────┬─────┬───────┬──────┬──────┐
+ │  (zero)  │ cls │ ecode │ err  │ done │
+ └──────────┴─────┴───────┴──────┴──────┘
+              [8:6]  [5:2]   [1]    [0]
+```
+
+### Bit Layout — CONTROL (`0x30000004`)
+
+```
+ 31       4   3           2            1         0
+ ┌─────────┬─────────────┬─────────────┬──────────┬───────┐
+ │ (zero)  │ kern_ready  │ vbatt_warn  │ vbatt_ok │ start │
+ └─────────┴─────────────┴─────────────┴──────────┴───────┘
+```
+
+> `start` auto-clears after one cycle. `kern_ready` is set by firmware to tell
+> the argmax accumulator to count kernel outputs.
+
+### Firmware Example (RISC-V C)
+
+```c
+#define SVM_BASE    0x30000000
+#define REG_CONTROL (*(volatile uint32_t*)(SVM_BASE + 0x04))
+#define REG_STATUS  (*(volatile uint32_t*)(SVM_BASE + 0x08))
+
+// Drive vbatt signals and start a run
+REG_CONTROL = (1 << 1) |   // vbatt_ok  = 1
+              (0 << 2) |   // vbatt_warn = 0
+              (1 << 3) |   // kern_ready = 1
+              (1 << 0);    // start pulse
+
+// Poll for done
+uint32_t s;
+do { s = REG_STATUS; } while (!(s & 0x1));
+
+uint8_t done       = (s >> 0) & 0x1;
+uint8_t error_flag = (s >> 1) & 0x1;
+uint8_t error_code = (s >> 2) & 0xF;   // same 4-bit codes as RTL
+uint8_t class_out  = (s >> 6) & 0x7;
+
+// Clear sticky fault
+if (error_flag && error_code <= 0x7) {
+    // pulse rst_n via management SoC GPIO or housekeeping register
+}
+```
+
+### Port-to-Register Mapping
+
+| RTL port (m3) | Wishbone register / bit (m4) |
+|---------------|------------------------------|
+| `start` | CONTROL `[0]` |
+| `vbatt_ok` | CONTROL `[1]` |
+| `vbatt_warn` | CONTROL `[2]` |
+| `kernel_ready` | CONTROL `[3]` |
+| `done` | STATUS `[0]` |
+| `error` | STATUS `[1]` |
+| `error_code[3:0]` | STATUS `[5:2]` |
+| `class_out[2:0]` | STATUS `[8:6]` |
+
+All 13 error codes (`0x0`–`0xB`) are identical between m3 and m4.
+The sticky/advisory behaviour, priority rules, and clear conditions are unchanged.
+Only the access method shifts from direct RTL ports to Wishbone reads/writes.
 
 ---
 
