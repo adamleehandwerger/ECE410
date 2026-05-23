@@ -281,7 +281,8 @@ tx(ax, SVX+SVW/2, SVY+SVH/2-0.05,
 
 # ── WORKSPACE RAM  (on-chip, inside chip boundary) ────────────────
 # Chip boundary bottom = 3.8; FSM bottom = 5.6 → place here: y 4.0–5.4
-WRX, WRY, WRW, WRH = 11.9, 4.05, 5.5, 1.35
+# Shifted left so right edge (≈13.8) clears the sv_in routing line (17.55)
+WRX, WRY, WRW, WRH = 8.8, 4.05, 5.0, 1.35
 bx(ax, WRX, WRY, WRW, WRH, C["feat_face"], C["feat_edge"], lw=1.5)
 tx(ax, WRX+WRW/2, WRY+WRH-0.28,
    "Workspace RAM  (ON-CHIP, regs)", sz=11, color=C["tgr"], weight="bold")
@@ -304,9 +305,9 @@ DM_RX  = DMX + DMW
 DM_CY  = DMY + DMH/2
 SV_RX  = SVX + SVW
 SV_TY  = SVY + SVH
-seg(ax, [SV_RX, 17.1, 17.1], [SV_TY, SV_TY, DM_CY], C["offchip_edge"], lw=1.3)
-tip(ax, 17.1, DM_CY, DM_RX, DM_CY, C["offchip_edge"], lw=1.3)
-tx(ax, 17.15, (SV_TY+DM_CY)/2, "sv_in\n(16-bit,\none feat/cyc)",
+seg(ax, [SV_RX, 17.55, 17.55], [SV_TY, SV_TY, DM_CY], C["offchip_edge"], lw=1.3)
+tip(ax, 17.55, DM_CY, DM_RX, DM_CY, C["offchip_edge"], lw=1.3)
+tx(ax, 17.6, (SV_TY+DM_CY)/2, "sv_in\n(16-bit,\none feat/cyc)",
    sz=10, color=C["tg"], ha="left")
 
 # ════════════════════════════════════════════════════════════════════
