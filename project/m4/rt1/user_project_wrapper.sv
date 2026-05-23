@@ -162,7 +162,7 @@ module user_project_wrapper #(
     // =========================================================================
     // SV RAM — off-chip interface via GPIO + LA
     // =========================================================================
-    wire [14:0] sv_ram_addr_w;
+    wire [17:0] sv_ram_addr_w;
     wire        sv_ram_ren_w;
     wire [15:0] sv_ram_rdata_w = la_data_in[15:0];
 
@@ -272,9 +272,9 @@ module user_project_wrapper #(
         .param_data      (reg_param_wr[15:0]),
         .gamma_reg       (),
         .c_reg           (),
-        .bias_reg        (),
-        .num_sv_per_class({reg_num_sv[4], reg_num_sv[3], reg_num_sv[2],
-                           reg_num_sv[1], reg_num_sv[0]}),
+        .bias_reg_flat   (),
+        .num_sv_per_class_flat({reg_num_sv[4], reg_num_sv[3], reg_num_sv[2],
+                                reg_num_sv[1], reg_num_sv[0]}),
         .qspi_valid      (qspi_valid_r),
         .qspi_data       (qspi_data_r),
         .qspi_ready      (fifo_ready),
@@ -303,7 +303,7 @@ module user_project_wrapper #(
     // =========================================================================
     assign io_out  = {{`MPRJ_IO_PADS-26{1'b0}},
                        sv_ram_ren_w,
-                       sv_ram_addr_w,
+                       sv_ram_addr_w[14:0],
                        fifo_ready,
                        svm_error_code,
                        svm_error,
