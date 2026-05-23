@@ -219,13 +219,22 @@ module user_project_wrapper #(
         end
     end
 
-    reg [2:0] argmax_comb;
+    // Flatten array to wires — Yosys mem2reg can't handle variable index
+    // (class_score[argmax_comb]) in a combinational always block
+    wire [31:0] cs0 = class_score[0];
+    wire [31:0] cs1 = class_score[1];
+    wire [31:0] cs2 = class_score[2];
+    wire [31:0] cs3 = class_score[3];
+    wire [31:0] cs4 = class_score[4];
+
+    reg [2:0]  argmax_comb;
+    reg [31:0] argmax_best;
     always @(*) begin
-        argmax_comb = 3'd0;
-        if (class_score[1] > class_score[argmax_comb]) argmax_comb = 3'd1;
-        if (class_score[2] > class_score[argmax_comb]) argmax_comb = 3'd2;
-        if (class_score[3] > class_score[argmax_comb]) argmax_comb = 3'd3;
-        if (class_score[4] > class_score[argmax_comb]) argmax_comb = 3'd4;
+        argmax_comb = 3'd0; argmax_best = cs0;
+        if ($signed(cs1) > $signed(argmax_best)) begin argmax_comb = 3'd1; argmax_best = cs1; end
+        if ($signed(cs2) > $signed(argmax_best)) begin argmax_comb = 3'd2; argmax_best = cs2; end
+        if ($signed(cs3) > $signed(argmax_best)) begin argmax_comb = 3'd3; argmax_best = cs3; end
+        if ($signed(cs4) > $signed(argmax_best)) begin argmax_comb = 3'd4; argmax_best = cs4; end
     end
 
     always @(posedge clk or negedge rst_n) begin
