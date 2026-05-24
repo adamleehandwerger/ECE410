@@ -89,7 +89,7 @@ openlane \
     --run-tag wrapper_harden \
     --jobs $SLURM_CPUS_PER_TASK \
     --skip OpenROAD.STAPrePNR \
-    --skip OpenROAD.STAMidPNR \
+    --skip 'OpenROAD.STAMidPNR*' \
     --skip OpenROAD.STAPostPNR \
     $DESIGN_DIR/config.json 2>&1
 
