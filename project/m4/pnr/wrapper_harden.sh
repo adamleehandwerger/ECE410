@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH --job-name=wrapper_harden
-#SBATCH --partition=normal
+#SBATCH --partition=long
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
-#SBATCH --time=24:00:00
+#SBATCH --time=7-00:00:00
 #SBATCH --output=%x_%j.out
 #SBATCH --error=%x_%j.err
 #SBATCH --mail-type=END,FAIL
