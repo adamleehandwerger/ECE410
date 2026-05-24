@@ -77,13 +77,46 @@ ls -lh $CARAVEL/gds/svm_compute_core.gds
 ls -lh $CARAVEL/verilog/gl/svm_compute_core.v
 ls -lh $CARAVEL/verilog/rtl/user_project_wrapper.sv
 
-# --- Run OpenLane 2 ---
-echo "--- Running openlane ---"
+# --- Phase 1: synthesis + checkers only ---
+echo "--- Phase 1: synthesis through Checker.NetlistAssignStatements ---"
 openlane \
     --pdk sky130A \
     --pdk-root $PDK_ROOT \
     --run-tag wrapper_harden \
     --jobs $SLURM_CPUS_PER_TASK \
+    --to Checker.NetlistAssignStatements \
+    --skip OpenROAD.STAPrePNR \
+    --skip OpenROAD.STAPostPNR \
+    $DESIGN_DIR/config.json 2>&1
+
+# --- Fix netlist: Yosys elaborate-only writes 'output X; reg X;' for reg-driven
+#     output ports, which OpenSTA/OpenROAD rejects. Convert the 'reg' line to 'wire'.
+NETLIST=$(find $DESIGN_DIR/runs/wrapper_harden -name "user_project_wrapper.nl.v" \
+          -path "*/yosys-synthesis/*" | sort | tail -1)
+echo "--- Fixing netlist reg->wire on output ports: $NETLIST ---"
+python3 - "$NETLIST" << 'PYEOF'
+import re, sys
+path = sys.argv[1]
+txt  = open(path).read()
+# Match: "  output [W:0] name;\n  reg [W:0] name;"
+# Replace reg line with wire
+fixed = re.sub(
+    r'(  output (\[[^\]]*\] )?([^;\n]+);)\n  reg (?:\[[^\]]*\] )?\3;',
+    r'\1\n  wire \2\3;',
+    txt
+)
+open(path, 'w').write(fixed)
+print(f"Fixed: {path}")
+PYEOF
+
+# --- Phase 2: floorplan through GDS ---
+echo "--- Phase 2: OpenROAD.CheckSDCFiles through final GDS ---"
+openlane \
+    --pdk sky130A \
+    --pdk-root $PDK_ROOT \
+    --run-tag wrapper_harden \
+    --jobs $SLURM_CPUS_PER_TASK \
+    --from OpenROAD.CheckSDCFiles \
     --skip OpenROAD.STAPrePNR \
     --skip OpenROAD.STAPostPNR \
     $DESIGN_DIR/config.json 2>&1
