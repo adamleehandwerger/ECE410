@@ -71,7 +71,6 @@ module svm_compute_core #(
     input  logic [DATA_WIDTH-1:0]   param_data,
     output logic [DATA_WIDTH-1:0]   gamma_reg,
     output logic [DATA_WIDTH-1:0]   c_reg,
-    output logic [DATA_WIDTH-1:0]   bias_reg [5],
 
     input  logic [39:0]             num_sv_per_class_flat,
 
@@ -318,10 +317,6 @@ module svm_compute_core #(
 
     assign gamma_reg = gamma_int;
     assign c_reg     = c_int;
-    generate
-        for (genvar i = 0; i < 5; i++)
-            assign bias_reg[i] = bias_int[i];
-    endgenerate
 
     // =========================================================================
     // FSM
