@@ -44,8 +44,7 @@
 module user_project_wrapper #(
     parameter BITS = 32
 ) (
-    inout vdda1, inout vdda2, inout vssa1, inout vssa2,
-    inout vccd1, inout vccd2, inout vssd1, inout vssd2,
+    inout vccd1, inout vssd1,
     input  wb_clk_i, input  wb_rst_i,
     input  wbs_stb_i, input  wbs_cyc_i, input  wbs_we_i,
     input  [3:0]  wbs_sel_i,
