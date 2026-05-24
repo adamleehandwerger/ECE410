@@ -180,8 +180,6 @@ module svm_compute_core #(
     logic                    horner_valid_out;
 
     logic [6:0]              heartbeat_count; // saturates at 100; persists across batches, clears on rst_n
-    logic                    interrupted;     // set on rst_n when heartbeat_count was in [1,99]; cleared at beat 100
-    logic                    arm_interrupted = 1'b0; // simulation init only — synthesis uses async reset below
 
     logic                    dist_valid_latch;
 
@@ -518,49 +516,14 @@ module svm_compute_core #(
     end
 
     // =========================================================================
-    // Warm-up Counter + Interrupted Flag
+    // Warm-up Counter
     // =========================================================================
-    // arm_interrupted freezes the warm-up state so that the `interrupted` block
-    // can safely read it at negedge rst_n without seeing the NBA-zeroing of
-    // heartbeat_count from the same time step.
-    //
-    // Two versions are provided via `ifdef:
-    //
-    //   SYNTHESIS (Yosys/DC/Genus):
-    //     Proper async reset to 0.  IEEE 1800-compliant synthesis simulators
-    //     read arm_interrupted's PRE-reset value in the `interrupted` block
-    //     because NBA reads commit before writes across separately-triggered
-    //     always_ff blocks — so the pre-reset snapshot is correctly captured.
-    //
-    //   Icarus Verilog (simulation only):
-    //     Gated-only update (no negedge rst_n).  arm_interrupted is not in
-    //     the negedge rst_n sensitivity list, so it holds its last clocked
-    //     value when rst_n falls — Icarus's non-standard cross-block NBA
-    //     ordering cannot corrupt the capture in the `interrupted` block.
-    //     arm_interrupted initialises to X at power-on but reaches 0 on the
-    //     first posedge clk after rst_n deasserts (heartbeat_count = 0 → false).
-    `ifdef SYNTHESIS
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) arm_interrupted <= 1'b0;
-        else        arm_interrupted <= (heartbeat_count > 7'd0 && heartbeat_count < 7'd100);
-    end
-    `else
-    always_ff @(posedge clk)
-        if (rst_n) arm_interrupted <= (heartbeat_count > 7'd0 && heartbeat_count < 7'd100);
-    `endif
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n)
             heartbeat_count <= 7'd0;
         else if ((state == WRITE_CLASS) && (heartbeat_count < 7'd100))
             heartbeat_count <= heartbeat_count + 7'd1;
-    end
-
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n)
-            interrupted <= arm_interrupted; // reads pre-reset value (no NBA race)
-        else if (heartbeat_count == 7'd100)
-            interrupted <= 1'b0;
     end
 
     // =========================================================================
@@ -610,7 +573,7 @@ module svm_compute_core #(
         else if (vbatt_warn_s)
             err_detect = ERR_LOW_BATTERY;
         else if (heartbeat_count > 0 && heartbeat_count < 7'd100)
-            err_detect = interrupted ? ERR_INTERRUPTED : ERR_WARMING_UP;
+            err_detect = ERR_WARMING_UP;
         else
             err_detect = ERR_NONE;
     end
