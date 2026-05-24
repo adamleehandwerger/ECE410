@@ -53,8 +53,8 @@ module svm_compute_core #(
     parameter int FEATURE_DIM = 256,
     parameter int NUM_SV = 250,
     parameter int MAX_BATCH_SIZE = 1000,
-    parameter int FIFO_DEPTH = 8192,
-    parameter int ADDR_WIDTH = 13,
+    parameter int FIFO_DEPTH = 512,
+    parameter int ADDR_WIDTH = 9,
     parameter real DEFAULT_GAMMA   = 0.25,   // Q6.10 = 256 = 0x0100 (exact)
     parameter real DEFAULT_C       = 1.0,
     parameter real DEFAULT_BIAS_0  =  0.0,
@@ -189,7 +189,7 @@ module svm_compute_core #(
     logic                    vbatt_ok_s;   // synchronized vbatt_ok  (reset=1: assume power OK)
     logic                    vbatt_warn_s; // synchronized vbatt_warn (reset=0: no warning)
 
-    logic [DATA_WIDTH-1:0]   feature_bank [FEATURE_DIM];
+    (* ram_style = "registers" *) logic [DATA_WIDTH-1:0] feature_bank [FEATURE_DIM];
 
     logic [9:0]              num_samples_latched; // shadow: captured at start; immune to mid-batch writes
 
