@@ -41,7 +41,7 @@ TOOL_WRAPPERS=$SCRATCH/eda-wrappers
 mkdir -p $TOOL_WRAPPERS
 
 # All tools except yosys come from the SIF (openroad, magic, etc.)
-for TOOL in openroad magic klayout netgen verilator iverilog opensta; do
+for TOOL in openroad magic klayout netgen verilator iverilog opensta sta; do
     cat > $TOOL_WRAPPERS/$TOOL << WRAP
 #!/bin/bash
 exec apptainer exec --bind /scratch,/tmp $OL2_SIF $TOOL "\$@"
