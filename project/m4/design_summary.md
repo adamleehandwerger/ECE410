@@ -1,7 +1,7 @@
 # SVM Compute Core — Design Summary (m4: Hardening & GDS Submission)
 
 **Project:** Multi-Class Cardiac Arrhythmia Detection
-**RTL:** `svm_compute_core.sv` (128-feature, 256 SVs, Q6.10 fixed-point)
+**RTL:** `svm_compute_core.sv` (256-feature, 250 SVs, Q6.10 fixed-point)
 **Accuracy:** 96.39% on MIT-BIH (sklearn = HW, 0.00% gap, 154/256 SVs active)
 **Milestone:** Full Place-and-Route complete, GDS/LEF/GL committed to Caravel repo
 

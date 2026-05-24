@@ -95,6 +95,7 @@ python3 generate_block_diagram.py
 
 ## Differences from m4
 
-m3 uses a 256-dim feature vector and targets synthesis only (no physical layout).
-m4 reduces to 128-dim features, completes full place-and-route to GDS, and integrates
-into the Caravel chipIgnite wrapper for tape-out submission.
+m3 targets synthesis only (no physical layout). m4 keeps the same 256-dim feature
+vector, moves argmax from the wrapper into the core (class labels written to
+work_ram), completes full place-and-route to GDS, and integrates into the Caravel
+chipIgnite wrapper for tape-out submission.

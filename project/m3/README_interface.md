@@ -120,7 +120,7 @@ Both signals are driven by analog comparators and pass through 2-FF synchronizer
 | `num_sv_per_class[5]` | input | 8×5 | SV count per class; evaluated at `start` |
 | `start` | input | 1 | One-cycle pulse; valid in IDLE state only (blocked when `vbatt_ok=0`) |
 | `num_samples` | input | 10 | Heartbeats in this batch (1–1000) |
-| `done` | output | 1 | One-cycle pulse after the last kernel output |
+| `done` | output | 1 | One-cycle pulse after the last beat's class label is written to work_ram |
 
 **`num_samples` is latched** into `num_samples_latched` at `start && vbatt_ok_s` (Fix #7). The FSM evaluates `sample_counter >= num_samples_latched - 1` using the shadow copy throughout the batch. Mid-batch writes to `num_samples` are safe and have no effect.
 
@@ -159,17 +159,20 @@ Valid SV count: `1 ≤ Σ num_sv_per_class ≤ NUM_SV`. Zero or overflow raises 
 
 ---
 
-### Kernel Output Stream
+### Kernel Output Stream (debug only)
 
 | Signal | Dir (core) | Width | Description |
 |--------|-----------|-------|-------------|
 | `kernel_out` | output | 16 | Q6.10 RBF kernel value ∈ [0, 1] |
 | `kernel_valid` | output | 1 | Held high until `kernel_ready` handshake completes |
-| `kernel_ready` | input | 1 | MCU asserts to consume kernel word |
+| `kernel_ready` | input | 1 | Tie high; the core consumes immediately in m4 |
 
-**Handshake:** `kernel_valid` is a set/clear latch (not a one-cycle pulse). The core holds it high until `kernel_ready` is asserted; the FSM advances on the rising edge of `kernel_ready`. This ensures the MCU cannot miss a kernel output even if it deasserts `kernel_ready` for multiple cycles.
+The core performs argmax internally — kernel values are accumulated into per-class
+score registers and the winning class is written to `work_ram[sample_counter]`
+at the end of each beat. The `kernel_out`/`kernel_valid` stream remains available
+for debug inspection but is no longer used for classification.
 
-**Output volume per batch:** `num_samples × Σ num_sv_per_class` kernel words  
+**Output volume per batch (debug):** `num_samples × Σ num_sv_per_class` kernel words  
 **Output order:** sequential over (sample, class, sv_within_class) — innermost loop is sv
 
 ---
@@ -203,10 +206,10 @@ Valid SV count: `1 ≤ Σ num_sv_per_class ≤ NUM_SV`. Zero or overflow raises 
 
 | Property | Value |
 |----------|-------|
-| Capacity | 1000 samples × 250 SVs × 2 B = 500 KB max |
-| Address space | 19-bit (2¹⁹ = 512 K words — sufficient) |
-| Access | Read/write |
-| Note | Promoted from 18-bit (m2) to 19-bit (m3) to cover full 500 KB range |
+| Capacity | 1 word per beat × up to 1000 beats = 1000 words max |
+| Address space | 19-bit (addr = sample_counter; only low 10 bits used) |
+| Access | Write (core stores class labels); read (MCU via WORK_RD) |
+| Content | `work_ram[i] = {13'b0, argmax_class}` — 3-bit class label for beat i |
 
 ---
 
@@ -237,10 +240,11 @@ Valid SV count: `1 ≤ Σ num_sv_per_class ≤ NUM_SV`. Zero or overflow raises 
 | `LOAD_FEATURES` | Draining FIFO into feature registers | → `COMPUTE_DIST` after `FEATURE_DIM` words |
 | `COMPUTE_DIST` | Squared-distance accumulation (all dims) | → `COMPUTE_KERNEL` on `dist_done` |
 | `COMPUTE_KERNEL` | 15th-order Horner eval of exp(−γd²) | → `OUTPUT_RESULT` on `horner_done` |
-| `OUTPUT_RESULT` | Stream kernel; handshake with MCU | → `COMPUTE_DIST` (next SV/class) · `LOAD_FIFO` (next heartbeat) · `IDLE` (batch done) |
+| `OUTPUT_RESULT` | Accumulate kernel into class_score_acc[class]; advance SV/class counters | → `COMPUTE_DIST` (next SV/class) · `WRITE_CLASS` (all SVs × classes done) |
+| `WRITE_CLASS` | Argmax of class_score_acc[0..4]; write winning class to work_ram[sample_counter] | → `LOAD_FIFO` (next beat) · `IDLE` (batch done) |
 | `ERROR_STATE` | One-cycle pass-through; latch error flag | → `IDLE` |
 
-`COMPUTE_DIST → COMPUTE_KERNEL → OUTPUT_RESULT` repeats once per (SV, class) pair within a heartbeat. The outer loop over heartbeats returns to `LOAD_FIFO` between samples.
+`COMPUTE_DIST → COMPUTE_KERNEL → OUTPUT_RESULT` repeats once per (SV, class) pair within a beat. `WRITE_CLASS` runs once per beat, storing one class label. The outer loop over beats returns to `LOAD_FIFO` between samples.
 
 ---
 
@@ -285,7 +289,7 @@ logic        param_write_en;
 logic [2:0]  param_addr;
 logic [15:0] param_data, gamma_reg, c_reg;
 logic [15:0] bias_reg [5];
-logic [7:0]  num_sv_per_class [5];
+logic [39:0] num_sv_per_class_flat;  // {class4[39:32], ..., class0[7:0]}
 logic        vbatt_warn, vbatt_ok;
 logic        qspi_valid, qspi_ready;
 logic [15:0] qspi_data;
@@ -297,16 +301,17 @@ logic        kernel_valid, kernel_ready;
 logic [17:0] sv_ram_addr;
 logic [15:0] sv_ram_rdata;
 logic        sv_ram_ren;
-logic [18:0] work_ram_addr;  // 19-bit: covers 500 KB workspace
+logic [18:0] work_ram_addr;  // addr = sample_counter; stores class labels
 logic [15:0] work_ram_wdata, work_ram_rdata;
 logic        work_ram_wen, work_ram_ren;
+logic [127:0] class_scores_la;  // cs_acc0–cs_acc3 for LA bus debug
 
 svm_compute_core dut (
     .clk(clk),                 .rst_n(rst_n),
     .param_write_en(param_write_en),
     .param_addr(param_addr),   .param_data(param_data),
     .gamma_reg(gamma_reg),     .c_reg(c_reg),
-    .bias_reg(bias_reg),       .num_sv_per_class(num_sv_per_class),
+    .bias_reg(bias_reg),       .num_sv_per_class_flat(num_sv_per_class_flat),
     .vbatt_warn(vbatt_warn),   .vbatt_ok(vbatt_ok),
     .qspi_valid(qspi_valid),   .qspi_data(qspi_data),
     .qspi_ready(qspi_ready),
@@ -319,7 +324,8 @@ svm_compute_core dut (
     .done(done),               .error(error),
     .error_code(error_code),
     .kernel_out(kernel_out),   .kernel_valid(kernel_valid),
-    .kernel_ready(kernel_ready)
+    .kernel_ready(1'b1),       // tie high; argmax is internal
+    .class_scores_la(class_scores_la)
 );
 ```
 

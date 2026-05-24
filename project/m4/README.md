@@ -7,8 +7,10 @@
 
 The m4 milestone delivers a fully hardened GDSII layout of `svm_compute_core`
 integrated into the Efabless Caravel chipIgnite `user_project_wrapper`. Feature
-vector reduced to 128-dim (64 single-beat + 32 10-beat mean + 32 RR-interval).
-SV RAM moved off-chip via GPIO/LA to eliminate the unavailable sky130_sram macro.
+vector: 256-dim (128 single-beat morphology + 64 10-beat context + 64 100-beat
+context). SV RAM moved off-chip via GPIO/LA to eliminate the unavailable
+sky130_sram macro. Argmax moved into the SVM core; class labels written to
+work_ram instead of raw kernel values.
 
 ---
 
@@ -25,11 +27,11 @@ m4/
 ├── confusion_comparison.py    ← script that generates confusion_comparison.png
 ├── rt1/                       ← RTL source files (128-feature, Caravel-integrated)
 │   ├── svm_compute_core.sv    ← compute core: FSM, FIFO, distance matrix, Horner LUT
-│   │                              kernel; FEATURE_DIM=128 NUM_SV=256 FIFO_DEPTH=4096
+│   │                              kernel; FEATURE_DIM=256 NUM_SV=250 FIFO_DEPTH=8192
 │   ├── svm_fifo_sram.sv       ← feature FIFO backed by sky130 SRAM macro interface
 │   ├── svm_sv_ram.sv          ← SV RAM arbiter — off-chip GPIO/LA interface logic
 │   └── user_project_wrapper.sv ← Caravel wrapper: Wishbone decode, clock gate (ICG),
-│                                  argmax accumulator, work_ram, GPIO/LA pin assignments
+│                                  work_ram (class labels), GPIO/LA pin assignments
 │                                  Wishbone map (base 0x30000000):
 │                                    +0x04 CONTROL  +0x08 STATUS  +0x0C NUM_SAMPLES
 │                                    +0x10-0x20 NUM_SV[0-4]  +0x24 PARAM_WR
@@ -57,7 +59,7 @@ m4/
 │   ├── README.md              ← testbench overview and how to run
 │   ├── Makefile               ← iverilog/cocotb build rules; `make all` runs all tests
 │   ├── tb_top.sv              ← full-pipeline 5-heartbeat classification testbench
-│   ├── tb_svm_params.svh      ← SV params for 128-feature 256-SV model
+│   ├── tb_svm_params.svh      ← SV params for 256-feature 250-SV model
 │   ├── tb_error_codes.sv      ← unit test: all error codes, sticky latch, reset-clear
 │   ├── tb_backpressure.sv     ← unit test: kernel_valid hold; late kernel_ready
 │   ├── tb_consecutive.sv      ← unit test: back-to-back heartbeat processing
@@ -77,8 +79,8 @@ m4/
 │   │                              via Wishbone (base 0x30000000); signals pass via GPIO
 │   ├── dv_Makefile            ← Efabless standard DV Makefile (MCW_ROOT includes)
 │   ├── test_svm_compute_core.py ← cocotb Python testbench (9 tests)
-│   ├── sv_ram.hex             ← 256-SV × 128-feature SV memory image
-│   ├── test_features.hex      ← 5-heartbeat 128-feature test vectors
+│   ├── sv_ram.hex             ← 250-SV × 256-feature SV memory image
+│   ├── test_features.hex      ← 5-heartbeat 256-feature test vectors
 │   ├── test_labels.hex        ← ground-truth class labels
 │   ├── expected_kernels.hex   ← pre-computed expected RBF kernel outputs
 │   └── expected_preds.hex     ← pre-computed expected class predictions
@@ -93,7 +95,7 @@ m4/
 
 | Parameter | Value |
 |-----------|-------|
-| Feature dimension | 128 (64 single-beat + 32 10-beat mean + 32 RR) |
+| Feature dimension | 256 (128 single-beat morph + 64 10-beat context + 64 100-beat context) |
 | Support vectors | 256 (154 active at 96.39% accuracy) |
 | Classes | 5 (Normal, PVC, AFib, VT, SVT) |
 | Fixed-point | Q6.10, 16-bit signed |
@@ -107,8 +109,8 @@ m4/
 
 | Offset | Name | R/W | Description |
 |--------|------|-----|-------------|
-| +0x04 | CONTROL | RW | [0]=start [1]=vbatt_ok [2]=vbatt_warn [3]=kern_ready |
-| +0x08 | STATUS | RO | [0]=done [1]=error [5:2]=error_code [8:6]=class_out |
+| +0x04 | CONTROL | RW | [0]=start [1]=vbatt_ok [2]=vbatt_warn |
+| +0x08 | STATUS | RO | [0]=done [1]=error [5:2]=error_code [8:6]=work_ram[0] class |
 | +0x0C | NUM_SAMPLES | RW | [9:0] heartbeats per classification run |
 | +0x10–+0x20 | NUM_SV[0–4] | RW | [7:0] support vectors per class |
 | +0x24 | PARAM_WR | WO | [19]=en [18:16]=addr [15:0]=data |
@@ -133,7 +135,8 @@ sbatch ~/ece410/dv_run.sh
 
 | | m3 | m4 |
 |--|----|----|
-| Feature dim | 256 | 128 |
+| Feature dim | 256 | 256 (unchanged) |
+| Argmax | External (wrapper) | Internal (core → work_ram) |
 | SV RAM | External FIFO interface | Off-chip GPIO/LA |
 | Layout | Synthesis only | DRT complete, GDS/LEF/GL |
 | Caravel | Not integrated | user_project_wrapper hardened |

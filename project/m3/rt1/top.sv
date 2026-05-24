@@ -73,7 +73,7 @@ module svm_compute_core #(
     output logic [DATA_WIDTH-1:0]   c_reg,
     output logic [DATA_WIDTH-1:0]   bias_reg [5],
 
-    input  logic [7:0]              num_sv_per_class [5],
+    input  logic [39:0]             num_sv_per_class_flat,
 
     input  logic                    qspi_valid,
     input  logic [DATA_WIDTH-1:0]   qspi_data,
@@ -100,7 +100,9 @@ module svm_compute_core #(
 
     output logic [DATA_WIDTH-1:0]   kernel_out,
     output logic                    kernel_valid,
-    input  logic                    kernel_ready
+    input  logic                    kernel_ready,
+
+    output logic [127:0]            class_scores_la
 );
 
     // =========================================================================
@@ -203,8 +205,6 @@ module svm_compute_core #(
     logic [DATA_WIDTH-1:0]   feat_rd_data;
 
     logic [9:0]              sv_base;
-    logic [17:0]             kernel_out_counter;
-
     typedef enum logic [2:0] {
         IDLE,
         LOAD_FIFO,
@@ -212,6 +212,7 @@ module svm_compute_core #(
         COMPUTE_DIST,
         COMPUTE_KERNEL,
         OUTPUT_RESULT,
+        WRITE_CLASS,
         ERROR_STATE
     } state_t;
 
@@ -231,6 +232,16 @@ module svm_compute_core #(
     wire last_sv        = (sv_counter >= sv_count_reg[class_counter] - 1);
     wire last_class     = (class_counter >= 3'd4);
     wire last_heartbeat = (sample_counter >= num_samples_latched - 1);
+
+    // Internal class score accumulators for argmax (kernel values are Q6.10, unsigned [0,1024])
+    logic [31:0] class_score_acc [5];
+    wire  [31:0] cs_acc0 = class_score_acc[0];
+    wire  [31:0] cs_acc1 = class_score_acc[1];
+    wire  [31:0] cs_acc2 = class_score_acc[2];
+    wire  [31:0] cs_acc3 = class_score_acc[3];
+    wire  [31:0] cs_acc4 = class_score_acc[4];
+    logic [2:0]  argmax_class;
+    logic [31:0] argmax_best;
 
     // =========================================================================
     // Sub-module Instances
@@ -331,13 +342,15 @@ module svm_compute_core #(
             COMPUTE_KERNEL: if (horner_done) next_state = OUTPUT_RESULT;
             OUTPUT_RESULT: begin
                 if (kernel_ready && kernel_valid) begin
-                    if (last_sv && last_class) begin
-                        if (last_heartbeat) next_state = IDLE;
-                        else                next_state = LOAD_FIFO;
-                    end else begin
+                    if (last_sv && last_class)
+                        next_state = WRITE_CLASS;
+                    else
                         next_state = COMPUTE_DIST;
-                    end
                 end
+            end
+            WRITE_CLASS: begin
+                if (last_heartbeat) next_state = IDLE;
+                else                next_state = LOAD_FIFO;
             end
             ERROR_STATE: next_state = IDLE;
             default:     next_state = ERROR_STATE;
@@ -479,9 +492,7 @@ module svm_compute_core #(
                     class_counter  <= '0;
                     if (start && vbatt_ok_s) begin
                         for (int i = 0; i < 5; i++)
-                            sv_count_reg[i] <= num_sv_per_class[i];
-                        // Latch gamma at the start of each batch so a mid-compute
-                        // param_write_en cannot corrupt in-flight kernel values.
+                            sv_count_reg[i] <= num_sv_per_class_flat[i*8 +: 8];
                         gamma_latched       <= gamma_int;
                         num_samples_latched <= num_samples;
                     end
@@ -493,9 +504,8 @@ module svm_compute_core #(
                 OUTPUT_RESULT: begin
                     if (kernel_ready && kernel_valid) begin
                         if (last_sv && last_class) begin
-                            sv_counter     <= '0;
-                            class_counter  <= '0;
-                            sample_counter <= sample_counter + 1;
+                            sv_counter    <= '0;
+                            class_counter <= '0;
                         end else if (last_sv) begin
                             sv_counter    <= '0;
                             class_counter <= class_counter + 1;
@@ -503,6 +513,9 @@ module svm_compute_core #(
                             sv_counter <= sv_counter + 1;
                         end
                     end
+                end
+                WRITE_CLASS: begin
+                    sample_counter <= sample_counter + 1;
                 end
                 default: begin end
             endcase
@@ -544,8 +557,7 @@ module svm_compute_core #(
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n)
             heartbeat_count <= 7'd0;
-        else if ((state == OUTPUT_RESULT) && kernel_valid && kernel_ready
-                 && last_sv && last_class && (heartbeat_count < 7'd100))
+        else if ((state == WRITE_CLASS) && (heartbeat_count < 7'd100))
             heartbeat_count <= heartbeat_count + 7'd1;
     end
 
@@ -557,25 +569,15 @@ module svm_compute_core #(
     end
 
     // =========================================================================
-    // Work RAM Output
+    // Work RAM Output — one class label per window at work_ram[sample_counter]
     // =========================================================================
 
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) kernel_out_counter <= '0;
-        else begin
-            case (state)
-                IDLE:          kernel_out_counter <= '0;
-                OUTPUT_RESULT: if (kernel_ready && kernel_valid)
-                                   kernel_out_counter <= kernel_out_counter + 1;
-                default: ;
-            endcase
-        end
-    end
-
-    assign work_ram_addr  = kernel_out_counter;
-    assign work_ram_wdata = kernel_out;
-    assign work_ram_wen   = (state == OUTPUT_RESULT) && kernel_valid && kernel_ready;
+    assign work_ram_addr  = {9'b0, sample_counter};
+    assign work_ram_wdata = {13'b0, argmax_class};
+    assign work_ram_wen   = (state == WRITE_CLASS);
     assign work_ram_ren   = 1'b0;
+
+    assign class_scores_la = {cs_acc3, cs_acc2, cs_acc1, cs_acc0};
 
     // =========================================================================
     // Output Registers
@@ -627,8 +629,7 @@ module svm_compute_core #(
             kernel_out   <= '0;
             kernel_valid <= 1'b0;
         end else begin
-            done  <= (state == OUTPUT_RESULT) && kernel_valid && kernel_ready
-                      && last_sv && last_class && last_heartbeat;
+            done  <= (state == WRITE_CLASS) && last_heartbeat;
             // Codes 0x1–0x7 are real faults: sticky (latch first, hold until rst_n).
             // Codes 0x8+ are advisory (ERR_WARMING_UP, ERR_INTERRUPTED): non-sticky,
             // auto-clear when err_detect returns ERR_NONE (heartbeat_count >= 100).
@@ -663,6 +664,54 @@ module svm_compute_core #(
             else if (kernel_valid && kernel_ready)
                 kernel_valid <= 1'b0;
         end
+    end
+
+    // =========================================================================
+    // Class Score Accumulation — kernel values → class_score_acc[class_counter]
+    // Bias seeds the accumulator each window so argmax includes the bias term.
+    // =========================================================================
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            for (int i = 0; i < 5; i++) class_score_acc[i] <= '0;
+        end else begin
+            case (state)
+                IDLE: begin
+                    if (start && vbatt_ok_s) begin
+                        class_score_acc[0] <= {16'b0, bias_int[0]};
+                        class_score_acc[1] <= {16'b0, bias_int[1]};
+                        class_score_acc[2] <= {16'b0, bias_int[2]};
+                        class_score_acc[3] <= {16'b0, bias_int[3]};
+                        class_score_acc[4] <= {16'b0, bias_int[4]};
+                    end
+                end
+                OUTPUT_RESULT: begin
+                    if (kernel_valid && kernel_ready)
+                        class_score_acc[class_counter] <=
+                            class_score_acc[class_counter] + {16'b0, kernel_out};
+                end
+                WRITE_CLASS: begin
+                    class_score_acc[0] <= {16'b0, bias_int[0]};
+                    class_score_acc[1] <= {16'b0, bias_int[1]};
+                    class_score_acc[2] <= {16'b0, bias_int[2]};
+                    class_score_acc[3] <= {16'b0, bias_int[3]};
+                    class_score_acc[4] <= {16'b0, bias_int[4]};
+                end
+                default: begin end
+            endcase
+        end
+    end
+
+    // =========================================================================
+    // Argmax — combinational over class_score_acc[0..4]
+    // =========================================================================
+
+    always_comb begin
+        argmax_class = 3'd0; argmax_best = cs_acc0;
+        if (cs_acc1 > argmax_best) begin argmax_class = 3'd1; argmax_best = cs_acc1; end
+        if (cs_acc2 > argmax_best) begin argmax_class = 3'd2; argmax_best = cs_acc2; end
+        if (cs_acc3 > argmax_best) begin argmax_class = 3'd3; argmax_best = cs_acc3; end
+        if (cs_acc4 > argmax_best) begin argmax_class = 3'd4; argmax_best = cs_acc4; end
     end
 
 endmodule

@@ -172,64 +172,16 @@ module user_project_wrapper #(
     end
 
     // =========================================================================
-    // Argmax
+    // Class output — argmax is computed inside svm_compute_core; first window
+    // result lives at work_ram[0] for STATUS register and GPIO readback.
     // =========================================================================
     wire [15:0] svm_kernel_out;
     wire        svm_kernel_valid;
     wire        fifo_ready;
     wire        svm_error;
+    wire [127:0] la_scores_w;
 
-    reg [31:0] class_score [0:4];
-    reg [2:0]  class_out_r;
-    reg [2:0]  kern_class_idx;
-    reg [7:0]  kern_sv_idx;
-    reg [7:0]  sv_snap [0:4];
-
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            kern_class_idx <= 0; kern_sv_idx <= 0;
-            for (c = 0; c < 5; c = c+1) begin
-                class_score[c] <= 0; sv_snap[c] <= 50;
-            end
-        end else begin
-            if (reg_control[0]) begin
-                kern_class_idx <= 0; kern_sv_idx <= 0;
-                for (c = 0; c < 5; c = c+1) begin
-                    class_score[c] <= 0; sv_snap[c] <= reg_num_sv[c];
-                end
-            end else if (svm_kernel_valid && reg_control[3]) begin
-                class_score[kern_class_idx] <=
-                    class_score[kern_class_idx] + {{16{svm_kernel_out[15]}}, svm_kernel_out};
-                if (kern_sv_idx >= sv_snap[kern_class_idx] - 1) begin
-                    kern_sv_idx    <= 0;
-                    kern_class_idx <= kern_class_idx + 1;
-                end else kern_sv_idx <= kern_sv_idx + 1;
-            end
-        end
-    end
-
-    // Flatten array to wires — Yosys mem2reg can't handle variable index
-    // (class_score[argmax_comb]) in a combinational always block
-    wire [31:0] cs0 = class_score[0];
-    wire [31:0] cs1 = class_score[1];
-    wire [31:0] cs2 = class_score[2];
-    wire [31:0] cs3 = class_score[3];
-    wire [31:0] cs4 = class_score[4];
-
-    reg [2:0]  argmax_comb;
-    reg [31:0] argmax_best;
-    always @(*) begin
-        argmax_comb = 3'd0; argmax_best = cs0;
-        if ($signed(cs1) > $signed(argmax_best)) begin argmax_comb = 3'd1; argmax_best = cs1; end
-        if ($signed(cs2) > $signed(argmax_best)) begin argmax_comb = 3'd2; argmax_best = cs2; end
-        if ($signed(cs3) > $signed(argmax_best)) begin argmax_comb = 3'd3; argmax_best = cs3; end
-        if ($signed(cs4) > $signed(argmax_best)) begin argmax_comb = 3'd4; argmax_best = cs4; end
-    end
-
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) class_out_r <= 3'd0;
-        else if (svm_done) class_out_r <= argmax_comb;
-    end
+    wire [2:0] class_out_r = work_ram[0][2:0];
 
     // =========================================================================
     // Wishbone read mux
@@ -268,7 +220,7 @@ module user_project_wrapper #(
         .param_data      (reg_param_wr[15:0]),
         .gamma_reg       (),
         .c_reg           (),
-        .bias_reg_flat   (),
+        .bias_reg        (),
         .num_sv_per_class_flat({reg_num_sv[4], reg_num_sv[3], reg_num_sv[2],
                                 reg_num_sv[1], reg_num_sv[0]}),
         .qspi_valid      (qspi_valid_r),
@@ -291,7 +243,8 @@ module user_project_wrapper #(
         .error_code      (svm_error_code),
         .kernel_out      (svm_kernel_out),
         .kernel_valid    (svm_kernel_valid),
-        .kernel_ready    (reg_control[3])
+        .kernel_ready    (1'b1),
+        .class_scores_la (la_scores_w)
     );
 
     // =========================================================================
@@ -308,7 +261,7 @@ module user_project_wrapper #(
 
     assign io_oeb  = {{`MPRJ_IO_PADS-26{1'b1}}, 26'b0};
 
-    assign la_data_out = {cs3, cs2, cs1, cs0};
+    assign la_data_out = la_scores_w;
     assign la_oenb     = 128'h0000_0000_0000_0000_0000_0000_0000_FFFF;
 
     assign user_irq = {2'b0, svm_done};
