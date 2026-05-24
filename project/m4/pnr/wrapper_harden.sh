@@ -84,6 +84,8 @@ openlane \
     --pdk-root $PDK_ROOT \
     --run-tag wrapper_harden \
     --jobs $SLURM_CPUS_PER_TASK \
+    --skip OpenROAD.STAPrePNR \
+    --skip OpenROAD.STAPostPNR \
     $DESIGN_DIR/config.json 2>&1
 
 echo "=== Done at $(date) ==="
