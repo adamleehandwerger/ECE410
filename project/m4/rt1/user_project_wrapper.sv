@@ -61,7 +61,7 @@ module user_project_wrapper #(
     input  [`MPRJ_IO_PADS-1:0] io_in,
     output [`MPRJ_IO_PADS-1:0] io_out,
     output [`MPRJ_IO_PADS-1:0] io_oeb,
-    inout  [`MPRJ_IO_PADS-10-1:0] analog_io,
+    inout  [`MPRJ_IO_PADS-10:0] analog_io,
     input  user_clock2,
     output [2:0] user_irq
 );

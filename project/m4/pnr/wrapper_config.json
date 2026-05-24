@@ -24,6 +24,7 @@
     ],
     "EXTRA_LIBS": [],
     "EXTRA_SPEFS": [],
+    "VERILOG_DEFINES": ["USE_POWER_PINS"],
     "BASE_SDC_FILE": "dir::base_user_project_wrapper.sdc",
     "IO_SYNC": 0,
     "MAX_TRANSITION_CONSTRAINT": 1.5,
