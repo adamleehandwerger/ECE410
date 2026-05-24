@@ -23,6 +23,9 @@
 
     "RT_MAX_LAYER": "met4",
 
+    "PNR_SDC_FILE": "dir::svm_compute_core.sdc",
+    "SIGNOFF_SDC_FILE": "dir::svm_compute_core.sdc",
+
     "EXTRA_VERILOG_MODELS": [
         "dir::../../verilog/rtl/sim_sram_models.sv"
     ]
