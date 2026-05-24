@@ -44,10 +44,8 @@
 module user_project_wrapper #(
     parameter BITS = 32
 ) (
-`ifdef USE_POWER_PINS
     inout vdda1, inout vdda2, inout vssa1, inout vssa2,
     inout vccd1, inout vccd2, inout vssd1, inout vssd2,
-`endif
     input  wb_clk_i, input  wb_rst_i,
     input  wbs_stb_i, input  wbs_cyc_i, input  wbs_we_i,
     input  [3:0]  wbs_sel_i,
@@ -97,9 +95,6 @@ module user_project_wrapper #(
     assign svm_gclk = clk & svm_clk_en;
 `else
     sky130_fd_sc_hd__dlclkp_1 u_icg (
-  `ifdef USE_POWER_PINS
-        .VPWR(vccd1), .VPB(vccd1), .VGND(vssd1), .VNB(vssd1),
-  `endif
         .CLK(clk), .GATE(svm_clk_en), .GCLK(svm_gclk)
     );
 `endif
