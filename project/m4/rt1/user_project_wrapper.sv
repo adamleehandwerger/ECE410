@@ -164,7 +164,7 @@ module user_project_wrapper #(
     // =========================================================================
     // work_ram: 2KB scratch (register-based)
     // =========================================================================
-    reg [15:0] work_ram [0:2047];
+    (* ram_style = "registers" *) reg [15:0] work_ram [0:2047];
     wire [18:0] work_ram_addr_w;
     wire [15:0] work_ram_wdata_w;
     wire        work_ram_wen_w, work_ram_ren_w;

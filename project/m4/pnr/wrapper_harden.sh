@@ -77,53 +77,13 @@ ls -lh $CARAVEL/gds/svm_compute_core.gds
 ls -lh $CARAVEL/verilog/gl/svm_compute_core.v
 ls -lh $CARAVEL/verilog/rtl/user_project_wrapper.sv
 
-# --- Clean previous run so Phase 1 starts fresh and Phase 2 uses Phase 1's netlist ---
-echo "--- Removing old run dir (if any) ---"
-rm -rf $DESIGN_DIR/runs/wrapper_harden
-
-# --- Phase 1: synthesis + checkers only ---
-echo "--- Phase 1: synthesis through Checker.NetlistAssignStatements ---"
+# --- Run OpenLane 2 (full synthesis — no elaborate-only; produces proper GL netlist) ---
+echo "--- Running openlane ---"
 openlane \
     --pdk sky130A \
     --pdk-root $PDK_ROOT \
     --run-tag wrapper_harden \
     --jobs $SLURM_CPUS_PER_TASK \
-    --to Checker.NetlistAssignStatements \
-    --skip OpenROAD.STAPrePNR \
-    --skip OpenROAD.STAPostPNR \
-    $DESIGN_DIR/config.json 2>&1
-
-# --- Fix netlist: Yosys elaborate-only writes 'output X; reg X;' for reg-driven
-#     output ports, which OpenSTA/OpenROAD rejects. Convert the 'reg' line to 'wire'.
-#     Fix ALL nl.v files in the run dir (step number varies; -path filter was unreliable).
-echo "--- Fixing netlist reg->wire on output ports ---"
-find $DESIGN_DIR/runs/wrapper_harden -name "user_project_wrapper.nl.v" 2>/dev/null | \
-while read NL; do
-    python3 - "$NL" << 'PYEOF'
-import re, sys
-path = sys.argv[1]
-txt  = open(path).read()
-fixed = re.sub(
-    r'(  output (\[[^\]]*\] )?([^;\n]+);)\n  reg (?:\[[^\]]*\] )?\3;',
-    r'\1\n  wire \2\3;',
-    txt
-)
-if fixed != txt:
-    open(path, 'w').write(fixed)
-    print(f"Fixed: {path}")
-else:
-    print(f"No change needed: {path}")
-PYEOF
-done
-
-# --- Phase 2: floorplan through GDS ---
-echo "--- Phase 2: OpenROAD.CheckSDCFiles through final GDS ---"
-openlane \
-    --pdk sky130A \
-    --pdk-root $PDK_ROOT \
-    --run-tag wrapper_harden \
-    --jobs $SLURM_CPUS_PER_TASK \
-    --from OpenROAD.CheckSDCFiles \
     --skip OpenROAD.STAPrePNR \
     --skip OpenROAD.STAPostPNR \
     $DESIGN_DIR/config.json 2>&1
