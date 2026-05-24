@@ -975,15 +975,15 @@ module horner_engine #(
     function automatic logic [DATA_WIDTH-1:0] exp_int_lut;
         input logic [3:0] idx;
         case (idx)
-            4'd0:  return 16'd1024;
-            4'd1:  return 16'd377;
-            4'd2:  return 16'd139;
-            4'd3:  return 16'd51;
-            4'd4:  return 16'd19;
-            4'd5:  return 16'd7;
-            4'd6:  return 16'd3;
-            4'd7:  return 16'd1;
-            default: return 16'd0;   // exp(-8..15)×1024 < 0.5 → rounds to 0
+            4'd0:  exp_int_lut = 16'd1024;
+            4'd1:  exp_int_lut = 16'd377;
+            4'd2:  exp_int_lut = 16'd139;
+            4'd3:  exp_int_lut = 16'd51;
+            4'd4:  exp_int_lut = 16'd19;
+            4'd5:  exp_int_lut = 16'd7;
+            4'd6:  exp_int_lut = 16'd3;
+            4'd7:  exp_int_lut = 16'd1;
+            default: exp_int_lut = 16'd0;
         endcase
     endfunction
 
