@@ -77,6 +77,10 @@ ls -lh $CARAVEL/gds/svm_compute_core.gds
 ls -lh $CARAVEL/verilog/gl/svm_compute_core.v
 ls -lh $CARAVEL/verilog/rtl/user_project_wrapper.sv
 
+# --- Clean previous run so new config (SYNTH_ELABORATE_ONLY=0) takes effect ---
+echo "--- Removing old run dir ---"
+rm -rf $DESIGN_DIR/runs/wrapper_harden
+
 # --- Run OpenLane 2 (full synthesis — no elaborate-only; produces proper GL netlist) ---
 echo "--- Running openlane ---"
 openlane \
