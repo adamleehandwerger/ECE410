@@ -314,8 +314,7 @@ module user_project_wrapper #(
 
     assign io_oeb  = {{`MPRJ_IO_PADS-26{1'b1}}, 26'b0};
 
-    assign la_data_out = {class_score[3], class_score[2],
-                          class_score[1], class_score[0]};
+    assign la_data_out = {cs3, cs2, cs1, cs0};
     assign la_oenb     = 128'h0000_0000_0000_0000_0000_0000_0000_FFFF;
 
     assign user_irq = {2'b0, svm_done};
