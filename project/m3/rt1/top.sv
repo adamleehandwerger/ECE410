@@ -731,7 +731,7 @@ module input_fifo #(
     output logic [ADDR_WIDTH:0]     count
 );
 
-    logic [DATA_WIDTH-1:0] mem [DEPTH];
+    (* ram_style = "registers" *) logic [DATA_WIDTH-1:0] mem [DEPTH];
     logic [ADDR_WIDTH:0]   wr_ptr;
     logic [ADDR_WIDTH:0]   rd_ptr;
 
