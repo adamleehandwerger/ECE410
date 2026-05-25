@@ -1,11 +1,27 @@
+Power Report — svm_compute_core (sky130A, OpenLane Classic, job 91947)
+========================================================================
+
+Corner: nom_tt_025C_1v80  (TT process, 25°C, 1.80V)
+Clock:  40 MHz (25 ns period)
+
 Group                  Internal  Switching    Leakage      Total
                           Power      Power      Power      Power (Watts)
 ----------------------------------------------------------------
-Sequential             3.15e-01   1.48e-03   8.02e-07   3.17e-01  55.1%
-Combinational          3.65e-02   4.46e-02   3.10e-07   8.10e-02  14.1%
-Clock                  8.59e-02   9.16e-02   7.71e-08   1.78e-01  30.8%
-Macro                  0.00e+00   0.00e+00   0.00e+00   0.00e+00   0.0%
-Pad                    0.00e+00   0.00e+00   0.00e+00   0.00e+00   0.0%
-----------------------------------------------------------------
-Total                  4.38e-01   1.38e-01   1.19e-06   5.75e-01 100.0%
-                          76.1%      23.9%       0.0%
+Total                  4.28e-02   2.32e-02   3.87e-07   6.60e-02  100.0%
+                          64.9%      35.1%      ~0.0%
+
+Active power:   66.0 mW
+
+Wearable Power Budget (80 bpm, ~3 ms active per beat)
+------------------------------------------------------
+  Beat period            : 750 ms  (60 s / 80 bpm)
+  Est. active duration   : ~3 ms   (classification per beat)
+  Duty cycle             : ~0.4%
+  Average power (SVM core): ~0.26 mW
+
+  Capacity (200 mAh @ 3.7V = 740 mWh):
+    SVM core avg lifetime : ~2857 hours = 119 days
+    14-day target         : MET with significant margin (8.5x headroom)
+
+Note: System power budget includes MCU, ECG frontend, BLE, and sensors.
+      SVM core contribution is negligible relative to other subsystems.

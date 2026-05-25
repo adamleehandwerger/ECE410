@@ -1,31 +1,34 @@
-Design Area Report — svm_compute_core (sky130A, OpenROAD DRT complete)
-========================================================================
+Design Area Report — svm_compute_core (sky130A, OpenLane Classic, job 91947)
+=============================================================================
 
 Design Name  : svm_compute_core
 PDK          : sky130A (sky130_fd_sc_hd)
-Clock Period : 10.0 ns (100 MHz target)
-Tool         : OpenROAD b16bda7e / TritonRoute (jobs 91870 drt_v12 / 91871 drt_v13)
-Parameters   : FEATURE_DIM=128, NUM_SV=256, FIFO_DEPTH=4096, DATA_WIDTH=16, FRAC_BITS=10
+Clock Period : 25.0 ns (40 MHz)
+Tool         : OpenLane 2 Classic flow (OL2 v2.3.10 / OpenROAD / TritonRoute)
+Parameters   : FEATURE_DIM=256, NUM_SV=250, FIFO_DEPTH=512, DATA_WIDTH=16, FRAC_BITS=10
 
 Area
 ----
-  Design area   : 2,894,769 µm²  (2.895 mm²)
-  Utilization   : 50%
-  Core util set : 45% (FP_CORE_UTIL)
-  PL density    : 0.50 (PL_TARGET_DENSITY)
+  Die area       : 6,250,000 µm²  (2500 × 2500 µm, 6.25 mm²)
+  Core area      : 6,166,550 µm²
+  Instance area  :   866,864 µm²
+  Utilization    :    14.1%  (PL_TARGET_DENSITY_PCT=45)
 
-Cell Count (approximate)
-------------------------
-  Standard cells (post-repair) : ~139,000 synthesis + ~23,000 repair buffers
-  SRAM macros                   : 4 × sky130_sram_1kbyte_1rw1r_32x256_8
-                                  (total 4 KB on-chip, used as 4096-word×16-bit FIFO)
+Cell Count
+----------
+  Standard cells : 146,311
+  SRAM macros    : 0 (work_ram uses register arrays; SV RAM is off-chip via GPIO/LA)
 
-Notes
------
-  DRT completed successfully with 0 DRC violations.
-  Two DRT runs produced consistent results:
-    - drt_v12 (job 91870): natural completion, 0 violations at final iteration
-    - drt_v13 (job 91871): layer-adjustment run, 0 violations; used as authoritative DEF
-  DRT DEF: svm_compute_core_128/svm_compute_core_drt.def (168 MB)
-  GL netlist: svm_compute_core_128/svm_compute_core_gl.v (20 MB)
-  Abstract LEF: svm_compute_core_128/svm_compute_core.lef (37 MB)
+Routing
+-------
+  Estimated wire length : 1,565,010 µm
+  Max routing layer     : met4
+  Power grid violations : 0 (VPWR), 0 (VGND)
+  Disconnected pins     : 0
+  Floating nets         : 0
+
+Artifacts
+---------
+  GDS : gds/svm_compute_core.gds          (181 MB, Magic stream-out)
+  LEF : lef/svm_compute_core.lef          (108 KB)
+  GL  : verilog/gl/svm_compute_core.v     ( 13 MB)
