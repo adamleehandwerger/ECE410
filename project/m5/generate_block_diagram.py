@@ -1,14 +1,13 @@
 """
-generate_block_diagram.py  v8
+generate_block_diagram.py  v9
 Saves block_diagram.png to project/m5/.
 
-Changes from v7 (m4):
-  - m5: FEATURE_DIM 128→256 (128+64+64 multi-scale), FIFO 4096→512
-  - Feature Bank 256 B→512 B, work_ram 2048→64 entries (routing fix)
-  - SV RAM 64 KB→128 KB (250 SVs × 256 feat × 2 B)
-  - Distance engine: 256 iterations per SV
-  - Caravel user_project_wrapper boundary shown explicitly
-  - Revisions box: v8 entry added
+Changes from v8:
+  - NUM_SV 250→500 (100 SVs/class), SV RAM 128 KB→256 KB
+  - Accuracy updated to 97.67% (matches sklearn exactly, zero gap)
+  - alpha_addr widened to [8:0], ALPHA_WR Wishbone register (9-bit sv_idx)
+  - GPIO addresses updated: [28:10]=ram_addr[18:0], [29]=ram_ren
+  - Revisions box: v9 entry added
 """
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
@@ -70,7 +69,7 @@ tx(ax, 9, 21.72, "Multi-Class Cardiac Arrhythmia Detection System",
    sz=16, weight="bold", color="#111")
 tx(ax, 9, 21.35,
    "ECE410  ·  γ = 0.25  ·  LUT range-reduction kernel"
-   "  ·  256-dim features (128+64+64)  ·  96.39% accuracy  ·  sky130A  2.895 mm²",
+   "  ·  256-dim features (128+64+64)  ·  97.67% accuracy  ·  sky130A  2.895 mm²",
    sz=11, color="#555", style="italic")
 
 # ── HOST MCU ──────────────────────────────────────────────────────
@@ -286,8 +285,8 @@ bx(ax, SVX, SVY, SVW, SVH, C["offchip_face"], C["offchip_edge"], lw=1.5)
 tx(ax, SVX+SVW/2, SVY+SVH-0.30,
    "SV RAM  (OFF-CHIP, host flash)", sz=12, color=C["tg"], weight="bold")
 tx(ax, SVX+SVW/2, SVY+SVH/2-0.05,
-   "250 SVs × 256 feat × 2 B  =  128 KB\n"
-   "GPIO[25:10]=addr[15:0]  GPIO[26]=ren  LA[15:0]=rdata",
+   "500 SVs × 256 feat × 2 B  =  256 KB\n"
+   "GPIO[28:10]=addr[18:0]  GPIO[29]=ren  LA[15:0]=rdata",
    sz=10, color="#333")
 
 # ── WORKSPACE RAM  (on-chip, routing-congestion fix) ──────────────
@@ -433,6 +432,7 @@ ax.plot([LX+0.22, LX+LW-0.22], [REV_TOP-0.40, REV_TOP-0.40],
         color="#bbbbbb", lw=0.7, zorder=3)
 
 revisions = [
+    ("v9", "2026-05-25", "NUM_SV 250→500 (100/class), 97.67% = sklearn zero gap, alpha WR port"),
     ("v8", "2026-05-24", "256-dim (128+64+64), work_ram 64-entry fix, Caravel wrapper GDS"),
     ("v7", "2026-05-23", "128-dim (64+32+32), SV RAM off-chip GPIO/LA, sky130A DRT 0 DRC"),
     ("v6", "2026-05-18", "fix 11 (arm_interrupted ASIC reset, ifdef SYNTHESIS)  13/13 PASS"),
@@ -451,7 +451,7 @@ for i, (ver, date, desc) in enumerate(revisions):
     tx(ax, LX+1.55, ry, desc, sz=8, color="#444", ha="left")
 
 # Page footer
-tx(ax, 9, 0.12, "Page 1 of 1  —  Hardware blocks  (v8 / m5)", sz=10, color="#aaa")
+tx(ax, 9, 0.12, "Page 1 of 1  —  Hardware blocks  (v9 / m5)", sz=10, color="#aaa")
 
 plt.tight_layout(pad=0.4)
 out = os.path.join(OUT_DIR, "block_diagram.png")

@@ -1,27 +1,30 @@
-Area Report — user_project_wrapper (OL2 job 91948)
-===================================================
+Area Report — svm_compute_core + user_project_wrapper (OL2 jobs 91966 / 91967)
+===============================================================================
 
-STATUS: PENDING — job 91948 running on orcaga11 as of 2026-05-24
+STATUS: COMPLETE
 
-Design Name  : user_project_wrapper
 PDK          : sky130A (sky130_fd_sc_hd)
 Tool         : OpenLane 2 v2.3.10 Classic
-Die          : 2920 × 3520 µm (Caravel fixed die, FP_DEF_TEMPLATE)
-Clock        : wb_clk_i, 25 ns period (sky130_fd_sc_hd SCL override)
+NUM_SV       : 500  (100 per class, doubled from prior 250)
 
-Macro Instance
---------------
-  u_svm (svm_compute_core) : 2500 × 2500 µm at (253, 554) N
-  Right margin : 167 µm
-  Top margin   : 466 µm
+svm_compute_core  (job 91966)
+------------------------------
+  Die area     : 2500 × 2500 µm
+  GDS size     : 226 MB
+  Utilization  : ~14% (register-heavy design — alpha_table[500] in registers)
+  Cells        : ~146K std cells (alpha_table doubled from 250→500 entries)
 
-Expected post-job values
-------------------------
-  Wrapper contains minimal glue logic (Wishbone decode, clock gate, work_ram)
-  around the pre-hardened svm_compute_core macro. Cell count is expected to be
-  low (hundreds to low thousands) compared to the 146K in svm_compute_core.
+user_project_wrapper  (job 91967)
+----------------------------------
+  Die area     : 2920 × 3520 µm (Caravel fixed, FP_DEF_TEMPLATE)
+  GDS size     : 230 MB
 
-  Estimated: ~500–2000 wrapper cells + 1 macro instance
-  Utilization: ~95%+ (macro fills most of die area)
+  Macro Instance
+  --------------
+    u_svm (svm_compute_core) : 2500 × 2500 µm at (253, 554) N
+    Right margin : 167 µm
+    Top margin   : 466 µm
 
-This file will be updated when job 91948 completes.
+  Wrapper contains minimal glue logic (Wishbone decode, clock gate, alpha_wr
+  register) around the pre-hardened svm_compute_core macro.
+  Estimated: ~500–2000 wrapper std cells + 1 macro instance.

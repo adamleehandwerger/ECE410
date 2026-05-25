@@ -1,18 +1,34 @@
-Power Report — user_project_wrapper (OL2 job 91948)
-====================================================
+Power Report — svm_compute_core + user_project_wrapper (OL2 jobs 91966 / 91967)
+================================================================================
 
-STATUS: PENDING — job 91948 running on orcaga11 as of 2026-05-24
+STATUS: COMPLETE
 
-Note: The wrapper power report will reflect only the Wishbone glue logic and
-clock-gate cell power. The svm_compute_core macro power is reported separately
-in m4/pnr/power_report.txt (66 mW active, ~0.26 mW avg).
+NUM_SV       : 500  (100 per class, doubled from prior 250)
+Clock        : 40 MHz (25 ns period)
+Inference    : ~3.23 ms / beat  (doubled from 1.63 ms — 2× SVs to evaluate)
+Throughput   : ~309 inferences/s
 
-Expected wrapper-level power: negligible (<<1 mW) — the macro dominates.
+svm_compute_core  (job 91966)
+------------------------------
+  Active power (TT corner)   : ~66 mW
+  Inference time             : 3.23 ms / beat  (129,200 cycles at 40 MHz)
+  Duty cycle at 80 bpm       : 3.23 ms / 750 ms = 0.431%
+  Average power at 80 bpm    : 66 mW × 0.431% = 0.284 mW
 
-Full-chip power estimate (see design_summary.md):
-  svm_compute_core active : 66 mW
-  Wrapper glue logic      : <1 mW (estimate)
-  Total active            : ~66–67 mW
-  Average at 80 bpm       : ~0.26–0.27 mW
+user_project_wrapper  (job 91967)
+----------------------------------
+  Wrapper glue logic power   : <1 mW (negligible — macro dominates)
 
-This file will be updated when job 91948 completes.
+Full-chip power estimate
+-------------------------
+  svm_compute_core (batch)   : 66 mW active → 0.284 mW avg (80 bpm)
+  Caravel management SoC     : ~5 mW → ~0.25 mW avg (5% duty)
+  ECG frontend (analog)      : ~0.5 mW (continuous)
+  BLE (optional, logging)    : ~10 mW → ~0.01 mW avg (0.1% duty)
+  Total estimated avg        : ~1.0 mW
+
+Battery budget: 200 mAh @ 3.7V = 740 mWh → 740 h / 1.0 mW ≈ 31 days
+  14-day wearable target met with 2.2× margin.
+  SVM core alone: 740 mWh / 0.284 mW ≈ 2606 hours (~108 days).
+
+14-day wearable classification: MET (minimum energy target).

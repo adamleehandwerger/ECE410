@@ -8,9 +8,9 @@
 //   then fires start.  The ASIC drives the outer sample loop autonomously.
 //
 // Off-chip address map  (row × FEATURE_DIM layout, FEATURE_DIM = 256 = 2^8):
-//   Rows  0 .. NUM_SV-1              SV matrix      (250 × 256 = 64 000 words)
+//   Rows  0 .. NUM_SV-1              SV matrix      (500 × 256 = 128 000 words)
 //   Rows  NUM_SV .. NUM_SV+batch-1   input matrix   (1000 × 256 = 256 000 words)
-//   Maximum address: (250 + 1000) × 256 - 1 = 319 999  →  19-bit address bus
+//   Maximum address: (500 + 1000) × 256 - 1 = 383 999  →  19-bit address bus
 //
 // Per-sample output:
 //   sample_rdy pulses one cycle per WRITE_CLASS.
