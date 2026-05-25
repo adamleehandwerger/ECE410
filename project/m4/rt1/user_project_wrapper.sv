@@ -142,7 +142,7 @@ module user_project_wrapper #(
                 6'h07: reg_num_sv[3]      <= wbs_dat_i[7:0];
                 6'h08: reg_num_sv[4]      <= wbs_dat_i[7:0];
                 6'h09: reg_param_wr       <= wbs_dat_i[19:0];
-                6'h0E: work_rd_latch      <= work_ram[wbs_dat_i[10:0]];
+                6'h0E: work_rd_latch      <= work_ram[wbs_dat_i[5:0]];
                 default: ;
             endcase
         end
@@ -156,19 +156,20 @@ module user_project_wrapper #(
     wire [15:0] sv_ram_rdata_w = la_data_in[15:0];
 
     // =========================================================================
-    // work_ram: 2KB scratch (register-based)
+    // work_ram: 64-entry result buffer (reduced from 2048 to limit routing congestion)
+    // Supports num_samples ≤ 64 per classification run.
     // =========================================================================
-    (* ram_style = "registers" *) reg [15:0] work_ram [0:2047];
+    reg [15:0] work_ram [0:63];
     wire [18:0] work_ram_addr_w;
     wire [15:0] work_ram_wdata_w;
     wire        work_ram_wen_w, work_ram_ren_w;
     reg  [15:0] work_ram_rdata_r;
 
     always @(posedge clk) begin
-        if (work_ram_wen_w && work_ram_addr_w[10:0] < 2048)
-            work_ram[work_ram_addr_w[10:0]] <= work_ram_wdata_w;
-        if (work_ram_ren_w && work_ram_addr_w[10:0] < 2048)
-            work_ram_rdata_r <= work_ram[work_ram_addr_w[10:0]];
+        if (work_ram_wen_w && work_ram_addr_w[5:0] < 64)
+            work_ram[work_ram_addr_w[5:0]] <= work_ram_wdata_w;
+        if (work_ram_ren_w && work_ram_addr_w[5:0] < 64)
+            work_ram_rdata_r <= work_ram[work_ram_addr_w[5:0]];
     end
 
     // =========================================================================
