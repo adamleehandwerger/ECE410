@@ -124,7 +124,10 @@ Battery budget: 200 mAh @ 3.7V = 740 mWh → **740 h / 1.04 mW ≈ 711 hours (~2
 
 ---
 
-## Caravel Submission Artifacts (caravel_svm_project repo)
+## Caravel Submission Artifacts
+
+**Repository:** [github.com/adamleehandwerger/caravel_svm_project](https://github.com/adamleehandwerger/caravel_svm_project)  
+**GDS Release:** [v2.0-hardened](https://github.com/adamleehandwerger/caravel_svm_project/releases/tag/v2.0-hardened) (226 MB core / 230 MB wrapper)
 
 | File | Size | Job | Status |
 |------|------|-----|--------|
