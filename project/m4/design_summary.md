@@ -1,14 +1,15 @@
-# SVM Compute Core — Design Summary (m4: OL2 Hardening & GDS Tape-Out)
+# SVM Compute Core — Design Summary (m4: Batch Architecture v8)
 
 **Project:** Multi-Class Cardiac Arrhythmia Detection
-**RTL:** `svm_compute_core.sv` (256-feature, 250 SVs, Q6.10 fixed-point)
+**RTL:** `svm_compute_core.sv` (batch v8 — 256-feature, 250 SVs, Q6.10 fixed-point)
+**Architecture:** Batch — host pre-loads SV matrix + input matrix; ASIC classifies autonomously
 **Accuracy:** 96.39% on MIT-BIH (sklearn = hardware, 0.00% gap)
 **Flow:** OpenLane 2 v2.3.10 Classic (Yosys 0.46 + OpenROAD + TritonRoute)
-**Status:** P&R complete — GDS/LEF/GL committed; wrapper hardening in progress
+**Status:** RTL v8 complete; new DRT in progress (prior job 91947 results below)
 
 ---
 
-## P&R Results Summary (OL2 job 91947, sky130A TT/25°C/1.8V)
+## P&R Results (OL2 job 91947, nom_tt_025C_1v80 — prior RTL)
 
 | Metric | Value |
 |--------|-------|
@@ -23,110 +24,217 @@
 | DRC violations | **0** |
 | Wire length | 1,565,010 µm |
 
----
-
-## 1. OL2 Flow — Key Changes from m4 Manual DRT
-
-The earlier m4 milestone used a custom manual OpenROAD flow at 100 MHz (10 ns period),
-which produced −14 ns setup violations. The OL2 Classic flow correctly targets **40 MHz**
-(25 ns), the practical maximum for sky130_fd_sc_hd at TT corner, and delivers a clean
-timing closure with 7.9 ns slack.
-
-| Metric | m4 manual (drt_v12, 100 MHz) | m4 OL2 (job 91947, 40 MHz) |
-|--------|------------------------------|----------------------------|
-| Clock period | 10 ns | **25 ns** |
-| Setup WNS (TT) | −14.04 ns (VIOLATED) | **+7.923 ns (CLEAN)** |
-| Hold WNS (TT) | −3.01 ns (pre-filler) | **+0.297 ns** |
-| Active power | 575 mW | **66 mW** |
-| Cell count | ~162K | **146K** |
-| Die utilization | 50% | **14.1%** |
-| DRC violations | 0 | **0** |
-
-Key OL2 improvements:
-- Proper CTS (clock tree synthesis) inserts hold buffers → hold violations resolved
-- AREA 0 synthesis strategy + 45% density target → lower power, smaller footprint
-- `(* ram_style = "registers" *)` on feature_bank + FIFO → no unmapped SRAM macros
-- All Yosys/OpenSTA compatibility issues resolved (see pnr/core_harden.sh)
+*These metrics are from the prior streaming architecture (v7). The batch
+architecture (v8) removes the 512-deep FIFO and 64-entry work_ram, replacing
+them with the LOAD_INPUT state machine. Utilization and power will decrease;
+all timing constraints remain the same (40 MHz, 25 ns).*
 
 ---
 
-## 2. Yosys Compatibility Fixes (m4 OL2)
+## 1. Batch Architecture (v8)
 
-Several RTL constructs were incompatible with Yosys 0.46 on sky130A and required fixes:
+### What Changed from v7
 
-| Issue | Fix |
-|-------|-----|
-| `output logic [W-1:0] bias_reg [5]` — unpacked array port | Removed port entirely |
-| `return expr` in `case` arms of functions | Changed to `function_name = expr` |
-| `input_fifo` $mem inference (DEPTH=8192) | Added `(* ram_style = "registers" *)` |
-| `feature_bank [FEATURE_DIM]` $mem inference | Added `(* ram_style = "registers" *)` |
-| `$_ALDFFE_PNP_` — non-constant async reset on `interrupted` | Removed `arm_interrupted` and `interrupted` signals |
-| `sim_sram_models.sv` parsed as gate-level netlist by OpenSTA | Added `/// sta-blackbox` directive |
-| OpenSTA corner.tcl — `is_propagated`, `is_virtual`, `is_generated`, `sources`, `report_clock_latency`, `report_clock_min_period` not supported | Patched with `catch {}` wrappers |
+| Component | v7 (streaming) | v8 (batch) |
+|-----------|----------------|------------|
+| Input path | FIFO_DATA WB writes (256 words/beat) | Off-chip SRAM via GPIO/LA bus |
+| Input FIFO | 512 × 16-bit register array | **Removed** |
+| work_ram | 64 × 16-bit result buffer | **Removed** |
+| SV RAM bus | GPIO[24:10] = 15-bit sv_ram_addr | GPIO[28:10] = 19-bit unified ram_addr |
+| Input RAM | Wishbone (host pushes) | Same GPIO/LA bus (ASIC pulls) |
+| Per-beat output | Poll work_ram after batch done | `sample_rdy` IRQ[0] per beat |
+| Batch done signal | IRQ[0] | IRQ[1] |
+| Clock gate | `qspi_valid` based (could open/close between beats) | `batch_active` register (stays open entire batch) |
+| WB registers | FIFO_DATA (0x00), WORK_RD (0x38), STATUS2 (0x3C) | **All three removed** |
+| FSM states | IDLE → LOAD_FIFO → LOAD_FEATURES → COMPUTE_DIST → … | IDLE → LOAD_INPUT → COMPUTE_DIST → … |
+
+### Off-chip RAM Address Map
+
+```
+Address = {row[10:0], col[7:0]}  (19-bit)
+
+Rows   0 .. 249   SV matrix      (250 SVs × 256 features × 2 B = 128 KB)
+Rows 250 .. 1249  Input matrix   (1000 beats × 256 features × 2 B = 512 KB max)
+
+Maximum address: 1250 × 256 − 1 = 319 999  →  19 bits
+```
+
+### LOAD_INPUT State
+
+The LOAD_INPUT state replaces LOAD_FIFO + LOAD_FEATURES:
+
+```
+cycle  0:     ram_addr = {NUM_SV + sample_counter, 0},  ram_ren = 1
+cycle  1:     ram_rdata valid → feature_bank[0] latched
+cycle  1..256: advance feat_wr_addr, ram_ren high while < FEATURE_DIM
+cycle  258:   feat_wr_count == 256 → transition to COMPUTE_DIST
+```
+
+One-cycle RAM latency is absorbed by registering `feat_wr_en` and `feat_wr_addr`.
+9-bit counters prevent 8-bit wrap at FEATURE_DIM = 256 (critical fix).
+
+### batch_active Clock Gate
+
+Without `batch_active`, the ICG would close between the `start` pulse and the
+first clock cycle the FSM turns active, stalling indefinitely. The `batch_active`
+register solves this:
+
+```systemverilog
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n)              batch_active <= 0;
+    else if (reg_control[0]) batch_active <= 1;   // set on start
+    else if (svm_done)       batch_active <= 0;   // clear on batch done
+end
+wire svm_clk_en = batch_active | reg_control[0] | core_warming | (drain_cnt > 0);
+```
+
+---
+
+## 2. FSM
+
+```
+IDLE
+ │  start && vbatt_ok
+ ▼
+LOAD_INPUT  ──────────────────────────────────┐
+ │  feat_wr_count == FEATURE_DIM              │ (loop: next sample)
+ ▼                                            │
+COMPUTE_DIST                                  │
+ │  dist_done                                 │
+ ▼                                            │
+COMPUTE_KERNEL                                │
+ │  horner_done                               │
+ ▼                                            │
+OUTPUT_RESULT                                 │
+ │  kernel_valid (advance sv/class counter)   │
+ │  last_sv && last_class                     │
+ ▼                                            │
+WRITE_CLASS ─── last_heartbeat ─────► IDLE   │
+ │                                            │
+ └──── !last_heartbeat ──────────────────────┘
+```
+
+Cycle budget per sample (approx.):
+- LOAD_INPUT: 256 + 2 = 258 cycles
+- Per SV: COMPUTE_DIST (258) + COMPUTE_KERNEL (20) + OUTPUT_RESULT (1) = 279 cycles
+- 250 SVs: 69,750 cycles
+- WRITE_CLASS: 1 cycle
+- **Total per sample: ≈ 70,009 cycles**
+- **1000-sample batch: ≈ 70 M cycles at 40 MHz ≈ 1.75 s**
 
 ---
 
 ## 3. Fixed-Point Format — Q6.10
 
-Unchanged from m3. 16-bit signed, 10 fractional bits, γ = 0.25 exactly representable.
-Quantization accuracy verified by hardware simulation (confusion_comparison.py).
-sklearn accuracy = hardware accuracy: **0.00% gap**.
+Unchanged from m3/v7. 16-bit signed, 10 fractional bits.
+
+| Value | Q6.10 | Hex |
+|-------|-------|-----|
+| γ = 0.25 | 256 | `0x0100` |
+| γ = 1.0 | 1024 | `0x0400` |
+| Feature range | ±32 | `0x8000..0x7FFF` |
+
+Quantization accuracy verified: sklearn = hardware, **96.39%, 0.00% gap**.
 
 ---
 
-## 4. Timing — 40 MHz, TT Corner Clean
+## 4. Yosys / OpenSTA Compatibility Fixes
 
-Setup slack: +7.923 ns (critical path uses 17.1 ns of 25 ns budget).
-Worst register-to-register slack: +14.97 ns.
+All fixes carried forward from v7 (job 91947):
 
-The critical path runs through the FIFO read-pointer decode → feature-bank mux →
-distance accumulator feedback chain. With a 25 ns period this path closes comfortably.
+| Issue | Fix |
+|-------|-----|
+| `output logic [W-1:0] bias_reg [5]` — unpacked array port | Port removed |
+| `return expr` in case arms | Changed to `fn_name = expr` |
+| `feature_bank [FEATURE_DIM]` → `$mem` inference | `(* ram_style = "registers" *)` |
+| `$_ALDFFE_PNP_` non-constant async reset | `arm_interrupted` / `interrupted` removed |
+| `sim_sram_models.sv` treated as gate-level by OpenSTA | `/// sta-blackbox` directive |
+| OpenSTA corner.tcl unsupported properties | `catch {}` wrappers on Orca |
 
-SS/FF corner timing violations are expected for a complex compute design on sky130
-at extreme corners (−56.7 ns at 100°C/1.60V, −29.2 ns at −40°C/1.95V). TT is the
-target corner for ECE410 submission.
+**v8 specific:** `input_fifo` (FIFO_DEPTH=512 register array) removed entirely —
+no `ram_style` annotation needed. `work_ram` (64 entries) also removed.
 
 ---
 
-## 5. Power — Wearable Budget
+## 5. Power Analysis
+
+### Active Power (prior job 91947, 40 MHz TT)
 
 | Component | Power |
 |-----------|-------|
 | Internal logic | 42.8 mW |
 | Switching | 23.2 mW |
 | Leakage | ~0.4 µW |
-| **Total (active)** | **66.0 mW** |
+| **Total active** | **66.0 mW** |
 
-Wearable analysis at 80 bpm:
-- Active duration per beat: ~3 ms (classification)
-- Beat period: 750 ms → duty cycle ~0.4%
-- **Average SVM core power: ~0.26 mW**
-- 200 mAh @ 3.7V battery (740 mWh) → **~119 days** from SVM core alone
+### Wearable Budget (batch architecture)
 
-The 256-dim feature set is retained — no need to reduce to 128-dim.
+The batch model changes the duty cycle calculation:
 
----
+| Parameter | Value |
+|-----------|-------|
+| Batch size | 1000 beats |
+| Time to collect 1000 beats at 80 bpm | 750 s |
+| Time to classify 1000 beats (ASIC, 40 MHz) | ~1.75 s |
+| Duty cycle | 1.75 / 750 = **0.23%** |
+| **Avg SVM core power** | 66 mW × 0.0023 = **~0.15 mW** |
+| 200 mAh @ 3.7V (740 mWh) | **~200 days** from SVM core alone |
 
-## 6. Caravel Submission Artifacts
-
-| File | Location | Size |
-|------|----------|------|
-| `svm_compute_core.gds` | `gds/` (caravel repo, local) + `project/m4/pnr/gds/` (ECE410 repo, LFS) | 181 MB |
-| `svm_compute_core.lef` | `lef/svm_compute_core.lef` (caravel repo) | 108 KB |
-| `svm_compute_core.v` | `verilog/gl/svm_compute_core.v` (caravel repo) | 13 MB |
-
-GDS committed to ECE410 repo via git-lfs. Caravel public fork blocks LFS upload for
-new objects (GitHub restriction on public forks); GDS kept locally + in ECE410 repo.
+The batch architecture improves average power by ~2× compared to per-beat
+streaming, since the ASIC is idle for longer between classification bursts.
 
 ---
 
-## 7. user_project_wrapper Status
+## 6. Timing — 40 MHz, TT Corner
 
-Wrapper hardening in progress (SLURM job 91948, long partition).
-Prior run (multiple jobs 91877–91910) completed through detailed placement (step 25).
-Failed at global routing due to SLURM job kill (not a routing failure — GRT reported
-0 overflow). Job 91948 resumes from step 25 and runs through DRT → GDS.
+Setup WNS +7.923 ns (prior run). Critical path: FIFO read-pointer decode →
+feature-bank mux → distance accumulator. With FIFO removed in v8, the critical
+path is expected to shift to the distance accumulator or Horner engine, which
+have similar register-to-register depths. New DRT result will confirm.
+
+SS/FF corner violations expected (sky130_fd_sc_hd inherent at extreme corners).
+TT is the target corner for ECE410 submission.
 
 ---
 
-*Document version: m4 OL2 · 2026-05-24*
+## 7. Caravel Integration
+
+### GPIO / LA Assignment
+
+| Signal | Pins | Direction |
+|--------|------|-----------|
+| `class_out[2:0]` | GPIO[2:0] | output |
+| `sample_rdy` | GPIO[3] / IRQ[0] | output |
+| `svm_done` | GPIO[4] / IRQ[1] | output |
+| `svm_error` | GPIO[5] | output |
+| `error_code[3:0]` | GPIO[9:6] | output |
+| `ram_addr[18:0]` | GPIO[28:10] | output |
+| `ram_ren` | GPIO[29] | output |
+| `ram_rdata[15:0]` | LA[15:0] | input (host drives) |
+
+### Clock Gate
+
+```
+wb_clk_i → sky130_fd_sc_hd__dlclkp_1 (ICG) → svm_gclk → svm_compute_core
+                    ↑
+              svm_clk_en = batch_active | reg_control[0] | core_warming | drain_cnt>0
+```
+
+In SIMULATION (`define SIMULATION`), the ICG is replaced with a simple AND gate.
+
+---
+
+## 8. Submission Artifacts
+
+| File | Location | Status |
+|------|----------|--------|
+| `svm_compute_core.gds` | `pnr/gds/` + caravel repo | Prior run (new DRT pending) |
+| `svm_compute_core.lef` | caravel repo | Prior run |
+| `svm_compute_core.v` (GL) | caravel repo | Prior run |
+| `user_project_wrapper.gds` | caravel repo | Pending new wrapper DRT |
+| `user_project_wrapper.lef` | caravel repo | Pending |
+| `user_project_wrapper.v` (GL) | caravel repo | Pending |
+
+---
+
+*Document version: m4 v8 batch · 2026-05-24*

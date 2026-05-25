@@ -343,8 +343,10 @@ async def run_batch_cosim(dut):
     all_preds = []
     batch_start = 0
 
-    # Generous per-sample cycle budget: LOAD_INPUT + sv_total × (dist+kernel) + overhead
-    cycles_per_sample = FEATURE_DIM + 2 + sv_total * (FEATURE_DIM + 22) + 10
+    # Per-sample cycle budget with margin:
+    #   LOAD_INPUT: FEATURE_DIM+3 cycles, COMPUTE_DIST: FEATURE_DIM+4 per SV,
+    #   COMPUTE_KERNEL: 22 cycles, OUTPUT_RESULT: 1, WRITE_CLASS: 1 + FSM transitions
+    cycles_per_sample = FEATURE_DIM + 5 + sv_total * (FEATURE_DIM + 30) + 200
 
     while batch_start < N_eval:
         batch_end = min(batch_start + MAX_BATCH_SIZE, N_eval)
