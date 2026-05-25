@@ -1,0 +1,27 @@
+Area Report — user_project_wrapper (OL2 job 91948)
+===================================================
+
+STATUS: PENDING — job 91948 running on orcaga11 as of 2026-05-24
+
+Design Name  : user_project_wrapper
+PDK          : sky130A (sky130_fd_sc_hd)
+Tool         : OpenLane 2 v2.3.10 Classic
+Die          : 2920 × 3520 µm (Caravel fixed die, FP_DEF_TEMPLATE)
+Clock        : wb_clk_i, 25 ns period (sky130_fd_sc_hd SCL override)
+
+Macro Instance
+--------------
+  u_svm (svm_compute_core) : 2500 × 2500 µm at (253, 554) N
+  Right margin : 167 µm
+  Top margin   : 466 µm
+
+Expected post-job values
+------------------------
+  Wrapper contains minimal glue logic (Wishbone decode, clock gate, work_ram)
+  around the pre-hardened svm_compute_core macro. Cell count is expected to be
+  low (hundreds to low thousands) compared to the 146K in svm_compute_core.
+
+  Estimated: ~500–2000 wrapper cells + 1 macro instance
+  Utilization: ~95%+ (macro fills most of die area)
+
+This file will be updated when job 91948 completes.

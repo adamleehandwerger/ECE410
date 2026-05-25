@@ -1,0 +1,18 @@
+Power Report — user_project_wrapper (OL2 job 91948)
+====================================================
+
+STATUS: PENDING — job 91948 running on orcaga11 as of 2026-05-24
+
+Note: The wrapper power report will reflect only the Wishbone glue logic and
+clock-gate cell power. The svm_compute_core macro power is reported separately
+in m4/pnr/power_report.txt (66 mW active, ~0.26 mW avg).
+
+Expected wrapper-level power: negligible (<<1 mW) — the macro dominates.
+
+Full-chip power estimate (see design_summary.md):
+  svm_compute_core active : 66 mW
+  Wrapper glue logic      : <1 mW (estimate)
+  Total active            : ~66–67 mW
+  Average at 80 bpm       : ~0.26–0.27 mW
+
+This file will be updated when job 91948 completes.

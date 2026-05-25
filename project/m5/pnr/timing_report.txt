@@ -1,0 +1,18 @@
+Timing Report — user_project_wrapper (OL2 job 91948)
+=====================================================
+
+STATUS: PENDING — job 91948 running on orcaga11 as of 2026-05-24
+
+Clock     : wb_clk_i (→ svm_gclk via ICG), 25 ns period (40 MHz)
+CTS       : Disabled (RUN_CTS: 0) — svm_compute_core drives its own clock tree
+STA       : Will run for nom_tt_025C_1v80, nom_ss_100C_1v60, nom_ff_n40C_1v95
+
+Expected: The wrapper contains only Wishbone glue logic and clock-gate control.
+Register-to-register paths are short (few gates between FFs).
+Timing is expected to be significantly easier than svm_compute_core alone.
+Setup WNS should be well above 0 ns at TT.
+
+Note: Corner.tcl patches applied on Orca to handle unsupported OpenSTA properties
+(is_propagated, is_virtual, is_generated, sources, report_clock_latency).
+
+This file will be updated when job 91948 completes.

@@ -1,0 +1,17 @@
+Efabless mpw-precheck Results — caravel_svm_project
+=====================================================
+
+STATUS: PENDING — wrapper GDS required before precheck can run
+
+Run this after job 91948 completes and GDS is committed:
+  sbatch ~/ece410/precheck_run.sh   (see precheck_run.sh in this directory)
+
+Expected precheck gates:
+  1. Manifest check     — info.yaml present, all required fields
+  2. Consistency check  — GL netlist matches GDS hierarchy
+  3. XOR check          — Magic GDS vs. KLayout GDS (no geometry differences)
+  4. DRC (Magic)        — 0 violations across all layers
+  5. LVS (netgen)       — No shorts or opens vs. GL netlist
+  6. Antenna check      — No antenna violations
+
+Results will be recorded here after the precheck run completes.
