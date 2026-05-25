@@ -79,18 +79,16 @@ ls -lh $CARAVEL/verilog/rtl/user_project_wrapper.sv
 
 # --- Clean previous run so new config (SYNTH_ELABORATE_ONLY=0) takes effect ---
 echo "--- Removing old run dir ---"
-rm -rf $DESIGN_DIR/runs/wrapper_harden
+# rm -rf $DESIGN_DIR/runs/wrapper_harden  # RESUME: keep existing run
 
 # --- Run OpenLane 2 (full synthesis — no elaborate-only; produces proper GL netlist) ---
 echo "--- Running openlane ---"
 openlane \
+     \
     --pdk sky130A \
     --pdk-root $PDK_ROOT \
     --run-tag wrapper_harden \
     --jobs $SLURM_CPUS_PER_TASK \
-    --skip OpenROAD.STAPrePNR \
-    --skip 'OpenROAD.STAMidPNR*' \
-    --skip OpenROAD.STAPostPNR \
     $DESIGN_DIR/config.json 2>&1
 
 echo "=== Done at $(date) ==="

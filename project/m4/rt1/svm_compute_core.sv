@@ -53,8 +53,8 @@ module svm_compute_core #(
     parameter int FEATURE_DIM = 256,
     parameter int NUM_SV = 250,
     parameter int MAX_BATCH_SIZE = 1000,
-    parameter int FIFO_DEPTH = 8192,
-    parameter int ADDR_WIDTH = 13,
+    parameter int FIFO_DEPTH = 512,
+    parameter int ADDR_WIDTH = 9,
     parameter real DEFAULT_GAMMA   = 0.25,   // Q6.10 = 256 = 0x0100 (exact)
     parameter real DEFAULT_C       = 1.0,
     parameter real DEFAULT_BIAS_0  =  0.0,
@@ -71,9 +71,8 @@ module svm_compute_core #(
     input  logic [DATA_WIDTH-1:0]   param_data,
     output logic [DATA_WIDTH-1:0]   gamma_reg,
     output logic [DATA_WIDTH-1:0]   c_reg,
-    output logic [DATA_WIDTH-1:0]   bias_reg [5],
 
-    input  logic [7:0]              num_sv_per_class [5],
+    input  logic [39:0]             num_sv_per_class_flat,
 
     input  logic                    qspi_valid,
     input  logic [DATA_WIDTH-1:0]   qspi_data,
@@ -100,7 +99,9 @@ module svm_compute_core #(
 
     output logic [DATA_WIDTH-1:0]   kernel_out,
     output logic                    kernel_valid,
-    input  logic                    kernel_ready
+    input  logic                    kernel_ready,
+
+    output logic [127:0]            class_scores_la
 );
 
     // =========================================================================
@@ -179,8 +180,6 @@ module svm_compute_core #(
     logic                    horner_valid_out;
 
     logic [6:0]              heartbeat_count; // saturates at 100; persists across batches, clears on rst_n
-    logic                    interrupted;     // set on rst_n when heartbeat_count was in [1,99]; cleared at beat 100
-    logic                    arm_interrupted = 1'b0; // simulation init only — synthesis uses async reset below
 
     logic                    dist_valid_latch;
 
@@ -188,7 +187,7 @@ module svm_compute_core #(
     logic                    vbatt_ok_s;   // synchronized vbatt_ok  (reset=1: assume power OK)
     logic                    vbatt_warn_s; // synchronized vbatt_warn (reset=0: no warning)
 
-    logic [DATA_WIDTH-1:0]   feature_bank [FEATURE_DIM];
+    (* ram_style = "registers" *) logic [DATA_WIDTH-1:0] feature_bank [FEATURE_DIM];
 
     logic [9:0]              num_samples_latched; // shadow: captured at start; immune to mid-batch writes
 
@@ -203,8 +202,6 @@ module svm_compute_core #(
     logic [DATA_WIDTH-1:0]   feat_rd_data;
 
     logic [9:0]              sv_base;
-    logic [17:0]             kernel_out_counter;
-
     typedef enum logic [2:0] {
         IDLE,
         LOAD_FIFO,
@@ -212,6 +209,7 @@ module svm_compute_core #(
         COMPUTE_DIST,
         COMPUTE_KERNEL,
         OUTPUT_RESULT,
+        WRITE_CLASS,
         ERROR_STATE
     } state_t;
 
@@ -232,11 +230,21 @@ module svm_compute_core #(
     wire last_class     = (class_counter >= 3'd4);
     wire last_heartbeat = (sample_counter >= num_samples_latched - 1);
 
+    // Internal class score accumulators for argmax (kernel values are Q6.10, unsigned [0,1024])
+    logic [31:0] class_score_acc [5];
+    wire  [31:0] cs_acc0 = class_score_acc[0];
+    wire  [31:0] cs_acc1 = class_score_acc[1];
+    wire  [31:0] cs_acc2 = class_score_acc[2];
+    wire  [31:0] cs_acc3 = class_score_acc[3];
+    wire  [31:0] cs_acc4 = class_score_acc[4];
+    logic [2:0]  argmax_class;
+    logic [31:0] argmax_best;
+
     // =========================================================================
     // Sub-module Instances
     // =========================================================================
 
-    svm_fifo_sram #(
+    input_fifo #(
         .DATA_WIDTH(DATA_WIDTH),
         .DEPTH(FIFO_DEPTH),
         .ADDR_WIDTH(ADDR_WIDTH)
@@ -307,10 +315,6 @@ module svm_compute_core #(
 
     assign gamma_reg = gamma_int;
     assign c_reg     = c_int;
-    generate
-        for (genvar i = 0; i < 5; i++)
-            assign bias_reg[i] = bias_int[i];
-    endgenerate
 
     // =========================================================================
     // FSM
@@ -331,13 +335,15 @@ module svm_compute_core #(
             COMPUTE_KERNEL: if (horner_done) next_state = OUTPUT_RESULT;
             OUTPUT_RESULT: begin
                 if (kernel_ready && kernel_valid) begin
-                    if (last_sv && last_class) begin
-                        if (last_heartbeat) next_state = IDLE;
-                        else                next_state = LOAD_FIFO;
-                    end else begin
+                    if (last_sv && last_class)
+                        next_state = WRITE_CLASS;
+                    else
                         next_state = COMPUTE_DIST;
-                    end
                 end
+            end
+            WRITE_CLASS: begin
+                if (last_heartbeat) next_state = IDLE;
+                else                next_state = LOAD_FIFO;
             end
             ERROR_STATE: next_state = IDLE;
             default:     next_state = ERROR_STATE;
@@ -479,9 +485,7 @@ module svm_compute_core #(
                     class_counter  <= '0;
                     if (start && vbatt_ok_s) begin
                         for (int i = 0; i < 5; i++)
-                            sv_count_reg[i] <= num_sv_per_class[i];
-                        // Latch gamma at the start of each batch so a mid-compute
-                        // param_write_en cannot corrupt in-flight kernel values.
+                            sv_count_reg[i] <= num_sv_per_class_flat[i*8 +: 8];
                         gamma_latched       <= gamma_int;
                         num_samples_latched <= num_samples;
                     end
@@ -493,9 +497,8 @@ module svm_compute_core #(
                 OUTPUT_RESULT: begin
                     if (kernel_ready && kernel_valid) begin
                         if (last_sv && last_class) begin
-                            sv_counter     <= '0;
-                            class_counter  <= '0;
-                            sample_counter <= sample_counter + 1;
+                            sv_counter    <= '0;
+                            class_counter <= '0;
                         end else if (last_sv) begin
                             sv_counter    <= '0;
                             class_counter <= class_counter + 1;
@@ -504,78 +507,35 @@ module svm_compute_core #(
                         end
                     end
                 end
+                WRITE_CLASS: begin
+                    sample_counter <= sample_counter + 1;
+                end
                 default: begin end
             endcase
         end
     end
 
     // =========================================================================
-    // Warm-up Counter + Interrupted Flag
+    // Warm-up Counter
     // =========================================================================
-    // arm_interrupted freezes the warm-up state so that the `interrupted` block
-    // can safely read it at negedge rst_n without seeing the NBA-zeroing of
-    // heartbeat_count from the same time step.
-    //
-    // Two versions are provided via `ifdef:
-    //
-    //   SYNTHESIS (Yosys/DC/Genus):
-    //     Proper async reset to 0.  IEEE 1800-compliant synthesis simulators
-    //     read arm_interrupted's PRE-reset value in the `interrupted` block
-    //     because NBA reads commit before writes across separately-triggered
-    //     always_ff blocks — so the pre-reset snapshot is correctly captured.
-    //
-    //   Icarus Verilog (simulation only):
-    //     Gated-only update (no negedge rst_n).  arm_interrupted is not in
-    //     the negedge rst_n sensitivity list, so it holds its last clocked
-    //     value when rst_n falls — Icarus's non-standard cross-block NBA
-    //     ordering cannot corrupt the capture in the `interrupted` block.
-    //     arm_interrupted initialises to X at power-on but reaches 0 on the
-    //     first posedge clk after rst_n deasserts (heartbeat_count = 0 → false).
-    `ifdef SYNTHESIS
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) arm_interrupted <= 1'b0;
-        else        arm_interrupted <= (heartbeat_count > 7'd0 && heartbeat_count < 7'd100);
-    end
-    `else
-    always_ff @(posedge clk)
-        if (rst_n) arm_interrupted <= (heartbeat_count > 7'd0 && heartbeat_count < 7'd100);
-    `endif
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n)
             heartbeat_count <= 7'd0;
-        else if ((state == OUTPUT_RESULT) && kernel_valid && kernel_ready
-                 && last_sv && last_class && (heartbeat_count < 7'd100))
+        else if ((state == WRITE_CLASS) && (heartbeat_count < 7'd100))
             heartbeat_count <= heartbeat_count + 7'd1;
     end
 
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n)
-            interrupted <= arm_interrupted; // reads pre-reset value (no NBA race)
-        else if (heartbeat_count == 7'd100)
-            interrupted <= 1'b0;
-    end
-
     // =========================================================================
-    // Work RAM Output
+    // Work RAM Output — one class label per window at work_ram[sample_counter]
     // =========================================================================
 
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) kernel_out_counter <= '0;
-        else begin
-            case (state)
-                IDLE:          kernel_out_counter <= '0;
-                OUTPUT_RESULT: if (kernel_ready && kernel_valid)
-                                   kernel_out_counter <= kernel_out_counter + 1;
-                default: ;
-            endcase
-        end
-    end
-
-    assign work_ram_addr  = kernel_out_counter;
-    assign work_ram_wdata = kernel_out;
-    assign work_ram_wen   = (state == OUTPUT_RESULT) && kernel_valid && kernel_ready;
+    assign work_ram_addr  = {9'b0, sample_counter};
+    assign work_ram_wdata = {13'b0, argmax_class};
+    assign work_ram_wen   = (state == WRITE_CLASS);
     assign work_ram_ren   = 1'b0;
+
+    assign class_scores_la = {cs_acc3, cs_acc2, cs_acc1, cs_acc0};
 
     // =========================================================================
     // Output Registers
@@ -613,7 +573,7 @@ module svm_compute_core #(
         else if (vbatt_warn_s)
             err_detect = ERR_LOW_BATTERY;
         else if (heartbeat_count > 0 && heartbeat_count < 7'd100)
-            err_detect = interrupted ? ERR_INTERRUPTED : ERR_WARMING_UP;
+            err_detect = ERR_WARMING_UP;
         else
             err_detect = ERR_NONE;
     end
@@ -627,8 +587,7 @@ module svm_compute_core #(
             kernel_out   <= '0;
             kernel_valid <= 1'b0;
         end else begin
-            done  <= (state == OUTPUT_RESULT) && kernel_valid && kernel_ready
-                      && last_sv && last_class && last_heartbeat;
+            done  <= (state == WRITE_CLASS) && last_heartbeat;
             // Codes 0x1–0x7 are real faults: sticky (latch first, hold until rst_n).
             // Codes 0x8+ are advisory (ERR_WARMING_UP, ERR_INTERRUPTED): non-sticky,
             // auto-clear when err_detect returns ERR_NONE (heartbeat_count >= 100).
@@ -663,6 +622,118 @@ module svm_compute_core #(
             else if (kernel_valid && kernel_ready)
                 kernel_valid <= 1'b0;
         end
+    end
+
+    // =========================================================================
+    // Class Score Accumulation — kernel values → class_score_acc[class_counter]
+    // Bias seeds the accumulator each window so argmax includes the bias term.
+    // =========================================================================
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            for (int i = 0; i < 5; i++) class_score_acc[i] <= '0;
+        end else begin
+            case (state)
+                IDLE: begin
+                    if (start && vbatt_ok_s) begin
+                        class_score_acc[0] <= {16'b0, bias_int[0]};
+                        class_score_acc[1] <= {16'b0, bias_int[1]};
+                        class_score_acc[2] <= {16'b0, bias_int[2]};
+                        class_score_acc[3] <= {16'b0, bias_int[3]};
+                        class_score_acc[4] <= {16'b0, bias_int[4]};
+                    end
+                end
+                OUTPUT_RESULT: begin
+                    if (kernel_valid && kernel_ready)
+                        class_score_acc[class_counter] <=
+                            class_score_acc[class_counter] + {16'b0, kernel_out};
+                end
+                WRITE_CLASS: begin
+                    class_score_acc[0] <= {16'b0, bias_int[0]};
+                    class_score_acc[1] <= {16'b0, bias_int[1]};
+                    class_score_acc[2] <= {16'b0, bias_int[2]};
+                    class_score_acc[3] <= {16'b0, bias_int[3]};
+                    class_score_acc[4] <= {16'b0, bias_int[4]};
+                end
+                default: begin end
+            endcase
+        end
+    end
+
+    // =========================================================================
+    // Argmax — combinational over class_score_acc[0..4]
+    // =========================================================================
+
+    always_comb begin
+        argmax_class = 3'd0; argmax_best = cs_acc0;
+        if (cs_acc1 > argmax_best) begin argmax_class = 3'd1; argmax_best = cs_acc1; end
+        if (cs_acc2 > argmax_best) begin argmax_class = 3'd2; argmax_best = cs_acc2; end
+        if (cs_acc3 > argmax_best) begin argmax_class = 3'd3; argmax_best = cs_acc3; end
+        if (cs_acc4 > argmax_best) begin argmax_class = 3'd4; argmax_best = cs_acc4; end
+    end
+
+endmodule
+
+// ===========================================================================
+// Input FIFO Module (16 KB SRAM)  — unchanged from ECE410_project_updated
+// ===========================================================================
+
+module input_fifo #(
+    parameter int DATA_WIDTH = 16,
+    parameter int DEPTH = 1024,
+    parameter int ADDR_WIDTH = 10
+) (
+    input  logic                    clk,
+    input  logic                    rst_n,
+    input  logic                    wr_en,
+    input  logic [DATA_WIDTH-1:0]   wr_data,
+    input  logic                    rd_en,
+    output logic [DATA_WIDTH-1:0]   rd_data,
+    output logic                    full,
+    output logic                    empty,
+    output logic [ADDR_WIDTH:0]     count
+);
+
+    (* ram_style = "registers" *) logic [DATA_WIDTH-1:0] mem [DEPTH];
+    logic [ADDR_WIDTH:0]   wr_ptr;
+    logic [ADDR_WIDTH:0]   rd_ptr;
+
+    assign full  = (count == DEPTH);
+    assign empty = (count == 0);
+
+    wire [ADDR_WIDTH-1:0] wr_ptr_idx = wr_ptr[ADDR_WIDTH-1:0];
+    wire [ADDR_WIDTH-1:0] rd_ptr_idx = rd_ptr[ADDR_WIDTH-1:0];
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) wr_ptr <= '0;
+        else if (wr_en && !full) wr_ptr <= wr_ptr + 1;
+    end
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) rd_ptr <= '0;
+        else if (rd_en && !empty) rd_ptr <= rd_ptr + 1;
+    end
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            count <= '0;
+        end else begin
+            case ({wr_en && !full, rd_en && !empty})
+                2'b10:   count <= count + 1;
+                2'b01:   count <= count - 1;
+                default: count <= count;
+            endcase
+        end
+    end
+
+    always_ff @(posedge clk) begin
+        if (wr_en && !full)
+            mem[wr_ptr_idx] <= wr_data;
+    end
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) rd_data <= '0;
+        else if (rd_en && !empty) rd_data <= mem[rd_ptr_idx];
     end
 
 endmodule
@@ -867,15 +938,15 @@ module horner_engine #(
     function automatic logic [DATA_WIDTH-1:0] exp_int_lut;
         input logic [3:0] idx;
         case (idx)
-            4'd0:  return 16'd1024;
-            4'd1:  return 16'd377;
-            4'd2:  return 16'd139;
-            4'd3:  return 16'd51;
-            4'd4:  return 16'd19;
-            4'd5:  return 16'd7;
-            4'd6:  return 16'd3;
-            4'd7:  return 16'd1;
-            default: return 16'd0;   // exp(-8..15)×1024 < 0.5 → rounds to 0
+            4'd0:  exp_int_lut = 16'd1024;
+            4'd1:  exp_int_lut = 16'd377;
+            4'd2:  exp_int_lut = 16'd139;
+            4'd3:  exp_int_lut = 16'd51;
+            4'd4:  exp_int_lut = 16'd19;
+            4'd5:  exp_int_lut = 16'd7;
+            4'd6:  exp_int_lut = 16'd3;
+            4'd7:  exp_int_lut = 16'd1;
+            default: exp_int_lut = 16'd0;
         endcase
     endfunction
 

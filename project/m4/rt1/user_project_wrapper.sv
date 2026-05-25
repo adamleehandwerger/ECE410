@@ -220,7 +220,6 @@ module user_project_wrapper #(
         .param_data      (reg_param_wr[15:0]),
         .gamma_reg       (),
         .c_reg           (),
-        .bias_reg        (),
         .num_sv_per_class_flat({reg_num_sv[4], reg_num_sv[3], reg_num_sv[2],
                                 reg_num_sv[1], reg_num_sv[0]}),
         .qspi_valid      (qspi_valid_r),
