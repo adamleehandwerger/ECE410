@@ -51,6 +51,8 @@ apptainer exec \
     --env PDK_ROOT=$PDK_ROOT \
     --env PDK=sky130A \
     --env UPRJ_ROOT=$CARAVEL \
+    --env GCC_PATH=/foss/tools/riscv-gnu-toolchain-rv32i/217e7f3debe424d61374d31e33a091a630535937/bin \
+    --env GCC_PREFIX=riscv32-unknown-linux-gnu \
     $DV_SIF \
     bash -c "
         set -e

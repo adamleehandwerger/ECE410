@@ -20,6 +20,7 @@ PDK_ROOT=$SCRATCH/pdk
 echo "=== mpw_precheck on $(hostname) at $(date) ==="
 
 # --- Pull latest repo state (reset to origin/main; skip LFS smudge) ---
+rm -f $CARAVEL/.git/refs/remotes/origin/main.lock
 GIT_LFS_SKIP_SMUDGE=1 git -C $CARAVEL fetch origin
 GIT_LFS_SKIP_SMUDGE=1 git -C $CARAVEL reset --hard origin/main
 
