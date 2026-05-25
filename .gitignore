@@ -4,6 +4,7 @@
 
 # Keep these
 !.gitignore
+!.gitattributes
 !/project/
 !/codefest/
 
