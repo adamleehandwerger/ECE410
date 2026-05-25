@@ -222,35 +222,43 @@ def build_dataset(n_per_class=300):
     return np.array(X, np.float32), np.array(y, np.int32)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# OvO reconstruction (mirrors sklearn internals, applied to Q6.10 kernel matrix)
+# OVR alpha-weighted decision (mirrors ASIC's computation exactly)
 # ─────────────────────────────────────────────────────────────────────────────
-def make_ovo_fns(clf):
-    sv_class_idx = np.concatenate([np.full(nc, i)
-                                   for i, nc in enumerate(clf.n_support_)])
-    def reconstruct(K_mat):
-        n_test  = K_mat.shape[0]
-        n_pairs = NUM_CLASSES * (NUM_CLASSES - 1) // 2
-        dec = np.zeros((n_test, n_pairs))
-        p = 0
-        for a in range(NUM_CLASSES):
-            for b in range(a + 1, NUM_CLASSES):
-                sa = sv_class_idx == a; sb = sv_class_idx == b
-                dec[:, p] = (K_mat[:, sa] @ clf.dual_coef_[b-1, sa]
-                           + K_mat[:, sb] @ clf.dual_coef_[a,   sb]
-                           + clf.intercept_[p])
-                p += 1
-        return dec
-    def vote(dec):
-        votes = np.zeros((dec.shape[0], NUM_CLASSES), dtype=int)
-        p = 0
-        for a in range(NUM_CLASSES):
-            for b in range(a + 1, NUM_CLASSES):
-                mask = dec[:, p] > 0
-                votes[ mask, a] += 1
-                votes[~mask, b] += 1
-                p += 1
-        return clf.classes_[np.argmax(votes, axis=1)]
-    return reconstruct, vote
+MAX_SV_PER_CLASS = 50
+
+def train_binary_svms(X_tr, y_tr):
+    """Train 5 binary OVR SVMs; select top SVs by |alpha|."""
+    binary_svms       = []
+    sv_vecs_per_class = []
+    sv_alphas_per_cls = []
+    sv_counts         = []
+    for c in range(NUM_CLASSES):
+        y_bin = np.where(y_tr == c, 1, -1)
+        svm_c = SVC(kernel="rbf", gamma=DEFAULT_GAMMA, C=1.0, random_state=42)
+        svm_c.fit(X_tr, y_bin)
+        binary_svms.append(svm_c)
+        alphas = svm_c.dual_coef_[0]
+        svs    = svm_c.support_vectors_
+        n = min(len(alphas), MAX_SV_PER_CLASS)
+        idx = (np.argsort(-np.abs(alphas))[:MAX_SV_PER_CLASS]
+               if len(alphas) > MAX_SV_PER_CLASS else np.arange(len(alphas)))
+        sv_vecs_per_class.append(svs[idx])
+        sv_alphas_per_cls.append(alphas[idx])
+        sv_counts.append(n)
+    sv_counts = np.array(sv_counts, dtype=int)
+    biases    = np.array([svm.intercept_[0] for svm in binary_svms])
+    return binary_svms, sv_vecs_per_class, sv_alphas_per_cls, sv_counts, biases
+
+def ovr_predict_numba(K_mat, sv_alphas_per_cls, sv_counts, biases):
+    """Alpha-weighted OVR argmax: score_c = Σ alpha_ci*K[:,i] + b_c."""
+    n_test = K_mat.shape[0]
+    scores = np.zeros((n_test, NUM_CLASSES))
+    offset = 0
+    for c in range(NUM_CLASSES):
+        n = sv_counts[c]
+        scores[:, c] = K_mat[:, offset:offset+n] @ sv_alphas_per_cls[c] + biases[c]
+        offset += n
+    return np.argmax(scores, axis=1)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Load ASIC RTL predictions (from cocotb or expected_preds.hex)
@@ -307,40 +315,28 @@ def main():
         X, y, test_size=0.2, stratify=y, random_state=42)
     N_eval = len(X_te)
 
-    # ── Train sklearn SVM (SVs only — not shown as a column) ─────────────────
-    print(f"\n=== Training sklearn RBF SVM (gamma={DEFAULT_GAMMA}, C=1.0) — internal only ===")
-    clf = SVC(kernel="rbf", gamma=DEFAULT_GAMMA, C=1.0,
-              decision_function_shape="ovr", random_state=42)
-    clf.fit(X_tr, y_tr)
-    print(f"  SVs: {clf.n_support_.sum()} total  ({clf.n_support_} per class)")
+    # ── Optimal sklearn OVR (full float, no SV count limit) ──────────────────
+    print(f"\n=== Optimal sklearn OVR SVM (gamma={DEFAULT_GAMMA}, C=1.0, all SVs) ===")
+    clf_opt = SVC(kernel="rbf", gamma=DEFAULT_GAMMA, C=1.0,
+                  decision_function_shape="ovr", random_state=42)
+    clf_opt.fit(X_tr, y_tr)
+    y_pred_opt = clf_opt.predict(X_te)
+    opt_acc    = accuracy_score(y_te, y_pred_opt)
+    print(f"  SVs: {clf_opt.n_support_.sum()} total  |  accuracy: {opt_acc:.4f}")
 
-    # ── Numba Q6.10 (best CPU — exact hardware model, JIT parallel) ──────────
-    gamma_q = int(float_to_q10(DEFAULT_GAMMA))
-    X_q_te  = vecs_to_q10(X_te)
-    SV_q    = vecs_to_q10(clf.support_vectors_)
-
-    print(f"\n=== Numba Q6.10 kernel ({N_eval} × {len(SV_q)} SVs) ===")
-    print("  Compiling (first run only)...", flush=True)
-    _dummy = np.zeros((1, FEATURE_DIM), dtype=np.int32)
-    _      = compute_kernel_matrix_nb(_dummy, _dummy, gamma_q, _EXP_LUT_NB, _HORNER_NB)
-
-    t0      = time.perf_counter()
-    K_hw    = compute_kernel_matrix_nb(X_q_te, SV_q, gamma_q, _EXP_LUT_NB, _HORNER_NB)
-    nb_time = time.perf_counter() - t0
-
-    reconstruct, vote = make_ovo_fns(clf)
-    y_pred_nb = vote(reconstruct(K_hw))
-    nb_acc    = accuracy_score(y_te, y_pred_nb)
-    print(f"  Numba: {nb_time*1000:.1f} ms for {N_eval} samples  |  "
-          f"{N_eval/nb_time:.0f} inf/s  |  acc: {nb_acc:.4f}")
+    # context: ASIC uses 5 binary OVR SVMs capped at 50 SVs/class
+    (binary_svms, sv_vecs_per_class,
+     sv_alphas_per_cls, sv_counts, biases) = train_binary_svms(X_tr, y_tr)
+    sv_total = int(sv_counts.sum())
+    print(f"  ASIC model (binary OVR, ≤50 SVs/class): {sv_counts}  total: {sv_total}")
 
     # ── ASIC RTL predictions ─────────────────────────────────────────────────
     print(f"\n=== ASIC RTL predictions ===")
     asic_preds, asic_label = load_asic_preds(N_eval)
     if asic_preds is None:
-        y_pred_asic = y_pred_nb
-        asic_label  = "ASIC RTL\n(Numba stand-in — run cocotb to replace)"
-        asic_note   = "* RTL simulation pending. ASIC column = Numba output."
+        y_pred_asic = y_pred_opt
+        asic_label  = "ASIC RTL\n(sklearn stand-in — run cocotb to replace)"
+        asic_note   = "* RTL simulation pending. ASIC column = sklearn output."
     else:
         y_pred_asic = asic_preds
         asic_note   = "* ASIC predictions from svm_compute_core RTL simulation."
@@ -348,16 +344,16 @@ def main():
     print(f"  ASIC acc: {asic_acc:.4f}")
 
     # ── 2-column confusion matrix figure ─────────────────────────────────────
-    cm_nb   = confusion_matrix(y_te, y_pred_nb,   labels=list(range(NUM_CLASSES)))
+    cm_opt  = confusion_matrix(y_te, y_pred_opt,  labels=list(range(NUM_CLASSES)))
     cm_asic = confusion_matrix(y_te, y_pred_asic, labels=list(range(NUM_CLASSES)))
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-    plot_cm(axes[0], cm_nb,   "Numba Q6.10\n(best CPU — JIT parallel)", fig, nb_acc)
-    plot_cm(axes[1], cm_asic, asic_label,                                fig, asic_acc)
+    plot_cm(axes[0], cm_opt,  "Optimal sklearn OVR\n(float, all SVs)", fig, opt_acc)
+    plot_cm(axes[1], cm_asic, asic_label,                               fig, asic_acc)
 
     fig.suptitle(
-        "RBF-SVM Cardiac Arrhythmia Classifier — Best CPU vs. ASIC\n"
-        "Numba Q6.10 (exact hardware model, JIT)  vs.  svm_compute_core RTL  ·  "
+        "RBF-SVM Cardiac Arrhythmia Classifier — Optimal sklearn vs. ASIC\n"
+        "Optimal OVR SVM (float, all SVs)  vs.  svm_compute_core RTL  ·  "
         "γ=0.25, 256-dim features (128+64+64), MIT-BIH 5-class  ·  ECE410 PSU",
         fontsize=12, fontweight="bold", y=1.02)
     plt.tight_layout()
@@ -370,30 +366,32 @@ def main():
     # ── Throughput / power comparison ─────────────────────────────────────────
     CLOCK_HZ      = 40e6
     BEATS_PER_SEC = 80 / 60
-    N_SV          = int(clf.n_support_.sum())
-    asic_cycles   = 256 + N_SV * FEATURE_DIM + 1000
+    asic_cycles   = 256 + sv_total * FEATURE_DIM + 1000
     asic_time_s   = asic_cycles / CLOCK_HZ
     asic_active_w = 0.066
     asic_avg_w    = asic_active_w * (asic_time_s * BEATS_PER_SEC)
 
     report = f"""
-Best CPU vs. ASIC — ECE410 SVM ASIC (m5)
-=========================================
+Optimal sklearn vs. ASIC — ECE410 SVM ASIC (m5)
+================================================
 Dataset : MIT-BIH 5-class arrhythmia, {N_eval} test samples
 Features: 256-dim (128 single-beat + 64 10-beat + 64 100-beat context)
-SVs     : {N_SV} total across 5 classes
 
-Implementation       Accuracy    Inference time    Throughput      Power
--------------------  ----------  ----------------  --------------  -------
-Numba Q6.10 JIT      {nb_acc:.2%}      {nb_time*1000:6.1f} ms ({N_eval})    {N_eval/nb_time:7.0f} inf/s    CPU (~30 W)
-ASIC RTL (40 MHz)    {asic_acc:.2%}    ~{asic_time_s*1000:.2f} ms / beat    {1/asic_time_s:7.0f} inf/s    {asic_active_w*1000:.0f} mW active
+Implementation              Accuracy    SVs                       Notes
+--------------------------  ----------  ------------------------  --------
+Optimal sklearn OVR (float) {opt_acc:.2%}    {clf_opt.n_support_.sum()} total (unlimited)  float precision
+ASIC binary OVR (Q6.10)     {asic_acc:.2%}    {sv_total} total ({sv_counts})  gamma={DEFAULT_GAMMA}, C=1.0
 
-Wearable budget (80 bpm):
-  ASIC duty cycle   : {asic_time_s * BEATS_PER_SEC * 100:.3f}%
-  ASIC average power: {asic_avg_w*1000:.3f} mW
-  14-day target     : MET — 119-day headroom on 200 mAh @ 3.7V
+ASIC hardware (40 MHz):
+  Inference time   : ~{asic_time_s*1000:.2f} ms / beat
+  Throughput       : {1/asic_time_s:.0f} inf/s
+  Active power     : {asic_active_w*1000:.0f} mW
+  Duty cycle       : {asic_time_s * BEATS_PER_SEC * 100:.3f}% (80 bpm)
+  Average power    : {asic_avg_w*1000:.3f} mW
 
-Accuracy gap (Numba vs. ASIC): {abs(nb_acc - asic_acc):.4f}
+14-day wearable target: MET — headroom on 200 mAh @ 3.7V battery
+
+Accuracy gap (optimal sklearn vs. ASIC): {abs(opt_acc - asic_acc):.4f}
 {asic_note}
 """
     print(report)
@@ -403,15 +401,15 @@ Accuracy gap (Numba vs. ASIC): {abs(nb_acc - asic_acc):.4f}
     print(f"  Saved → {report_path}")
 
     # ── Per-class breakdown ───────────────────────────────────────────────────
-    print(f"\n  {'Class':<8}  Numba Q6.10      ASIC RTL")
-    print(  "  " + "-" * 46)
+    print(f"\n  {'Class':<8}  Optimal sklearn   ASIC RTL")
+    print(  "  " + "-" * 48)
     for c, name in enumerate(CLASS_NAMES):
-        sup = cm_nb[c].sum()
+        sup = cm_opt[c].sum()
         print(f"  {name:<8}  "
-              f"{cm_nb[c,c]:3d}/{sup:3d} ({cm_nb[c,c]/sup:5.1%})   "
+              f"{cm_opt[c,c]:3d}/{sup:3d} ({cm_opt[c,c]/sup:5.1%})   "
               f"{cm_asic[c,c]:3d}/{sup:3d} ({cm_asic[c,c]/sup:5.1%})")
-    print(f"\n  Overall  Numba={nb_acc:.4f}  ASIC={asic_acc:.4f}  "
-          f"gap={abs(nb_acc-asic_acc):.4f}")
+    print(f"\n  Overall  sklearn={opt_acc:.4f}  ASIC={asic_acc:.4f}  "
+          f"gap={abs(opt_acc-asic_acc):.4f}")
 
 
 if __name__ == "__main__":

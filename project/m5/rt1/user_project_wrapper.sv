@@ -35,6 +35,7 @@
 // │  0x0C RW  NUM_SAMPLES  [9:0]                             │
 // │  0x10–0x20 RW  NUM_SV_0–4  [7:0] SVs per class          │
 // │  0x24 WO  PARAM_WR    [19]=en [18:16]=addr [15:0]=data   │
+// │  0x28 WO  ALPHA_WR    [23:16]=sv_global_idx [15:0]=alpha │
 // └──────────────────────────────────────────────────────────┘
 
 `default_nettype none
@@ -71,6 +72,8 @@ module user_project_wrapper #(
     reg [9:0]  reg_num_samples;
     reg [7:0]  reg_num_sv [0:4];
     reg [19:0] reg_param_wr;
+    reg [23:0] reg_alpha_wr;   // [23:16]=sv_global_idx, [15:0]=alpha Q6.10
+    reg        alpha_wr_en_r;  // 1-cycle write-enable pulse to core
 
     // =========================================================================
     // Clock gate
@@ -125,10 +128,13 @@ module user_project_wrapper #(
             reg_control     <= 32'd8;
             reg_num_samples <= 0;
             reg_param_wr    <= 0;
+            reg_alpha_wr    <= 0;
+            alpha_wr_en_r   <= 1'b0;
             for (c = 0; c < 5; c = c+1) reg_num_sv[c] <= 8'd50;
         end else begin
             reg_control[0]   <= 1'b0;          // start auto-clears
             reg_param_wr[19] <= 1'b0;          // param_write_en auto-clears
+            alpha_wr_en_r    <= 1'b0;          // alpha_write_en auto-clears
             if (wb_wr) case (wb_reg)
                 6'h01: reg_control        <= wbs_dat_i;
                 6'h03: reg_num_samples    <= wbs_dat_i[9:0];
@@ -138,6 +144,10 @@ module user_project_wrapper #(
                 6'h07: reg_num_sv[3]      <= wbs_dat_i[7:0];
                 6'h08: reg_num_sv[4]      <= wbs_dat_i[7:0];
                 6'h09: reg_param_wr       <= wbs_dat_i[19:0];
+                6'h0A: begin
+                    reg_alpha_wr  <= wbs_dat_i[23:0]; // [23:16]=sv_idx [15:0]=alpha
+                    alpha_wr_en_r <= 1'b1;
+                end
                 default: ;
             endcase
         end
@@ -215,7 +225,10 @@ module user_project_wrapper #(
         .kernel_out      (svm_kernel_out),
         .kernel_valid    (svm_kernel_valid),
         .kernel_ready    (1'b1),
-        .class_scores_la (la_scores_w)
+        .class_scores_la (la_scores_w),
+        .alpha_write_en  (alpha_wr_en_r),
+        .alpha_addr      (reg_alpha_wr[23:16]),
+        .alpha_data      (reg_alpha_wr[15:0])
     );
 
     // =========================================================================

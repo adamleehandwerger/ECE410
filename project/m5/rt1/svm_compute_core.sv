@@ -83,7 +83,12 @@ module svm_compute_core #(
     output logic [DATA_WIDTH-1:0]   kernel_out,
     output logic                    kernel_valid,
     input  logic                    kernel_ready,
-    output logic [127:0]            class_scores_la
+    output logic [127:0]            class_scores_la,
+
+    // Alpha dual-coefficient write port (Wishbone-driven)
+    input  logic                    alpha_write_en,
+    input  logic [7:0]              alpha_addr,
+    input  logic [DATA_WIDTH-1:0]   alpha_data
 );
 
     // =========================================================================
@@ -153,6 +158,9 @@ module svm_compute_core #(
     // Feature bank  (holds current sample's 256-dim input vector)
     (* ram_style = "registers" *) logic [DATA_WIDTH-1:0] feature_bank [FEATURE_DIM];
 
+    // Alpha dual coefficients (signed Q6.10, one per SV; reset to 1.0 = unweighted)
+    (* ram_style = "registers" *) logic signed [DATA_WIDTH-1:0] alpha_table [NUM_SV];
+
     // Batch counters
     logic [9:0] num_samples_latched;
     logic [9:0] sample_counter;
@@ -177,6 +185,10 @@ module svm_compute_core #(
     // SV row index (sv_base = global SV index within the SV region)
     logic [9:0] sv_base;
 
+    // Weighted kernel: alpha_table[sv_base] × kernel_out  (Q6.10 × Q6.10 = Q12.20)
+    logic signed [32:0] alpha_k_full;
+    assign alpha_k_full = $signed(alpha_table[sv_base[7:0]]) * $signed({1'b0, kernel_out});
+
     // FSM
     typedef enum logic [2:0] {
         IDLE,
@@ -189,15 +201,15 @@ module svm_compute_core #(
     } state_t;
     state_t state, next_state;
 
-    // Argmax accumulators
-    logic [31:0] class_score_acc [5];
-    wire  [31:0] cs_acc0 = class_score_acc[0];
-    wire  [31:0] cs_acc1 = class_score_acc[1];
-    wire  [31:0] cs_acc2 = class_score_acc[2];
-    wire  [31:0] cs_acc3 = class_score_acc[3];
-    wire  [31:0] cs_acc4 = class_score_acc[4];
-    logic [2:0]  argmax_class;
-    logic [31:0] argmax_best;
+    // Argmax accumulators (signed — alpha-weighted scores can be negative)
+    logic signed [31:0] class_score_acc [5];
+    wire signed [31:0] cs_acc0 = class_score_acc[0];
+    wire signed [31:0] cs_acc1 = class_score_acc[1];
+    wire signed [31:0] cs_acc2 = class_score_acc[2];
+    wire signed [31:0] cs_acc3 = class_score_acc[3];
+    wire signed [31:0] cs_acc4 = class_score_acc[4];
+    logic [2:0]        argmax_class;
+    logic signed [31:0] argmax_best;
 
     logic [10:0] total_sv_check;
     assign total_sv_check = sv_count_reg[0] + sv_count_reg[1]
@@ -249,17 +261,23 @@ module svm_compute_core #(
             bias_int[2] <= BIAS2_DEFAULT;
             bias_int[3] <= BIAS3_DEFAULT;
             bias_int[4] <= BIAS4_DEFAULT;
-        end else if (param_write_en) begin
-            case (param_addr)
-                3'b000: gamma_int   <= param_data;
-                3'b001: c_int       <= param_data;
-                3'b010: bias_int[0] <= param_data;
-                3'b011: bias_int[1] <= param_data;
-                3'b100: bias_int[2] <= param_data;
-                3'b101: bias_int[3] <= param_data;
-                3'b110: bias_int[4] <= param_data;
-                default: begin end
-            endcase
+            for (int i = 0; i < NUM_SV; i++)
+                alpha_table[i] <= DATA_WIDTH'(1 << FRAC_BITS); // default 1.0 Q6.10
+        end else begin
+            if (param_write_en) begin
+                case (param_addr)
+                    3'b000: gamma_int   <= param_data;
+                    3'b001: c_int       <= param_data;
+                    3'b010: bias_int[0] <= param_data;
+                    3'b011: bias_int[1] <= param_data;
+                    3'b100: bias_int[2] <= param_data;
+                    3'b101: bias_int[3] <= param_data;
+                    3'b110: bias_int[4] <= param_data;
+                    default: begin end
+                endcase
+            end
+            if (alpha_write_en)
+                alpha_table[alpha_addr] <= $signed(alpha_data);
         end
     end
 
@@ -489,24 +507,25 @@ module svm_compute_core #(
             case (state)
                 IDLE: begin
                     if (start && vbatt_ok_s) begin
-                        class_score_acc[0] <= {16'b0, bias_int[0]};
-                        class_score_acc[1] <= {16'b0, bias_int[1]};
-                        class_score_acc[2] <= {16'b0, bias_int[2]};
-                        class_score_acc[3] <= {16'b0, bias_int[3]};
-                        class_score_acc[4] <= {16'b0, bias_int[4]};
+                        class_score_acc[0] <= {{16{bias_int[0][15]}}, bias_int[0]};
+                        class_score_acc[1] <= {{16{bias_int[1][15]}}, bias_int[1]};
+                        class_score_acc[2] <= {{16{bias_int[2][15]}}, bias_int[2]};
+                        class_score_acc[3] <= {{16{bias_int[3][15]}}, bias_int[3]};
+                        class_score_acc[4] <= {{16{bias_int[4][15]}}, bias_int[4]};
                     end
                 end
                 OUTPUT_RESULT: begin
                     if (kernel_valid && kernel_ready)
                         class_score_acc[class_counter] <=
-                            class_score_acc[class_counter] + {16'b0, kernel_out};
+                            $signed(class_score_acc[class_counter])
+                            + $signed(alpha_k_full[32:FRAC_BITS]);
                 end
                 WRITE_CLASS: begin
-                    class_score_acc[0] <= {16'b0, bias_int[0]};
-                    class_score_acc[1] <= {16'b0, bias_int[1]};
-                    class_score_acc[2] <= {16'b0, bias_int[2]};
-                    class_score_acc[3] <= {16'b0, bias_int[3]};
-                    class_score_acc[4] <= {16'b0, bias_int[4]};
+                    class_score_acc[0] <= {{16{bias_int[0][15]}}, bias_int[0]};
+                    class_score_acc[1] <= {{16{bias_int[1][15]}}, bias_int[1]};
+                    class_score_acc[2] <= {{16{bias_int[2][15]}}, bias_int[2]};
+                    class_score_acc[3] <= {{16{bias_int[3][15]}}, bias_int[3]};
+                    class_score_acc[4] <= {{16{bias_int[4][15]}}, bias_int[4]};
                 end
                 default: begin end
             endcase
@@ -518,10 +537,10 @@ module svm_compute_core #(
     // =========================================================================
     always_comb begin
         argmax_class = 3'd0; argmax_best = cs_acc0;
-        if (cs_acc1 > argmax_best) begin argmax_class = 3'd1; argmax_best = cs_acc1; end
-        if (cs_acc2 > argmax_best) begin argmax_class = 3'd2; argmax_best = cs_acc2; end
-        if (cs_acc3 > argmax_best) begin argmax_class = 3'd3; argmax_best = cs_acc3; end
-        if (cs_acc4 > argmax_best) begin argmax_class = 3'd4; argmax_best = cs_acc4; end
+        if ($signed(cs_acc1) > $signed(argmax_best)) begin argmax_class = 3'd1; argmax_best = cs_acc1; end
+        if ($signed(cs_acc2) > $signed(argmax_best)) begin argmax_class = 3'd2; argmax_best = cs_acc2; end
+        if ($signed(cs_acc3) > $signed(argmax_best)) begin argmax_class = 3'd3; argmax_best = cs_acc3; end
+        if ($signed(cs_acc4) > $signed(argmax_best)) begin argmax_class = 3'd4; argmax_best = cs_acc4; end
     end
 
     assign class_scores_la = {cs_acc3, cs_acc2, cs_acc1, cs_acc0};

@@ -53,11 +53,12 @@ NORMAL_RR        = 308
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Wishbone addresses (base 0x3000_0000) — FIFO_DATA removed in v8
+# Wishbone addresses (base 0x3000_0000)
 WB_CONTROL     = 0x30000004
 WB_NUM_SAMPLES = 0x3000000C
 WB_NUM_SV      = [0x30000010, 0x30000014, 0x30000018, 0x3000001C, 0x30000020]
 WB_PARAM_WR    = 0x30000024
+WB_ALPHA_WR    = 0x30000028  # [23:16]=sv_global_idx [15:0]=alpha Q6.10 signed
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Synthetic dataset  (identical generator to confusion_comparison_m5.py)
@@ -180,6 +181,12 @@ def q10_u16(x):
     """Float → unsigned Q6.10 bit pattern (for SV features and gamma)."""
     return ctypes.c_uint16(int(round(x * SCALE))).value
 
+def q10_s16(x):
+    """Float → signed Q6.10 as uint16 bit pattern (for alpha coefficients and biases)."""
+    v = int(round(x * SCALE))
+    v = max(-32768, min(32767, v))
+    return v & 0xFFFF
+
 def feats_to_q16(X):
     """Float array → int16 Q6.10 (for input feature matrix)."""
     return (np.clip(np.round(X * SCALE).astype(np.int64), -(1<<15), (1<<15)-1)
@@ -248,19 +255,15 @@ async def ram_model(dut, ram):
 # ─────────────────────────────────────────────────────────────────────────────
 # RAM builder helpers
 # ─────────────────────────────────────────────────────────────────────────────
-def load_sv_ram(ram, clf, sv_counts):
+def load_sv_ram(ram, sv_vecs_per_class):
     """Populate SV rows (0..NUM_SV_ROWS-1) in the shared RAM dict."""
     sv_row = 0
-    sv_offset_in_clf = 0
     for c in range(NUM_CLASSES):
-        n   = sv_counts[c]
-        svs = clf.support_vectors_[sv_offset_in_clf: sv_offset_in_clf + n]
-        for sv in svs:
+        for sv in sv_vecs_per_class[c]:
             base = sv_row * FEATURE_DIM
             for fi, f in enumerate(sv):
-                ram[base + fi] = q10_u16(f)
+                ram[base + fi] = q10_u16(float(f))
             sv_row += 1
-        sv_offset_in_clf += clf.n_support_[c]
 
 def load_input_ram(ram, X_batch_q):
     """Populate input rows (NUM_SV_ROWS..) in the shared RAM dict."""
@@ -308,17 +311,45 @@ async def run_batch_cosim(dut):
     dut.wb_rst_i.value = 0
     for _ in range(5):  await RisingEdge(dut.wb_clk_i)
 
-    # ── Train sklearn SVM ─────────────────────────────────────────────────────
-    print("\n[cosim] Training sklearn RBF SVM...")
+    # ── Train 5 binary OVR SVMs ───────────────────────────────────────────────
+    print("\n[cosim] Loading dataset (256-dim multi-scale features)...")
     X, y = build_dataset(n_per_class=300)
     X_tr, X_te, y_tr, y_te = train_test_split(
         X, y, test_size=0.2, stratify=y, random_state=42)
-    clf = SVC(kernel="rbf", gamma=DEFAULT_GAMMA, C=1.0,
-              decision_function_shape="ovr", random_state=42)
-    clf.fit(X_tr, y_tr)
-    sv_counts = np.minimum(clf.n_support_, MAX_SV_PER_CLASS).astype(int)
+
+    print("[cosim] Training 5 binary OVR SVMs...")
+    binary_svms = []
+    for c in range(NUM_CLASSES):
+        y_bin = np.where(y_tr == c, 1, -1)
+        svm_c = SVC(kernel="rbf", gamma=DEFAULT_GAMMA, C=1.0, random_state=42)
+        svm_c.fit(X_tr, y_bin)
+        binary_svms.append(svm_c)
+
+    # Select top SVs by |alpha| magnitude (keeps most impactful when truncating)
+    sv_vecs_per_class   = []
+    sv_alphas_per_class = []
+    sv_counts = []
+    for c in range(NUM_CLASSES):
+        alphas = binary_svms[c].dual_coef_[0]   # signed: α_i * y_i
+        svs    = binary_svms[c].support_vectors_
+        n = min(len(alphas), MAX_SV_PER_CLASS)
+        if len(alphas) > MAX_SV_PER_CLASS:
+            top_idx = np.argsort(-np.abs(alphas))[:MAX_SV_PER_CLASS]
+        else:
+            top_idx = np.arange(len(alphas))
+        sv_vecs_per_class.append(svs[top_idx])
+        sv_alphas_per_class.append(alphas[top_idx])
+        sv_counts.append(n)
+
+    sv_counts = np.array(sv_counts, dtype=int)
     sv_total  = int(sv_counts.sum())
     print(f"[cosim] SVs per class: {sv_counts}  total: {sv_total}")
+
+    # sklearn OVR accuracy reference
+    scores_sklearn = np.column_stack(
+        [svm.decision_function(X_te) for svm in binary_svms])
+    sklearn_acc = np.mean(np.argmax(scores_sklearn, axis=1) == y_te)
+    print(f"[cosim] sklearn OVR accuracy: {sklearn_acc:.4f} ({int(sklearn_acc*len(y_te))}/{len(y_te)})")
 
     X_te_q = feats_to_q16(X_te)
     N_eval  = len(X_te_q)
@@ -329,13 +360,31 @@ async def run_batch_cosim(dut):
         await wb_write(dut, WB_NUM_SV[c], int(sv_counts[c]))
     gamma_q = q10_u16(DEFAULT_GAMMA)
     await wb_write(dut, WB_PARAM_WR, (1 << 19) | (0 << 16) | gamma_q)
+
+    # Load per-class biases from binary SVM intercepts
+    for c in range(NUM_CLASSES):
+        bias_val = float(binary_svms[c].intercept_[0])
+        bias_q   = q10_s16(bias_val)
+        await wb_write(dut, WB_PARAM_WR, (1 << 19) | ((c + 2) << 16) | bias_q)
+
+    # Load alpha table: one WB write per SV (global index order)
+    global_sv_idx = 0
+    for c in range(NUM_CLASSES):
+        for sv_local_idx in range(len(sv_alphas_per_class[c])):
+            alpha_val = float(sv_alphas_per_class[c][sv_local_idx])
+            alpha_q   = q10_s16(alpha_val)
+            await wb_write(dut, WB_ALPHA_WR,
+                           (global_sv_idx << 16) | alpha_q)
+            global_sv_idx += 1
+    print(f"[cosim] Alpha table loaded: {global_sv_idx} coefficients")
+
     # Assert vbatt_ok=1 (bit 1) and wait for 2-FF synchroniser
     await wb_write(dut, WB_CONTROL, 0x02)
     for _ in range(6): await RisingEdge(dut.wb_clk_i)
 
     # ── Shared RAM dict + persistent background RAM model ─────────────────────
     ram = {}
-    load_sv_ram(ram, clf, sv_counts)
+    load_sv_ram(ram, sv_vecs_per_class)
     cocotb.start_soon(ram_model(dut, ram))
     print(f"[cosim] SV RAM loaded: {sv_total} SVs × {FEATURE_DIM} features")
 
