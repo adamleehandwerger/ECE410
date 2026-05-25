@@ -50,6 +50,11 @@ MAX_BATCH_SIZE   = 1000  # RTL MAX_BATCH_SIZE
 CLASS_NAMES      = ["Normal", "PVC", "AFib", "VT", "SVT"]
 DEFAULT_GAMMA    = 0.25
 NORMAL_RR        = 308
+HALF_SINGLE      = FEAT_SINGLE // 2   # 64
+HALF_10BEAT      = FEAT_10BEAT // 2   # 32
+N_BEATS_10       = 10
+N_BEATS_100      = 100
+_BEAT_SYMS       = set("NLReEjJAaSVF/fQ")
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -61,110 +66,101 @@ WB_PARAM_WR    = 0x30000024
 WB_ALPHA_WR    = 0x30000028  # [23:16]=sv_global_idx [15:0]=alpha Q6.10 signed
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Synthetic dataset  (identical generator to confusion_comparison_m5.py)
+# Feature extraction + ECG loader (real data only)
 # ─────────────────────────────────────────────────────────────────────────────
-def _gauss(t, mu, sig, a): return a * np.exp(-0.5 * ((t - mu) / sig) ** 2)
+def extract_multiscale(sig, all_beat_samples, beat_idx):
+    s = int(all_beat_samples[beat_idx]); n = len(sig)
+    if s < HALF_SINGLE or s + HALF_SINGLE > n:
+        return None
+    seg1 = sig[s - HALF_SINGLE : s + HALF_SINGLE].copy()
+    pk1  = np.max(np.abs(seg1))
+    if pk1 < 1e-6: return None
+    seg1 = (seg1 / pk1).astype(np.float32)
 
-def _make_ms(beat_fn, rr_fn, n, noise_e, noise_b, rng):
-    beats, rr_hist = [], [NORMAL_RR] * 100
-    for _ in range(n):
-        rr_vals = rr_fn(10, rng).astype(int)
-        t = np.linspace(-0.2, 0.6, FEAT_SINGLE)
-        raw = np.array([beat_fn(t, rng) for _ in rr_vals])
-        sig = raw.mean(0) + rng.normal(0, noise_b, FEAT_SINGLE)
-        feat_single = sig + rng.normal(0, noise_e, FEAT_SINGLE)
-        rr_std  = np.std(rr_vals[:FEAT_10BEAT // 2])
-        ctx10 = np.concatenate([rr_vals[:FEAT_10BEAT//2] / NORMAL_RR,
-                                 np.full(FEAT_10BEAT//2, rr_std / NORMAL_RR)])
-        rh = np.array(rr_hist[-100:], dtype=float) / NORMAL_RR
-        ctx100 = np.concatenate([np.resize(rh, (FEAT_100RR//2,)),
-                                  np.full(FEAT_100RR//2, np.std(rh))])
-        beats.append(np.concatenate([feat_single, ctx10, ctx100]).astype(np.float32))
-        rr_hist.extend(list(rr_vals)); rr_hist = rr_hist[-100:]
-    return beats
+    half10 = N_BEATS_10 // 2
+    i0 = max(0, beat_idx - half10); i1 = min(len(all_beat_samples), beat_idx + half10)
+    segs2 = []
+    for bi in range(i0, i1):
+        bs = int(all_beat_samples[bi])
+        if bs >= HALF_10BEAT and bs + HALF_10BEAT <= n:
+            seg = sig[bs - HALF_10BEAT : bs + HALF_10BEAT].astype(np.float32)
+            pk2 = np.max(np.abs(seg))
+            if pk2 > 1e-6: segs2.append(seg / pk2)
+    if not segs2: return None
+    seg2 = np.mean(segs2, axis=0).astype(np.float32)
 
-def synth_normal(n, r):
-    def beat(t, r): return (_gauss(t,-0.03,0.030,-0.15)+_gauss(t,0.00,0.035,1.10)
-                             +_gauss(t,0.04,0.028,-0.12)+_gauss(t,0.25,0.08,0.30))
-    def rr(nb, r): return r.normal(NORMAL_RR, 10, nb)
-    return _make_ms(beat, rr, n, 0.02, 0.01, r)
-
-def synth_pvc(n, r):
-    def beat(t, r):
-        w=r.uniform(0.06,0.09); s=r.choice([-1,1])
-        return (_gauss(t,-0.03,w,s*1.20)+_gauss(t,0.06,w*0.85,-s*0.55)+_gauss(t,0.28,0.10,s*0.18))
-    def rr(nb, r): rrs=r.normal(NORMAL_RR,12,nb); rrs[0]=r.uniform(0.6,0.8)*NORMAL_RR; return rrs
-    return _make_ms(beat, rr, n, 0.03, 0.02, r)
-
-def synth_afib(n, r):
-    def beat(t, r):
-        bl=sum(r.uniform(0.03,0.08)*np.sin(2*np.pi*ff*t+r.uniform(0,6.28)) for ff in r.uniform(4,10,6))
-        o=r.uniform(-0.05,0.05)
-        return (_gauss(t,o-0.04,0.025,-0.12)+_gauss(t,o,0.035,0.90)
-                +_gauss(t,o+0.04,0.025,-0.08)+_gauss(t,o+0.30,0.09,0.25)+bl)
-    def rr(nb, r): return r.uniform(0.50*NORMAL_RR,1.50*NORMAL_RR,nb)
-    return _make_ms(beat, rr, n, 0.06, 0.05, r)
-
-def synth_vt(n, r):
-    def beat(t, r):
-        w=r.uniform(0.10,0.16); p=r.choice([-1,1])
-        return (_gauss(t,0.00,w,p*0.95)+_gauss(t,0.08,w*0.9,p*0.30)+_gauss(t,0.35,0.14,-p*0.35))
-    def rr(nb, r): return r.normal(144, 4, nb)
-    return _make_ms(beat, rr, n, 0.04, 0.03, r)
-
-def synth_svt(n, r):
-    def beat(t, r): return (_gauss(t,-0.02,0.030,-0.10)+_gauss(t,0.00,0.035,1.00)
-                             +_gauss(t,0.04,0.025,-0.08)+_gauss(t,0.22,0.070,0.25)
-                             +_gauss(t,0.18,0.040,-0.10))
-    def rr(nb, r): return r.normal(120, 3, nb)
-    return _make_ms(beat, rr, n, 0.03, 0.02, r)
-
-SYNTH_FNS = [synth_normal, synth_pvc, synth_afib, synth_vt, synth_svt]
+    j0 = max(0, beat_idx - N_BEATS_100)
+    rr_raw = np.diff(all_beat_samples[j0 : beat_idx + 1]).astype(np.float32)
+    if len(rr_raw) < 2: return None
+    rr_norm = np.clip(rr_raw / NORMAL_RR, 0.0, 2.0)
+    seg3 = np.interp(np.linspace(0, 1, FEAT_100RR),
+                     np.linspace(0, 1, len(rr_norm)), rr_norm).astype(np.float32)
+    return np.concatenate([seg1, seg2, seg3])
 
 def load_mitbih_beats(max_per_class=300):
     try:
         import wfdb
     except ImportError:
         return {}
-    BEAT_MAP = {'N':0,'L':0,'R':0,'e':0,'j':0,'V':1,'E':1,
-                'A':2,'a':2,'J':2,'S':2,'F':3,'/':4,'f':4,'Q':4}
-    records = ['100','101','102','103','104','105','106','107','108','109',
-               '111','112','113','114','115','116','117','118','119','121',
-               '122','123','124','200','201','202','203','205','207','208',
-               '209','210','212','213','214','215','217','219','220','221',
-               '222','223','228','230','231','232','233','234']
+    BMAP = {"N": 0, "L": 0, "R": 0, "e": 0, "j": 0,
+            "V": 1, "E": 1,
+            "F": 3,
+            "A": 4, "a": 4, "J": 4, "S": 4,
+            "/": 4, "f": 4, "Q": 4}
+    sources = [
+        (['100','101','102','103','104','105','106','107','108','109',
+          '111','112','113','114','115','116','117','118','119','121',
+          '122','123','124','200','201','202','203','205','207','208',
+          '209','210','212','213','214','215','217','219','220','221',
+          '222','223','228','230','231','232','233','234'], 'mitdb'),
+        ([f'e{i:04d}' for i in range(1, 79)], 'svdb'),
+        ([f'I{i:02d}' for i in range(1, 76)], 'incartdb'),
+    ]
     beats = {i: [] for i in range(NUM_CLASSES)}
-    for rec in records:
+    for rec_list, pn_dir in sources:
         if all(len(v) >= max_per_class for v in beats.values()):
             break
-        try:
-            sig, _ = wfdb.rdsamp(rec, pn_dir='mitdb')
-            ann    = wfdb.rdann(rec, 'atr', pn_dir='mitdb')
-        except Exception:
-            continue
-        ecg = sig[:, 0]
-        rr_hist, prev_idx = [NORMAL_RR]*100, 0
-        for idx, sym in zip(ann.sample, ann.symbol):
-            cls = BEAT_MAP.get(sym)
-            if cls is None or len(beats[cls]) >= max_per_class:
+        for rec in rec_list:
+            if all(len(v) >= max_per_class for v in beats.values()):
+                break
+            try:
+                r   = wfdb.rdrecord(rec, pn_dir=pn_dir)
+                ann = wfdb.rdann(rec, 'atr', pn_dir=pn_dir)
+            except Exception:
                 continue
-            win = ecg[max(0, idx-50): idx+78]
-            if len(win) < 128:
-                continue
-            rr = idx - prev_idx
-            ctx10  = np.concatenate([np.full(FEAT_10BEAT//2, rr/NORMAL_RR),
-                                     np.full(FEAT_10BEAT//2, abs(rr-NORMAL_RR)/NORMAL_RR)])
-            rh = np.array(rr_hist[-100:], dtype=float)/NORMAL_RR
-            ctx100 = np.concatenate([np.resize(rh,(FEAT_100RR//2,)),
-                                     np.full(FEAT_100RR//2, np.std(rh))])
-            beats[cls].append(np.concatenate(
-                [win[:FEAT_SINGLE].astype(np.float32), ctx10, ctx100]).astype(np.float32))
-            rr_hist.append(rr); rr_hist = rr_hist[-100:]
-            prev_idx = idx
+            sig = r.p_signal[:, 0].astype(np.float32)
+            beat_samp_list, beat_sym_list = [], []
+            for s, sym in zip(ann.sample, ann.symbol):
+                if sym in _BEAT_SYMS:
+                    beat_samp_list.append(s); beat_sym_list.append(sym)
+            if len(beat_samp_list) < 3: continue
+            all_beat_samples = np.array(beat_samp_list, dtype=np.int32)
+            afib_regions = []
+            if hasattr(ann, 'aux_note'):
+                in_afib = False; afib_start = None
+                for s, sym, aux in zip(ann.sample, ann.symbol, ann.aux_note):
+                    if sym == '+' and aux:
+                        if '(AFIB' in aux: in_afib = True; afib_start = s
+                        elif in_afib and '(' in aux:
+                            afib_regions.append((afib_start, s)); in_afib = False
+                if in_afib and afib_start is not None:
+                    afib_regions.append((afib_start, len(sig)))
+            for beat_idx, (s_idx, sym) in enumerate(
+                    zip(all_beat_samples.tolist(), beat_sym_list)):
+                in_afib_flag = any(a0 <= s_idx <= a1 for a0, a1 in afib_regions)
+                if in_afib_flag and sym in ('N','L','R','e','j','V','A','a','J','S'):
+                    cls = 2
+                elif sym in BMAP:
+                    cls = BMAP[sym]
+                else:
+                    continue
+                if len(beats[cls]) >= max_per_class: continue
+                feat = extract_multiscale(sig, all_beat_samples, beat_idx)
+                if feat is not None: beats[cls].append(feat)
     return beats
 
 def build_dataset(n_per_class=300):
-    print("\n[cosim] Loading MIT-BIH dataset (256-dim multi-scale features, real data only)...")
+    print("\n[cosim] Loading ECG databases: MIT-BIH + SVDB + INCART (256-dim multi-scale features, real data only)...")
     real = load_mitbih_beats(max_per_class=n_per_class)
     X, y = [], []
     for cls in range(NUM_CLASSES):
@@ -359,6 +355,13 @@ async def run_batch_cosim(dut):
 
     # ── One-time WB config ────────────────────────────────────────────────────
     print("[cosim] Configuring DUT...")
+    # Assert vbatt_ok=1 FIRST so the 2-FF synchroniser inside the gated clock
+    # domain sees d=1 during all subsequent param/alpha writes.  Without this,
+    # the svm_gclk edges generated by those writes flush vbatt_ok_s to 0 and
+    # the FSM won't leave IDLE when start fires later.
+    await wb_write(dut, WB_CONTROL, 0x02)
+    for _ in range(6): await RisingEdge(dut.wb_clk_i)
+
     for c in range(NUM_CLASSES):
         await wb_write(dut, WB_NUM_SV[c], int(sv_counts[c]))
     gamma_q = q10_u16(DEFAULT_GAMMA)
@@ -380,10 +383,6 @@ async def run_batch_cosim(dut):
                            (global_sv_idx << 16) | alpha_q)
             global_sv_idx += 1
     print(f"[cosim] Alpha table loaded: {global_sv_idx} coefficients")
-
-    # Assert vbatt_ok=1 (bit 1) and wait for 2-FF synchroniser
-    await wb_write(dut, WB_CONTROL, 0x02)
-    for _ in range(6): await RisingEdge(dut.wb_clk_i)
 
     # ── Shared RAM dict + persistent background RAM model ─────────────────────
     ram = {}
@@ -420,7 +419,7 @@ async def run_batch_cosim(dut):
         # svm_done   = io_out[4]  (1-cycle pulse at end of batch)
         # class_out  = io_out[2:0] (stable on same cycle as sample_rdy)
         batch_preds = []
-        MAX_CYCLES  = N_batch * cycles_per_sample + 10_000
+        MAX_CYCLES  = N_batch * cycles_per_sample * 2 + 100_000
 
         for cyc in range(MAX_CYCLES):
             await RisingEdge(dut.wb_clk_i)

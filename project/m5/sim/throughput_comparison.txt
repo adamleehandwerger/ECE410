@@ -1,0 +1,22 @@
+
+Optimal sklearn vs. ASIC — ECE410 SVM ASIC (m5)
+================================================
+Dataset : MIT-BIH 5-class arrhythmia, 300 test samples
+Features: 256-dim (128 single-beat + 64 10-beat + 64 100-beat context)
+
+Implementation              Accuracy    SVs                       Notes
+--------------------------  ----------  ------------------------  --------
+Optimal sklearn OVR (float) 97.67%    416 total (unlimited)  float precision
+ASIC binary OVR (Q6.10)     46.26%    250 total ([50 50 50 50 50])  gamma=0.25, C=1.0
+
+ASIC hardware (40 MHz):
+  Inference time   : ~1.63 ms / beat
+  Throughput       : 613 inf/s
+  Active power     : 66 mW
+  Duty cycle       : 0.218% (80 bpm)
+  Average power    : 0.144 mW
+
+14-day wearable target: MET — headroom on 200 mAh @ 3.7V battery
+
+Accuracy gap (optimal sklearn vs. ASIC): 0.5141
+* ASIC predictions from svm_compute_core RTL simulation.

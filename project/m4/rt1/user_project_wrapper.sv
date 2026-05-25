@@ -104,7 +104,8 @@ module user_project_wrapper #(
             drain_cnt <= drain_cnt - 6'd1;
     end
 
-    wire svm_clk_en = !rst_n | batch_active | reg_control[0] | core_warming | (drain_cnt > 0);
+    wire svm_clk_en = !rst_n | batch_active | reg_control[0] | core_warming | (drain_cnt > 0)
+                   | reg_param_wr[19] | alpha_wr_en_r;
 
     wire svm_gclk;
 `ifdef SIMULATION

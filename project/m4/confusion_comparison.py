@@ -193,47 +193,56 @@ def extract_multiscale(sig, all_beat_samples, beat_idx):
 # ─────────────────────────────────────────────────────────────────────────────
 # 4.  MIT-BIH loader
 # ─────────────────────────────────────────────────────────────────────────────
-ALL_MITBIH = tuple(str(r) for r in list(range(100, 125)) + list(range(200, 235)))
 _BEAT_SYMS = set("NLReEjJAaSVFQf")
 
-def load_mitbih_beats(records=ALL_MITBIH, max_per_class=300):
+def load_mitbih_beats(max_per_class=300):
     import wfdb
     BMAP = {"N": 0, "L": 0, "R": 0, "e": 0,
             "V": 1, "E": 1,
             "A": 4, "a": 4, "J": 4, "S": 4}
+    sources = [
+        ([str(r) for r in list(range(100, 125)) + list(range(200, 235))], 'mitdb'),
+        ([f'e{i:04d}' for i in range(1, 79)], 'svdb'),
+        ([f'I{i:02d}' for i in range(1, 76)], 'incartdb'),
+    ]
     beats = {i: [] for i in range(NUM_CLASSES)}
-    for rec in records:
-        try:
-            r   = wfdb.rdrecord(rec, pn_dir="mitdb")
-            ann = wfdb.rdann(rec, "atr", pn_dir="mitdb")
-        except Exception as e:
-            print(f"  [skip] {rec}: {e}"); continue
-        sig = r.p_signal[:, 0].astype(np.float32)
-        beat_samp_list, beat_sym_list = [], []
-        for s, sym in zip(ann.sample, ann.symbol):
-            if sym in _BEAT_SYMS:
-                beat_samp_list.append(s); beat_sym_list.append(sym)
-        if len(beat_samp_list) < 3: continue
-        all_beat_samples = np.array(beat_samp_list, dtype=np.int32)
-        afib_regions = []
-        if hasattr(ann, "aux_note"):
-            in_afib = False; afib_start = None
-            for s, sym, aux in zip(ann.sample, ann.symbol, ann.aux_note):
-                if sym == "+" and aux:
-                    if "(AFIB" in aux: in_afib = True; afib_start = s
-                    elif in_afib and "(" in aux:
-                        afib_regions.append((afib_start, s)); in_afib = False
-            if in_afib and afib_start is not None:
-                afib_regions.append((afib_start, len(sig)))
-        for beat_idx, (s_idx, sym) in enumerate(
-                zip(all_beat_samples.tolist(), beat_sym_list)):
-            in_afib = any(a0 <= s_idx <= a1 for a0, a1 in afib_regions)
-            if in_afib and sym in ("N", "L", "R", "V", "A"): cls = 2
-            elif sym in BMAP: cls = BMAP[sym]
-            else: continue
-            if len(beats[cls]) >= max_per_class: continue
-            feat = extract_multiscale(sig, all_beat_samples, beat_idx)
-            if feat is not None: beats[cls].append(feat)
+    for rec_list, pn_dir in sources:
+        if all(len(v) >= max_per_class for v in beats.values()):
+            break
+        for rec in rec_list:
+            if all(len(v) >= max_per_class for v in beats.values()):
+                break
+            try:
+                r   = wfdb.rdrecord(rec, pn_dir=pn_dir)
+                ann = wfdb.rdann(rec, "atr", pn_dir=pn_dir)
+            except Exception as e:
+                print(f"  [skip] {rec}: {e}"); continue
+            sig = r.p_signal[:, 0].astype(np.float32)
+            beat_samp_list, beat_sym_list = [], []
+            for s, sym in zip(ann.sample, ann.symbol):
+                if sym in _BEAT_SYMS:
+                    beat_samp_list.append(s); beat_sym_list.append(sym)
+            if len(beat_samp_list) < 3: continue
+            all_beat_samples = np.array(beat_samp_list, dtype=np.int32)
+            afib_regions = []
+            if hasattr(ann, "aux_note"):
+                in_afib = False; afib_start = None
+                for s, sym, aux in zip(ann.sample, ann.symbol, ann.aux_note):
+                    if sym == "+" and aux:
+                        if "(AFIB" in aux: in_afib = True; afib_start = s
+                        elif in_afib and "(" in aux:
+                            afib_regions.append((afib_start, s)); in_afib = False
+                if in_afib and afib_start is not None:
+                    afib_regions.append((afib_start, len(sig)))
+            for beat_idx, (s_idx, sym) in enumerate(
+                    zip(all_beat_samples.tolist(), beat_sym_list)):
+                in_afib = any(a0 <= s_idx <= a1 for a0, a1 in afib_regions)
+                if in_afib and sym in ("N", "L", "R", "V", "A"): cls = 2
+                elif sym in BMAP: cls = BMAP[sym]
+                else: continue
+                if len(beats[cls]) >= max_per_class: continue
+                feat = extract_multiscale(sig, all_beat_samples, beat_idx)
+                if feat is not None: beats[cls].append(feat)
     return beats
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -310,7 +319,7 @@ SYNTH_FNS = [synth_normal, synth_pvc, synth_afib, synth_vt, synth_svt]
 # ─────────────────────────────────────────────────────────────────────────────
 
 def build_dataset(n_per_class=300):
-    print("\n=== Loading MIT-BIH records (multi-scale features, real data only) ===")
+    print("\n=== Loading ECG databases: MIT-BIH + SVDB + INCART (multi-scale features, real data only) ===")
     real = load_mitbih_beats(max_per_class=n_per_class)
     X, y = [], []
     for cls in range(NUM_CLASSES):

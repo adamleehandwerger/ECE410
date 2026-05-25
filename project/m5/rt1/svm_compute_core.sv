@@ -262,7 +262,7 @@ module svm_compute_core #(
             bias_int[3] <= BIAS3_DEFAULT;
             bias_int[4] <= BIAS4_DEFAULT;
             for (int i = 0; i < NUM_SV; i++)
-                alpha_table[i] <= DATA_WIDTH'(1 << FRAC_BITS); // default 1.0 Q6.10
+                alpha_table[i] = DATA_WIDTH'(1 << FRAC_BITS); // default 1.0 Q6.10
         end else begin
             if (param_write_en) begin
                 case (param_addr)
