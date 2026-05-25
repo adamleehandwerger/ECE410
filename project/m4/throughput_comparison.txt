@@ -1,5 +1,5 @@
 
-Optimal sklearn vs. ASIC — ECE410 SVM ASIC (m5)
+Optimal sklearn vs. ASIC — ECE410 SVM ASIC (m4)
 ================================================
 Dataset : MIT-BIH 5-class arrhythmia, 300 test samples
 Features: 256-dim (128 single-beat + 64 10-beat + 64 100-beat context)

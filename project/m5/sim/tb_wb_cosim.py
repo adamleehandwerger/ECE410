@@ -8,8 +8,8 @@ SRAM model, fires start once, then the ASIC autonomously classifies
 all samples.  Results are captured per-sample via GPIO.
 
 Off-chip RAM layout  (row × FEATURE_DIM, FEATURE_DIM = 256):
-  Rows  0..249         SV matrix      (250 × 256 × 2 B = 128 KB)
-  Rows  250..1249      input batch    (1000 × 256 × 2 B = 512 KB max)
+  Rows  0..499         SV matrix      (500 × 256 × 2 B = 256 KB)
+  Rows  500..1499      input batch    (1000 × 256 × 2 B = 512 KB max)
 
 GPIO signals (io_out):
   [2:0]   class_out   — stable when sample_rdy fires
@@ -24,13 +24,15 @@ Outputs:
   asic_preds.csv — one integer class (0-4) per test sample
 """
 
-import os, warnings, ctypes, csv
+import os, sys, warnings, ctypes, csv
 import numpy as np
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge
 from sklearn.svm import SVC
 from sklearn.model_selection import train_test_split
+
+sys.stdout.reconfigure(line_buffering=True)
 
 warnings.filterwarnings("ignore")
 
@@ -45,10 +47,11 @@ FEAT_10BEAT      = 64
 FEAT_100RR       = 64
 NUM_CLASSES      = 5
 MAX_SV_PER_CLASS = 100
-NUM_SV_ROWS      = 250   # RTL NUM_SV — input matrix starts at this row index
+NUM_SV_ROWS      = 500   # RTL NUM_SV — input matrix starts at this row index
 MAX_BATCH_SIZE   = 1000  # RTL MAX_BATCH_SIZE
 CLASS_NAMES      = ["Normal", "PVC", "AFib", "VT", "SVT"]
-DEFAULT_GAMMA    = 0.25
+DEFAULT_GAMMA    = float(os.environ.get("COSIM_GAMMA",  "0.25"))
+N_EVAL_OVERRIDE  = int(os.environ.get("COSIM_N_EVAL",  "0"))    # 0 = use full dataset
 NORMAL_RR        = 308
 HALF_SINGLE      = FEAT_SINGLE // 2   # 64
 HALF_10BEAT      = FEAT_10BEAT // 2   # 32
@@ -97,6 +100,30 @@ def extract_multiscale(sig, all_beat_samples, beat_idx):
                      np.linspace(0, 1, len(rr_norm)), rr_norm).astype(np.float32)
     return np.concatenate([seg1, seg2, seg3])
 
+# Persistent local cache for PhysioNet records (~500 MB for the records we need).
+PHYSIONET_CACHE = os.path.expanduser("~/.physionet_cache")
+
+def _rdrecord_cached(rec, pn_dir):
+    """Read a WFDB record, caching .hea/.dat/.atr under PHYSIONET_CACHE."""
+    import wfdb, wfdb.io.download as wdl
+    local_dir = os.path.join(PHYSIONET_CACHE, pn_dir)
+    hea_path  = os.path.join(local_dir, rec + ".hea")
+    if not os.path.exists(hea_path):
+        os.makedirs(local_dir, exist_ok=True)
+        # Download header first to discover the exact .dat segment files
+        wdl.dl_files(pn_dir, local_dir, [rec + ".hea"], keep_subdirs=False)
+        # Parse header to find data file names, then grab them + annotation
+        hdr = wfdb.rdheader(os.path.join(local_dir, rec))
+        dat_files = list({seg + ".dat" for seg in (
+                          hdr.seg_name if hasattr(hdr, 'seg_name') and hdr.seg_name
+                          else [rec])})
+        wdl.dl_files(pn_dir, local_dir,
+                     dat_files + [rec + ".atr"],
+                     keep_subdirs=False)
+    r   = wfdb.rdrecord(os.path.join(local_dir, rec))
+    ann = wfdb.rdann(os.path.join(local_dir, rec), 'atr')
+    return r, ann
+
 def load_mitbih_beats(max_per_class=300):
     try:
         import wfdb
@@ -126,8 +153,7 @@ def load_mitbih_beats(max_per_class=300):
             if all(len(v) >= max_per_class for v in beats.values()):
                 break
             try:
-                r   = wfdb.rdrecord(rec, pn_dir=pn_dir)
-                ann = wfdb.rdann(rec, 'atr', pn_dir=pn_dir)
+                r, ann = _rdrecord_cached(rec, pn_dir)
             except Exception:
                 continue
             sig = r.p_signal[:, 0].astype(np.float32)
@@ -377,7 +403,9 @@ async def run_batch_cosim(dut):
     print(f"[cosim] sklearn OVR accuracy: {sklearn_acc:.4f} ({int(sklearn_acc*len(y_te))}/{len(y_te)})")
 
     X_te_q = feats_to_q16(X_te)
-    N_eval  = len(X_te_q)
+    N_eval  = N_EVAL_OVERRIDE if N_EVAL_OVERRIDE > 0 else len(X_te_q)
+    X_te_q  = X_te_q[:N_eval]
+    y_te    = y_te[:N_eval]
 
     # ── One-time WB config ────────────────────────────────────────────────────
     print("[cosim] Configuring DUT...")
@@ -452,7 +480,12 @@ async def run_batch_cosim(dut):
             io_val = int(dut.io_out.value)
 
             if (io_val >> 3) & 0x1:               # sample_rdy
-                batch_preds.append(io_val & 0x7)
+                pred = io_val & 0x7
+                batch_preds.append(pred)
+                n = len(batch_preds)
+                true_label = int(y_te[batch_start + n - 1])
+                running_acc = sum(p == t for p, t in zip(batch_preds, [int(y_te[batch_start+i]) for i in range(n)])) / n
+                print(f"[cosim] sample {n:3d}/{N_batch}  pred={CLASS_NAMES[pred]:<6s}  true={CLASS_NAMES[true_label]:<6s}  running_acc={running_acc:.1%}", flush=True)
                 if len(batch_preds) == N_batch:
                     break
 

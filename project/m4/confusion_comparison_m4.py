@@ -1,5 +1,5 @@
 """
-confusion_comparison_m5.py — ECE410 Milestone 5
+confusion_comparison_m4.py — ECE410 Milestone 4
 ================================================
 2-way confusion matrix: Numba Q6.10 (best CPU) vs ASIC RTL
 
@@ -11,11 +11,10 @@ it does NOT appear as a column in the output figure.
 
 ASIC predictions loaded from (in priority order):
   asic_preds.csv               — cocotb GL-level simulation output
-  ../../m4/tb/expected_preds.hex — RTL testbench output (svm_compute_core, job 91947)
   [fallback: Numba output]     — if RTL sim not yet run
 
 Outputs:
-  confusion_comparison_m5.png   — 2-column confusion matrix figure
+  confusion_comparison_m4.png   — 2-column confusion matrix figure
   throughput_comparison.txt     — inference speed and power comparison
 """
 
@@ -50,7 +49,7 @@ HORNER_COEFFS = [1024, 1024, 512, 170, 42, 8, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1]
 EXP_INT_LUT   = [round(math.exp(-i) * SCALE) for i in range(16)]
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-M4_TB_DIR  = os.path.join(SCRIPT_DIR, "../../m4/tb")
+M4_SIM_DIR = os.path.join(SCRIPT_DIR, "sim")
 
 _EXP_LUT_NB = np.array(EXP_INT_LUT,   dtype=np.int64)
 _HORNER_NB  = np.array(HORNER_COEFFS, dtype=np.int64)
@@ -252,7 +251,7 @@ def ovr_predict_numba(K_mat, sv_alphas_per_cls, sv_counts, biases):
 # Load ASIC RTL predictions (from cocotb or expected_preds.hex)
 # ─────────────────────────────────────────────────────────────────────────────
 def load_asic_preds(n_expected):
-    cosim_csv = os.path.join(SCRIPT_DIR, "asic_preds.csv")
+    cosim_csv = os.path.join(M4_SIM_DIR, "asic_preds.csv")
     if os.path.exists(cosim_csv):
         data = np.loadtxt(cosim_csv, delimiter=",", dtype=int).flatten()
         n_got = min(len(data), n_expected)
@@ -262,7 +261,7 @@ def load_asic_preds(n_expected):
             print(f"  Loaded ASIC predictions from cocotb: {cosim_csv}")
         return data[:n_got], "ASIC RTL\n(cocotb simulation)", n_got
 
-    hex_path = os.path.join(M4_TB_DIR, "expected_preds.hex")
+    hex_path = os.path.join(M4_SIM_DIR, "expected_preds.hex")
     if os.path.exists(hex_path):
         preds = []
         with open(hex_path) as f:
@@ -352,7 +351,7 @@ def main():
         fontsize=12, fontweight="bold", y=1.02)
     plt.tight_layout()
 
-    out_path = os.path.join(SCRIPT_DIR, "confusion_comparison_m5.png")
+    out_path = os.path.join(SCRIPT_DIR, "confusion_comparison_m4.png")
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"\n  Saved → {out_path}")
@@ -366,7 +365,7 @@ def main():
     asic_avg_w    = asic_active_w * (asic_time_s * BEATS_PER_SEC)
 
     report = f"""
-Optimal sklearn vs. ASIC — ECE410 SVM ASIC (m5)
+Optimal sklearn vs. ASIC — ECE410 SVM ASIC (m4)
 ================================================
 Dataset : MIT-BIH 5-class arrhythmia, {N_eval} test samples
 Features: 256-dim (128 single-beat + 64 10-beat + 64 100-beat context)
