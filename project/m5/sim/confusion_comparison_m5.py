@@ -209,16 +209,17 @@ def load_mitbih_beats(max_per_class=300):
     return beats
 
 def build_dataset(n_per_class=300):
-    print("\n=== Loading dataset (256-dim multi-scale features) ===")
+    print("\n=== Loading MIT-BIH dataset (256-dim multi-scale features, real data only) ===")
     real = load_mitbih_beats(max_per_class=n_per_class)
-    rng  = np.random.default_rng(42)
     X, y = [], []
     for cls in range(NUM_CLASSES):
-        rb=real.get(cls,[]); n_real=len(rb); n_syn=max(0, n_per_class-n_real)
-        for b in rb: X.append(b); y.append(cls)
-        for b in SYNTH_FNS[cls](n_syn, rng): X.append(b); y.append(cls)
-        print(f"  Class {cls} ({CLASS_NAMES[cls]:7s}): "
-              f"{n_real:3d} real + {n_syn:3d} synthetic")
+        for b in real.get(cls, []):
+            X.append(b)
+            y.append(cls)
+    if not X:
+        raise RuntimeError("No real MIT-BIH beats found. Install wfdb: pip install wfdb")
+    for cls in range(NUM_CLASSES):
+        print(f"  Class {cls} ({CLASS_NAMES[cls]:7s}): {len(real.get(cls, []))} real beats")
     return np.array(X, np.float32), np.array(y, np.int32)
 
 # ─────────────────────────────────────────────────────────────────────────────
