@@ -19,8 +19,9 @@ PDK_ROOT=$SCRATCH/pdk
 
 echo "=== mpw_precheck on $(hostname) at $(date) ==="
 
-# --- Pull latest repo state (skip LFS smudge — GDS files already present locally) ---
-GIT_LFS_SKIP_SMUDGE=1 git -C $CARAVEL pull --ff-only || echo "WARNING: git pull failed"
+# --- Pull latest repo state (reset to origin/main; skip LFS smudge) ---
+GIT_LFS_SKIP_SMUDGE=1 git -C $CARAVEL fetch origin
+GIT_LFS_SKIP_SMUDGE=1 git -C $CARAVEL reset --hard origin/main
 
 # --- Verify required artifacts exist ---
 echo "--- Checking required files ---"
@@ -52,11 +53,10 @@ fi
 mkdir -p $CARAVEL/precheck_results
 
 echo "--- Running mpw-precheck ---"
-apptainer exec \
+apptainer run \
     --bind $CARAVEL:/project \
     --bind $PDK_ROOT:/pdk \
     $PRECHECK_SIF \
-    python3 /usr/local/bin/precheck.py \
         --input-directory /project \
         --pdk-path /pdk \
         --output-directory /project/precheck_results \
