@@ -10,7 +10,7 @@ SIM      = icarus
 TOPLEVEL = user_project_wrapper
 MODULE   = tb_wb_cosim
 
-RTL_DIR  = ../../m4/rt1
+RTL_DIR  = ../../m5/rt1
 
 VERILOG_SOURCES  = $(RTL_DIR)/user_project_wrapper.sv
 VERILOG_SOURCES += $(RTL_DIR)/svm_compute_core.sv
@@ -21,7 +21,6 @@ COMPILE_ARGS += -g2012
 COMPILE_ARGS += -DMPRJ_IO_PADS=38
 COMPILE_ARGS += -Wno-timescale
 
-EXTRA_ARGS += --timescale=1ns/1ps
 
 # cocotb Python dependencies (must be installed in the active virtualenv)
 # pip install cocotb scikit-learn numba wfdb matplotlib numpy

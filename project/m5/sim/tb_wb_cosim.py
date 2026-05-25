@@ -1,66 +1,66 @@
 """
-tb_wb_cosim.py — ECE410 m5 Wishbone Interface cocotb Simulation
-================================================================
-Exercises user_project_wrapper through its Wishbone register interface.
-ALL feature writes, configuration, and result reads go through WB registers.
-The off-chip SV RAM is modeled in Python, responding to GPIO/LA signals.
+tb_wb_cosim.py — ECE410 m5 Batch Architecture cocotb Simulation  (v8)
+======================================================================
+Exercises user_project_wrapper with the batch RBF-SVM architecture.
 
-Protocol per sample:
-  1. Write NUM_SAMPLES = 1 (one-time)
-  2. Write NUM_SV[0..4] matching sklearn SV counts (one-time)
-  3. Write PARAM_WR to set gamma (one-time)
-  4. Write CONTROL = 0x0A  → set vbatt_ok=1, kern_ready=1, wait 3 clocks
-  5. Per sample: write CONTROL = 0x0B (start pulse)
-  6. Write 256 × FIFO_DATA (feature words, Q6.10, 16-bit signed)
-  7. Wait for GPIO[3] (io_out[3] = svm_done)
-  8. Capture class from GPIO[2:0] (io_out[2:0] = class_out_r)
+Host pre-loads both the SV matrix and the input matrix into a Python
+SRAM model, fires start once, then the ASIC autonomously classifies
+all samples.  Results are captured per-sample via GPIO.
+
+Off-chip RAM layout  (row × FEATURE_DIM, FEATURE_DIM = 256):
+  Rows  0..249         SV matrix      (250 × 256 × 2 B = 128 KB)
+  Rows  250..1249      input batch    (1000 × 256 × 2 B = 512 KB max)
+
+GPIO signals (io_out):
+  [2:0]   class_out   — stable when sample_rdy fires
+  [3]     sample_rdy  — pulses one cycle per classified heartbeat
+  [4]     svm_done    — pulses once at end of batch
+  [28:10] ram_addr    — 19-bit off-chip address (output from ASIC)
+  [29]    ram_ren     — off-chip read enable   (output from ASIC)
+
+la_data_in[15:0] = ram_rdata  (host drives, 1-cycle latency after ren)
 
 Outputs:
-  asic_preds.csv  — one integer class (0-4) per test sample
-  (consumed by confusion_comparison_m5.py for the ASIC column)
-
-Run: make cosim   (from project/m5/sim/)
+  asic_preds.csv — one integer class (0-4) per test sample
 """
 
-import os, sys, warnings, math, ctypes, csv
+import os, warnings, ctypes, csv
 import numpy as np
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, Timer
+from cocotb.triggers import RisingEdge
 from sklearn.svm import SVC
 from sklearn.model_selection import train_test_split
 
 warnings.filterwarnings("ignore")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Constants — must match svm_compute_core.sv
+# Constants — must match svm_compute_core.sv parameters
 # ─────────────────────────────────────────────────────────────────────────────
 FRAC_BITS        = 10
-SCALE            = 1 << FRAC_BITS   # 1024
+SCALE            = 1 << FRAC_BITS        # 1024
 FEATURE_DIM      = 256
 FEAT_SINGLE      = 128
 FEAT_10BEAT      = 64
 FEAT_100RR       = 64
 NUM_CLASSES      = 5
 MAX_SV_PER_CLASS = 50
+NUM_SV_ROWS      = 250   # RTL NUM_SV — input matrix starts at this row index
+MAX_BATCH_SIZE   = 1000  # RTL MAX_BATCH_SIZE
 CLASS_NAMES      = ["Normal", "PVC", "AFib", "VT", "SVT"]
 DEFAULT_GAMMA    = 0.25
 NORMAL_RR        = 308
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Wishbone register addresses (base 0x30000000)
-WB_FIFO_DATA   = 0x30000000
+# Wishbone addresses (base 0x3000_0000) — FIFO_DATA removed in v8
 WB_CONTROL     = 0x30000004
-WB_STATUS      = 0x30000008
 WB_NUM_SAMPLES = 0x3000000C
 WB_NUM_SV      = [0x30000010, 0x30000014, 0x30000018, 0x3000001C, 0x30000020]
 WB_PARAM_WR    = 0x30000024
-WB_WORK_RD     = 0x30000038
-WB_STATUS2     = 0x3000003C
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Dataset (identical to confusion_comparison_m5.py — same random_state → same split)
+# Synthetic dataset  (identical generator to confusion_comparison_m5.py)
 # ─────────────────────────────────────────────────────────────────────────────
 def _gauss(t, mu, sig, a): return a * np.exp(-0.5 * ((t - mu) / sig) ** 2)
 
@@ -137,7 +137,6 @@ def load_mitbih_beats(max_per_class=300):
         if all(len(v) >= max_per_class for v in beats.values()):
             break
         try:
-            import wfdb
             sig, _ = wfdb.rdsamp(rec, pn_dir='mitdb')
             ann    = wfdb.rdann(rec, 'atr', pn_dir='mitdb')
         except Exception:
@@ -157,7 +156,8 @@ def load_mitbih_beats(max_per_class=300):
             rh = np.array(rr_hist[-100:], dtype=float)/NORMAL_RR
             ctx100 = np.concatenate([np.resize(rh,(FEAT_100RR//2,)),
                                      np.full(FEAT_100RR//2, np.std(rh))])
-            beats[cls].append(np.concatenate([win[:FEAT_SINGLE].astype(np.float32), ctx10, ctx100]).astype(np.float32))
+            beats[cls].append(np.concatenate(
+                [win[:FEAT_SINGLE].astype(np.float32), ctx10, ctx100]).astype(np.float32))
             rr_hist.append(rr); rr_hist = rr_hist[-100:]
             prev_idx = idx
     return beats
@@ -174,10 +174,21 @@ def build_dataset(n_per_class=300):
     return np.array(X, np.float32), np.array(y, np.int32)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Wishbone Bus Functional Model
+# Quantisation helpers
+# ─────────────────────────────────────────────────────────────────────────────
+def q10_u16(x):
+    """Float → unsigned Q6.10 bit pattern (for SV features and gamma)."""
+    return ctypes.c_uint16(int(round(x * SCALE))).value
+
+def feats_to_q16(X):
+    """Float array → int16 Q6.10 (for input feature matrix)."""
+    return (np.clip(np.round(X * SCALE).astype(np.int64), -(1<<15), (1<<15)-1)
+            .astype(np.int16))
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Wishbone BFM
 # ─────────────────────────────────────────────────────────────────────────────
 async def wb_write(dut, addr, data):
-    """Single Wishbone write: assert cyc+stb+we, wait for ack, deassert."""
     dut.wbs_stb_i.value = 1
     dut.wbs_cyc_i.value = 1
     dut.wbs_we_i.value  = 1
@@ -192,7 +203,6 @@ async def wb_write(dut, addr, data):
     dut.wbs_we_i.value  = 0
 
 async def wb_read(dut, addr):
-    """Single Wishbone read: assert cyc+stb, wait for ack, return data."""
     dut.wbs_stb_i.value = 1
     dut.wbs_cyc_i.value = 1
     dut.wbs_we_i.value  = 0
@@ -207,73 +217,98 @@ async def wb_read(dut, addr):
     return val
 
 # ─────────────────────────────────────────────────────────────────────────────
-# SV RAM model — responds to GPIO sv_ram_ren / sv_ram_addr with LA sv_rdata
+# Unified off-chip RAM model
 # ─────────────────────────────────────────────────────────────────────────────
-async def sv_ram_model(dut, sv_data_q):
+async def ram_model(dut, ram):
     """
-    Emulates off-chip SV RAM (1-cycle read latency).
+    Emulates off-chip SRAM serving both SVs and input vectors (1-cycle latency).
 
-    The hardware drives:
-      io_out[25]      = sv_ram_ren  (combinational from feat_rd_en)
-      sv_ram_addr_w   = {sv_base[9:0], feat_rd_addr[7:0]}  (18 bits, internal wire)
+    Address map (row × FEATURE_DIM):
+      Rows 0..NUM_SV_ROWS-1      SV matrix
+      Rows NUM_SV_ROWS..1249     input matrix
 
-    We respond by writing la_data_in[15:0] = sv_data_q[addr] after each clock
-    where ren is high. This models the 1-cycle SRAM read latency expected by the RTL.
+    Monitors io_out[29]=ram_ren, io_out[28:10]=ram_addr.
+    Responds on la_data_in[15:0] = ram[addr] at the next delta after each ren edge.
+    Falls back to reading internal signals directly if the hierarchy is accessible.
     """
     while True:
         await RisingEdge(dut.wb_clk_i)
         try:
-            ren = int(dut.sv_ram_ren_w.value)
+            ren  = int(dut.u_svm.ram_ren.value)
+            addr = int(dut.u_svm.ram_addr.value)
         except Exception:
-            ren = (int(dut.io_out.value) >> 25) & 0x1
+            io_val = int(dut.io_out.value)
+            ren    = (io_val >> 29) & 0x1
+            addr   = (io_val >> 10) & 0x7FFFF   # bits [28:10] = 19 bits
         if ren:
-            try:
-                addr = int(dut.sv_ram_addr_w.value)
-            except Exception:
-                addr = (int(dut.io_out.value) >> 10) & 0x7FFF
-            word = int(sv_data_q[addr]) if addr < len(sv_data_q) else 0
+            word   = ram.get(addr, 0)
             la_val = int(dut.la_data_in.value)
             dut.la_data_in.value = (la_val & ~0xFFFF) | (word & 0xFFFF)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Quantization helpers
+# RAM builder helpers
 # ─────────────────────────────────────────────────────────────────────────────
-def q10_u16(x):
-    return ctypes.c_uint16(int(round(x * SCALE))).value
+def load_sv_ram(ram, clf, sv_counts):
+    """Populate SV rows (0..NUM_SV_ROWS-1) in the shared RAM dict."""
+    sv_row = 0
+    sv_offset_in_clf = 0
+    for c in range(NUM_CLASSES):
+        n   = sv_counts[c]
+        svs = clf.support_vectors_[sv_offset_in_clf: sv_offset_in_clf + n]
+        for sv in svs:
+            base = sv_row * FEATURE_DIM
+            for fi, f in enumerate(sv):
+                ram[base + fi] = q10_u16(f)
+            sv_row += 1
+        sv_offset_in_clf += clf.n_support_[c]
 
-def feats_to_q16(X):
-    return (np.clip(np.round(X * SCALE).astype(np.int64), -(1<<15), (1<<15)-1)
-            .astype(np.int16))
+def load_input_ram(ram, X_batch_q):
+    """Populate input rows (NUM_SV_ROWS..) in the shared RAM dict."""
+    for sample_idx, feat_q in enumerate(X_batch_q):
+        base = (NUM_SV_ROWS + sample_idx) * FEATURE_DIM
+        for fi, f in enumerate(feat_q):
+            ram[base + fi] = int(f) & 0xFFFF
+
+def clear_input_ram(ram, n_samples):
+    """Remove input rows from the shared RAM dict between batches."""
+    for sample_idx in range(n_samples):
+        base = (NUM_SV_ROWS + sample_idx) * FEATURE_DIM
+        for fi in range(FEATURE_DIM):
+            ram.pop(base + fi, None)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Main cocotb test
 # ─────────────────────────────────────────────────────────────────────────────
 @cocotb.test()
-async def run_wb_cosim(dut):
+async def run_batch_cosim(dut):
     """
-    Full Wishbone interface classification sweep.
-    Writes all feature vectors via FIFO_DATA register, reads class labels
-    from GPIO[2:0] (io_out[2:0]) after the done pulse on GPIO[3].
-    Outputs: asic_preds.csv
-    """
-    # ── Clock & reset ────────────────────────────────────────────────────────
-    cocotb.start_soon(Clock(dut.wb_clk_i, 25, unit="ns").start())
+    Batch RBF-SVM classification sweep.
 
-    dut.wb_rst_i.value = 1
+    Protocol:
+      1. Train sklearn SVM, build sv_counts.
+      2. One-time WB config: NUM_SV, PARAM_WR, CONTROL=vbatt_ok.
+      3. For each batch of up to MAX_BATCH_SIZE samples:
+         a. Populate shared RAM (SVs + input vectors).
+         b. Write NUM_SAMPLES, fire CONTROL=start.
+         c. Capture class_out on every sample_rdy pulse (GPIO[3]).
+         d. Stop after svm_done (GPIO[4]) or N_batch captures.
+    """
+    # ── Clock & reset ─────────────────────────────────────────────────────────
+    cocotb.start_soon(Clock(dut.wb_clk_i, 25, unit="ns").start())
+    dut.wb_rst_i.value  = 1
     dut.wbs_stb_i.value = 0
     dut.wbs_cyc_i.value = 0
     dut.wbs_we_i.value  = 0
     dut.wbs_sel_i.value = 0xF
     dut.wbs_dat_i.value = 0
-    dut.wbs_adr_i.value = 0x30000000
+    dut.wbs_adr_i.value = WB_CONTROL
     dut.la_data_in.value = 0
-    dut.io_in.value = 0
-
+    dut.io_in.value      = 0
     for _ in range(12): await RisingEdge(dut.wb_clk_i)
     dut.wb_rst_i.value = 0
     for _ in range(5):  await RisingEdge(dut.wb_clk_i)
 
-    # ── Train sklearn SVM (same params as confusion_comparison_m5.py) ────────
+    # ── Train sklearn SVM ─────────────────────────────────────────────────────
     print("\n[cosim] Training sklearn RBF SVM...")
     X, y = build_dataset(n_per_class=300)
     X_tr, X_te, y_tr, y_te = train_test_split(
@@ -281,93 +316,91 @@ async def run_wb_cosim(dut):
     clf = SVC(kernel="rbf", gamma=DEFAULT_GAMMA, C=1.0,
               decision_function_shape="ovr", random_state=42)
     clf.fit(X_tr, y_tr)
-    print(f"[cosim] SVs per class: {clf.n_support_}  total: {clf.n_support_.sum()}")
-
-    # ── Build SV RAM flat array (Q6.10, 16-bit unsigned) ─────────────────────
     sv_counts = np.minimum(clf.n_support_, MAX_SV_PER_CLASS).astype(int)
     sv_total  = int(sv_counts.sum())
-    sv_data_q = np.zeros(sv_total * FEATURE_DIM, dtype=np.uint16)
-    sv_start_in_clf = 0
-    sv_offset = 0
-    for c in range(NUM_CLASSES):
-        n = sv_counts[c]
-        svs = clf.support_vectors_[sv_start_in_clf: sv_start_in_clf + n]
-        for sv in svs:
-            for fi, f in enumerate(sv):
-                sv_data_q[sv_offset * FEATURE_DIM + fi] = q10_u16(f)
-            sv_offset += 1
-        sv_start_in_clf += clf.n_support_[c]
+    print(f"[cosim] SVs per class: {sv_counts}  total: {sv_total}")
 
-    print(f"[cosim] SV RAM: {sv_total} SVs × {FEATURE_DIM} features = "
-          f"{len(sv_data_q)} words ({len(sv_data_q)*2/1024:.1f} KB)")
-
-    # ── Start SV RAM model background coroutine ───────────────────────────────
-    cocotb.start_soon(sv_ram_model(dut, sv_data_q))
-
-    # ── Configure via WB registers (one-time setup) ───────────────────────────
-    print("[cosim] Configuring DUT via Wishbone...")
-    await wb_write(dut, WB_NUM_SAMPLES, 1)
-    for c in range(NUM_CLASSES):
-        await wb_write(dut, WB_NUM_SV[c], sv_counts[c])
-    # Write gamma via PARAM_WR: [19]=en [18:16]=addr(0=gamma) [15:0]=Q6.10 value
-    gamma_q = q10_u16(DEFAULT_GAMMA)
-    await wb_write(dut, WB_PARAM_WR, (1 << 19) | (0 << 16) | gamma_q)
-
-    # ── Set vbatt_ok=1, kern_ready=1 persistently (CONTROL = 0x0A) ───────────
-    # vbatt_ok passes through a 2-FF synchronizer; must be stable before start.
-    await wb_write(dut, WB_CONTROL, 0x0A)
-    for _ in range(6):  # 6 cycles > 2-FF sync delay
-        await RisingEdge(dut.wb_clk_i)
-
-    # ── Classify all test samples through the WB interface ───────────────────
     X_te_q = feats_to_q16(X_te)
     N_eval  = len(X_te_q)
-    preds   = []
 
-    # Upper bound on compute cycles per sample (generous): SVs × dims + FIFO + overhead
-    MAX_WAIT = sv_total * FEATURE_DIM + FEATURE_DIM * 4 + 2048
+    # ── One-time WB config ────────────────────────────────────────────────────
+    print("[cosim] Configuring DUT...")
+    for c in range(NUM_CLASSES):
+        await wb_write(dut, WB_NUM_SV[c], int(sv_counts[c]))
+    gamma_q = q10_u16(DEFAULT_GAMMA)
+    await wb_write(dut, WB_PARAM_WR, (1 << 19) | (0 << 16) | gamma_q)
+    # Assert vbatt_ok=1 (bit 1) and wait for 2-FF synchroniser
+    await wb_write(dut, WB_CONTROL, 0x02)
+    for _ in range(6): await RisingEdge(dut.wb_clk_i)
 
-    print(f"[cosim] Classifying {N_eval} samples (max {MAX_WAIT} cycles each)...")
+    # ── Shared RAM dict + persistent background RAM model ─────────────────────
+    ram = {}
+    load_sv_ram(ram, clf, sv_counts)
+    cocotb.start_soon(ram_model(dut, ram))
+    print(f"[cosim] SV RAM loaded: {sv_total} SVs × {FEATURE_DIM} features")
 
-    for i, feat_q in enumerate(X_te_q):
-        # Step 1: Pulse start=1 (auto-clears after 1 clock); keep vbatt_ok=1, kern_ready=1
-        await wb_write(dut, WB_CONTROL, 0x0B)
+    # ── Process in batches of MAX_BATCH_SIZE ──────────────────────────────────
+    all_preds = []
+    batch_start = 0
 
-        # Step 2: Write 256 feature words to FIFO_DATA
-        for f in feat_q:
-            await wb_write(dut, WB_FIFO_DATA, int(f) & 0xFFFF)
+    # Generous per-sample cycle budget: LOAD_INPUT + sv_total × (dist+kernel) + overhead
+    cycles_per_sample = FEATURE_DIM + 2 + sv_total * (FEATURE_DIM + 22) + 10
 
-        # Step 3: Wait for done via GPIO[3] = io_out[3] = svm_done
-        class_out = None
-        for _ in range(MAX_WAIT):
+    while batch_start < N_eval:
+        batch_end = min(batch_start + MAX_BATCH_SIZE, N_eval)
+        X_batch   = X_te_q[batch_start:batch_end]
+        N_batch   = batch_end - batch_start
+
+        # Load this batch's input vectors into RAM
+        load_input_ram(ram, X_batch)
+
+        # Write batch size and fire start (vbatt_ok=1 + start=1 → CONTROL = 0x03)
+        await wb_write(dut, WB_NUM_SAMPLES, N_batch)
+        await wb_write(dut, WB_CONTROL, 0x03)
+
+        print(f"[cosim] Batch {batch_start}..{batch_end-1} started "
+              f"({N_batch} samples, ~{N_batch * cycles_per_sample:,} cycles)")
+
+        # ── Capture per-sample results ─────────────────────────────────────────
+        # sample_rdy = io_out[3]  (1-cycle pulse per heartbeat)
+        # svm_done   = io_out[4]  (1-cycle pulse at end of batch)
+        # class_out  = io_out[2:0] (stable on same cycle as sample_rdy)
+        batch_preds = []
+        MAX_CYCLES  = N_batch * cycles_per_sample + 10_000
+
+        for cyc in range(MAX_CYCLES):
             await RisingEdge(dut.wb_clk_i)
             io_val = int(dut.io_out.value)
-            if io_val & 0x8:          # bit 3 = svm_done (1-cycle pulse)
-                class_out = io_val & 0x7   # bits [2:0] = class_out_r
+
+            if (io_val >> 3) & 0x1:               # sample_rdy
+                batch_preds.append(io_val & 0x7)
+                if len(batch_preds) == N_batch:
+                    break
+
+            if (io_val >> 4) & 0x1:               # svm_done (batch done)
+                if len(batch_preds) < N_batch:
+                    print(f"[cosim] WARNING: svm_done but only "
+                          f"{len(batch_preds)}/{N_batch} captures")
                 break
+        else:
+            print(f"[cosim] ERROR: timeout after {MAX_CYCLES} cycles "
+                  f"({len(batch_preds)}/{N_batch} captured)")
 
-        if class_out is None:
-            # Timeout fallback: read work_ram[0] via WORK_RD → STATUS2
-            await wb_write(dut, WB_WORK_RD, 0)
-            s2 = await wb_read(dut, WB_STATUS2)
-            class_out = s2 & 0x7
-            print(f"[cosim] WARNING: sample {i} timed out — fallback class={class_out}")
+        all_preds.extend(batch_preds)
+        clear_input_ram(ram, N_batch)
+        batch_start = batch_end
 
-        preds.append(class_out)
+        acc = sum(p == t for p, t in zip(all_preds, y_te[:len(all_preds)])) / len(all_preds)
+        print(f"[cosim] {len(all_preds)}/{N_eval} classified   running acc = {acc:.2%}")
 
-        if (i + 1) % 60 == 0:
-            acc_so_far = sum(p == t for p, t in zip(preds, y_te[:len(preds)])) / len(preds)
-            print(f"[cosim]   {i+1}/{N_eval} classified  running acc={acc_so_far:.2%}")
-
-    # ── Write CSV ─────────────────────────────────────────────────────────────
+    # ── Write predictions CSV ─────────────────────────────────────────────────
     out_csv = os.path.join(SCRIPT_DIR, "asic_preds.csv")
     with open(out_csv, "w", newline="") as f:
         writer = csv.writer(f)
-        for p in preds:
+        for p in all_preds:
             writer.writerow([p])
 
-    # Final accuracy
-    acc = sum(p == t for p, t in zip(preds, y_te)) / N_eval
-    print(f"\n[cosim] ASIC accuracy: {acc:.4f}  ({int(acc*N_eval)}/{N_eval})")
-    print(f"[cosim] Saved {len(preds)} predictions → {out_csv}")
+    acc = sum(p == t for p, t in zip(all_preds, y_te)) / N_eval
+    print(f"\n[cosim] ASIC accuracy : {acc:.4f}  ({int(acc*N_eval)}/{N_eval})")
+    print(f"[cosim] Saved {len(all_preds)} predictions → {out_csv}")
     print(f"[cosim] Run: python3 confusion_comparison_m5.py  to generate the plot")

@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 // Functional simulation stubs for sky130 standard cells
 // Used in tb_wb_cosim when PDK models are not on the icarus search path.
 
