@@ -53,6 +53,7 @@ apptainer exec \
     --env UPRJ_ROOT=$CARAVEL \
     --env GCC_PATH=/foss/tools/riscv-gnu-toolchain-rv32i/217e7f3debe424d61374d31e33a091a630535937/bin \
     --env GCC_PREFIX=riscv32-unknown-linux-gnu \
+    --env PATH=/foss/tools/iverilog/cc0a8c8dd2fef69c4f7fb8219542b1c03a71a3b4/bin:/foss/tools/riscv-gnu-toolchain-rv32i/217e7f3debe424d61374d31e33a091a630535937/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     $DV_SIF \
     bash -c "
         set -e
