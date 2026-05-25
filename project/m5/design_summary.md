@@ -141,6 +141,15 @@ Battery budget: 200 mAh @ 3.7V = 740 mWh → **740 h / 1.04 mW ≈ 711 hours (~2
 
 ---
 
+## Acknowledgments
+
+Place-and-route was performed on **Orca**, Portland State University's high-performance
+computing cluster, using SLURM batch jobs with OpenLane 2 v2.3.10 inside a Singularity
+container.  We thank the PSU Research Computing team for providing access to the GPU and
+CPU nodes that made the multi-hour OpenLane runs feasible.
+
+---
+
 ## Feature Extraction References
 
 The 256-dim multi-scale feature vector follows established AAMI EC57 beat

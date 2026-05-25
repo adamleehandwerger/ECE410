@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Caravel user_project_wrapper — 5-class RBF-SVM Cardiac Arrhythmia Classifier
-// ECE410, Portland State University  |  Milestone: m5  (batch architecture)
+// ECE410, Portland State University  |  Milestone: m4  (batch architecture)
 //
 // Batch architecture (v8):
 //   Host collects 1000 beats at low power, extracts 256-dim features,
@@ -11,8 +11,8 @@
 //
 // Off-chip RAM (shared bus, host serves from SRAM):
 //   Address layout: {row[10:0], col[7:0]} = 19-bit
-//   Rows  0..249        SV matrix      (250 × 256 × 2 B = 128 KB)
-//   Rows  250..1249     input matrix   (1000 × 256 × 2 B = 512 KB)
+//   Rows  0..499        SV matrix      (500 × 256 × 2 B = 256 KB)
+//   Rows  500..1499     input matrix   (1000 × 256 × 2 B = 512 KB)
 //   GPIO[28:10] = ram_addr[18:0]  (output)
 //   GPIO[29]    = ram_ren          (output)
 //   LA[15:0]    = ram_rdata[15:0] (input from host)

@@ -1,36 +1,26 @@
-DRC Report — svm_compute_core (OpenLane 2 Classic, job 91947)
-==============================================================
+DRC Report — svm_compute_core (OpenLane 2 Classic, job 91966)
+=============================================================
 
 Design Name  : svm_compute_core
 Tool         : OpenLane 2 v2.3.10 (OpenROAD / TritonRoute integrated)
-Run          : job 91947, tag core_harden, sky130A / sky130_fd_sc_hd
+Run          : job 91966, tag core_harden, sky130A / sky130_fd_sc_hd
+NUM_SV       : 500 (100 per class)
 Routing layers: li1 – met4 (signal + clock), RT_MAX_LAYER=met4
 
 Result
 ------
-  DRC violations : 0
+  DRC violations : 0  ✅
   Power grid violations (VPWR) : 0
   Power grid violations (VGND) : 0
   Disconnected pins : 0
   Floating nets    : 0
 
-Post-Route Checks (OpenLane metrics.json)
-------------------------------------------
-  design__power_grid_violation__count : 0
-  timing__drv__floating__nets         : 0
-  timing__drv__floating__pins         : 0
-
-Notes
------
-  OL2 Classic flow runs TritonRoute internally via the OpenROAD apptainer SIF.
-  No met5 probe cells are present (sky130_fd_sc_hd standard cells only).
-  The manual probe_p_8/probec_p_8 → buf_8 substitution required in earlier
-  manual DRT flows (m4 drt_v12/v13) is not needed under OL2's controlled
-  synthesis + placement pipeline — probe cells are not inferred by Yosys.
+Artifacts
+---------
+  GDS : 226 MB (Magic stream-out)
+  LEF :  94 KB
 
 KLayout DRC
 -----------
   RUN_KLAYOUT_DRC : false  (disabled; ruby not available on Orca compute nodes)
   RUN_KLAYOUT_XOR : false  (disabled; same reason)
-  Magic stream-out GDS is authoritative; KLayout GDS also generated (98 MB).
-  Magic GDS : 181 MB (step 51-magic-streamout)
