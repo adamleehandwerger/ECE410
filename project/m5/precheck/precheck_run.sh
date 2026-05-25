@@ -19,8 +19,8 @@ PDK_ROOT=$SCRATCH/pdk
 
 echo "=== mpw_precheck on $(hostname) at $(date) ==="
 
-# --- Pull latest repo state ---
-git -C $CARAVEL pull --ff-only || echo "WARNING: git pull failed"
+# --- Pull latest repo state (skip LFS smudge — GDS files already present locally) ---
+GIT_LFS_SKIP_SMUDGE=1 git -C $CARAVEL pull --ff-only || echo "WARNING: git pull failed"
 
 # --- Verify required artifacts exist ---
 echo "--- Checking required files ---"
@@ -30,7 +30,8 @@ for f in \
     $CARAVEL/lef/svm_compute_core.lef \
     $CARAVEL/lef/user_project_wrapper.lef \
     $CARAVEL/verilog/gl/svm_compute_core.v \
-    $CARAVEL/verilog/gl/user_project_wrapper.v; do
+    $CARAVEL/verilog/gl/user_project_wrapper.v \
+    $CARAVEL/info.yaml; do
     if [ -f "$f" ]; then
         echo "  OK: $(basename $f) ($(du -sh $f | cut -f1))"
     else
@@ -47,6 +48,8 @@ if [ ! -f $PRECHECK_SIF ]; then
     echo "--- Pulling mpw-precheck container ---"
     apptainer pull $PRECHECK_SIF docker://efabless/mpw_precheck:latest
 fi
+
+mkdir -p $CARAVEL/precheck_results
 
 echo "--- Running mpw-precheck ---"
 apptainer exec \
