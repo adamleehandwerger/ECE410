@@ -27,6 +27,10 @@ COMPILE_ARGS += -Wno-timescale
 
 include $(shell cocotb-config --makefiles)/Makefile.sim
 
+.PHONY: cosim
+cosim:
+	$(MAKE) sim
+
 .PHONY: plot
 plot: asic_preds.csv
 	python3 confusion_comparison_m5.py

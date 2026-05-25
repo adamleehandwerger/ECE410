@@ -72,7 +72,7 @@ module user_project_wrapper #(
     reg [9:0]  reg_num_samples;
     reg [7:0]  reg_num_sv [0:4];
     reg [19:0] reg_param_wr;
-    reg [23:0] reg_alpha_wr;   // [23:16]=sv_global_idx, [15:0]=alpha Q6.10
+    reg [24:0] reg_alpha_wr;   // [24:16]=sv_global_idx (9-bit), [15:0]=alpha Q6.10
     reg        alpha_wr_en_r;  // 1-cycle write-enable pulse to core
 
     // =========================================================================
@@ -146,7 +146,7 @@ module user_project_wrapper #(
                 6'h08: reg_num_sv[4]      <= wbs_dat_i[7:0];
                 6'h09: reg_param_wr       <= wbs_dat_i[19:0];
                 6'h0A: begin
-                    reg_alpha_wr  <= wbs_dat_i[23:0]; // [23:16]=sv_idx [15:0]=alpha
+                    reg_alpha_wr  <= wbs_dat_i[24:0]; // [24:16]=sv_idx [15:0]=alpha
                     alpha_wr_en_r <= 1'b1;
                 end
                 default: ;
@@ -228,7 +228,7 @@ module user_project_wrapper #(
         .kernel_ready    (1'b1),
         .class_scores_la (la_scores_w),
         .alpha_write_en  (alpha_wr_en_r),
-        .alpha_addr      (reg_alpha_wr[23:16]),
+        .alpha_addr      (reg_alpha_wr[24:16]),
         .alpha_data      (reg_alpha_wr[15:0])
     );
 

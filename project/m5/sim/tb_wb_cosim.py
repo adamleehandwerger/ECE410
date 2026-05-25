@@ -44,7 +44,7 @@ FEAT_SINGLE      = 128
 FEAT_10BEAT      = 64
 FEAT_100RR       = 64
 NUM_CLASSES      = 5
-MAX_SV_PER_CLASS = 50
+MAX_SV_PER_CLASS = 100
 NUM_SV_ROWS      = 250   # RTL NUM_SV — input matrix starts at this row index
 MAX_BATCH_SIZE   = 1000  # RTL MAX_BATCH_SIZE
 CLASS_NAMES      = ["Normal", "PVC", "AFib", "VT", "SVT"]
@@ -63,7 +63,7 @@ WB_CONTROL     = 0x30000004
 WB_NUM_SAMPLES = 0x3000000C
 WB_NUM_SV      = [0x30000010, 0x30000014, 0x30000018, 0x3000001C, 0x30000020]
 WB_PARAM_WR    = 0x30000024
-WB_ALPHA_WR    = 0x30000028  # [23:16]=sv_global_idx [15:0]=alpha Q6.10 signed
+WB_ALPHA_WR    = 0x30000028  # [24:16]=sv_global_idx (9-bit) [15:0]=alpha Q6.10 signed
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Feature extraction + ECG loader (real data only)
@@ -117,9 +117,11 @@ def load_mitbih_beats(max_per_class=300):
         ([f'I{i:02d}' for i in range(1, 76)], 'incartdb'),
     ]
     beats = {i: [] for i in range(NUM_CLASSES)}
+    recs_loaded = 0
     for rec_list, pn_dir in sources:
         if all(len(v) >= max_per_class for v in beats.values()):
             break
+        print(f"[cosim]   Scanning {pn_dir} ({len(rec_list)} records)...")
         for rec in rec_list:
             if all(len(v) >= max_per_class for v in beats.values()):
                 break
@@ -160,6 +162,16 @@ def load_mitbih_beats(max_per_class=300):
     return beats
 
 def build_dataset(n_per_class=300):
+    import os, hashlib, tempfile
+    cache_key = f"ecg_n{n_per_class}_d256"
+    cache_path = os.path.join(tempfile.gettempdir(), f"cosim_cache_{cache_key}.npz")
+    if os.path.exists(cache_path):
+        data = np.load(cache_path)
+        X, y = data["X"], data["y"]
+        counts = [int(np.sum(y == c)) for c in range(NUM_CLASSES)]
+        print(f"\n[cosim] Loaded from cache ({cache_path})")
+        print(f"[cosim] Real beats per class: {counts}  total: {sum(counts)}")
+        return X.astype(np.float32), y.astype(np.int32)
     print("\n[cosim] Loading ECG databases: MIT-BIH + SVDB + INCART (256-dim multi-scale features, real data only)...")
     real = load_mitbih_beats(max_per_class=n_per_class)
     X, y = [], []
@@ -171,7 +183,10 @@ def build_dataset(n_per_class=300):
         raise RuntimeError("No real MIT-BIH beats found. Install wfdb: pip install wfdb")
     counts = [len(real.get(c, [])) for c in range(NUM_CLASSES)]
     print(f"[cosim] Real beats per class: {counts}  total: {sum(counts)}")
-    return np.array(X, np.float32), np.array(y, np.int32)
+    Xa, ya = np.array(X, np.float32), np.array(y, np.int32)
+    np.savez_compressed(cache_path, X=Xa, y=ya)
+    print(f"[cosim] Dataset cached → {cache_path}")
+    return Xa, ya
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Quantisation helpers
@@ -324,20 +339,31 @@ async def run_batch_cosim(dut):
         svm_c.fit(X_tr, y_bin)
         binary_svms.append(svm_c)
 
-    # Select top SVs by |alpha| magnitude (keeps most impactful when truncating)
+    # Select top-MAX_SV_PER_CLASS SVs per class by |alpha| (signed, mixed-sign).
+    # The sklearn bias is calibrated for ALL SVs; after truncation the partial sum
+    # differs from the full score by a roughly-constant offset across samples.
+    # Bias is recalibrated as mean(full_sklearn_score - partial_hw_score) over
+    # the training set so the hardware decision boundary matches sklearn's.
+    from sklearn.metrics.pairwise import rbf_kernel as sk_rbf
     sv_vecs_per_class   = []
     sv_alphas_per_class = []
+    sv_biases           = []   # recalibrated per-class bias
     sv_counts = []
     for c in range(NUM_CLASSES):
         alphas = binary_svms[c].dual_coef_[0]   # signed: α_i * y_i
         svs    = binary_svms[c].support_vectors_
         n = min(len(alphas), MAX_SV_PER_CLASS)
-        if len(alphas) > MAX_SV_PER_CLASS:
-            top_idx = np.argsort(-np.abs(alphas))[:MAX_SV_PER_CLASS]
-        else:
-            top_idx = np.arange(len(alphas))
-        sv_vecs_per_class.append(svs[top_idx])
-        sv_alphas_per_class.append(alphas[top_idx])
+        top_idx = np.argsort(-np.abs(alphas))[:n] if len(alphas) > MAX_SV_PER_CLASS else np.arange(len(alphas))
+        sel_sv  = svs[top_idx]
+        sel_a   = alphas[top_idx]
+        # Recalibrate bias: bias_hw = mean(sklearn_decision(X_tr) - partial(X_tr))
+        K_tr       = sk_rbf(X_tr, sel_sv, gamma=DEFAULT_GAMMA)
+        partial_tr = (K_tr * sel_a).sum(axis=1)
+        full_tr    = binary_svms[c].decision_function(X_tr)
+        bias_hw    = float(np.mean(full_tr - partial_tr))
+        sv_vecs_per_class.append(sel_sv)
+        sv_alphas_per_class.append(sel_a)
+        sv_biases.append(bias_hw)
         sv_counts.append(n)
 
     sv_counts = np.array(sv_counts, dtype=int)
@@ -367,9 +393,9 @@ async def run_batch_cosim(dut):
     gamma_q = q10_u16(DEFAULT_GAMMA)
     await wb_write(dut, WB_PARAM_WR, (1 << 19) | (0 << 16) | gamma_q)
 
-    # Load per-class biases from binary SVM intercepts
+    # Load per-class biases (recalibrated for truncated top-50 SV set)
     for c in range(NUM_CLASSES):
-        bias_val = float(binary_svms[c].intercept_[0])
+        bias_val = sv_biases[c]
         bias_q   = q10_s16(bias_val)
         await wb_write(dut, WB_PARAM_WR, (1 << 19) | ((c + 2) << 16) | bias_q)
 

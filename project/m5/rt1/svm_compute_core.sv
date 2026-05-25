@@ -34,7 +34,7 @@ module svm_compute_core #(
     parameter int  FRAC_BITS      = 10,
     parameter int  DIST_WIDTH     = 20,
     parameter int  FEATURE_DIM    = 256,
-    parameter int  NUM_SV         = 250,
+    parameter int  NUM_SV         = 500,
     parameter int  MAX_BATCH_SIZE = 1000,
     parameter real DEFAULT_GAMMA  = 0.25,
     parameter real DEFAULT_C      = 1.0,
@@ -87,7 +87,7 @@ module svm_compute_core #(
 
     // Alpha dual-coefficient write port (Wishbone-driven)
     input  logic                    alpha_write_en,
-    input  logic [7:0]              alpha_addr,
+    input  logic [8:0]              alpha_addr,
     input  logic [DATA_WIDTH-1:0]   alpha_data
 );
 
@@ -187,7 +187,7 @@ module svm_compute_core #(
 
     // Weighted kernel: alpha_table[sv_base] × kernel_out  (Q6.10 × Q6.10 = Q12.20)
     logic signed [32:0] alpha_k_full;
-    assign alpha_k_full = $signed(alpha_table[sv_base[7:0]]) * $signed({1'b0, kernel_out});
+    assign alpha_k_full = $signed(alpha_table[sv_base[8:0]]) * $signed({1'b0, kernel_out});
 
     // FSM
     typedef enum logic [2:0] {
