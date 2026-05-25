@@ -1,0 +1,5 @@
+=== dv_run: svm_wb_test on orcaga03 at Mon May 25 02:53:51 PM PDT 2026 ===
+--- git pull caravel ---
+WARNING: git pull failed, using local state
+--- Running: make SIM=RTL TOOLCHAIN=GCC ---
+make: *** No rule to make target `svm_wb_test.hex', needed by `svm_wb_test.vvp'.  Stop.

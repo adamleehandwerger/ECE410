@@ -1,0 +1,20 @@
+From https://github.com/adamleehandwerger/caravel_svm_project
+   85f82eb..5366986  main       -> origin/main
+ * [new tag]         v2.0-hardened -> v2.0-hardened
+hint: Diverging branches can't be fast-forwarded, you need to either:
+hint:
+hint: 	git merge --no-ff
+hint:
+hint: or:
+hint:
+hint: 	git rebase
+hint:
+hint: Disable this message with "git config advice.diverging false"
+fatal: Not possible to fast-forward, aborting.
+INFO:    Converting OCI blobs to SIF format
+INFO:    Starting build...
+INFO:    Fetching OCI image...
+INFO:    Extracting OCI image...
+2026/05/25 14:54:14  warn rootless{usr/libexec/openssh/ssh-keysign} ignoring (usually) harmless EPERM on setxattr "user.rootlesscontainers"
+INFO:    Inserting Apptainer configuration...
+INFO:    Creating SIF file...

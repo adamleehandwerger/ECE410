@@ -1,0 +1,16 @@
+=== mpw_precheck on orcaga03 at Mon May 25 02:53:47 PM PDT 2026 ===
+WARNING: git pull failed
+--- Checking required files ---
+  OK: svm_compute_core.gds (227M)
+  OK: user_project_wrapper.gds (231M)
+  OK: svm_compute_core.lef (100K)
+  OK: user_project_wrapper.lef (200K)
+  OK: svm_compute_core.v (13M)
+  OK: user_project_wrapper.v (84K)
+  OK: info.yaml (4.0K)
+--- Pulling mpw-precheck container ---
+--- Running mpw-precheck ---
+/usr/bin/python3: can't open file '/usr/local/bin/precheck.py': [Errno 2] No such file or directory
+=== precheck done at Mon May 25 02:55:28 PM PDT 2026 ===
+=== Results ===
+/usr/bin/python3: can't open file '/usr/local/bin/precheck.py': [Errno 2] No such file or directory
