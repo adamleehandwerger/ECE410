@@ -84,6 +84,12 @@ tx(ax, HX+0.2+1.4, HY+5.0+0.38,
 tx(ax, HX+0.2+1.4, HY+5.0+0.75+0.28,
    "Raw ECG  (Lead II, 360 Hz)", sz=13, color="#555")
 
+bx(ax, HX+3.1, HY+5.0, HW-3.35, 0.75, C["offchip_face"], C["offchip_edge"], lw=1.2)
+tx(ax, HX+3.1+(HW-3.35)/2, HY+5.0+0.50,
+   "Off-chip SRAM", sz=10, color=C["tg"], weight="bold")
+tx(ax, HX+3.1+(HW-3.35)/2, HY+5.0+0.22,
+   "IS61WV51216  ·  512K×16", sz=9, color="#555")
+
 seg(ax, [HX+1.6, HX+1.6], [HY+5.0, HY+0.2+4.5], C["feat_edge"])
 tip(ax, HX+1.6, HY+0.2+4.5+0.05, HX+1.6, HY+0.2+4.45, C["feat_edge"])
 
@@ -152,7 +158,7 @@ tx(ax, PRX+PRW/2, PRY+0.30,
 PR_CY = PRY + PRH / 2
 seg(ax, [HX+HW, CBX, CBX+0.02], [PR_CY, PR_CY, PR_CY], C["config_edge"], lw=1.2)
 tip(ax, CBX, PR_CY, PRX, PR_CY, C["config_edge"], lw=1.3)
-tx(ax, (HX+HW + CBX)/2, PR_CY+0.28,
+tx(ax, (HX+HW + CBX)/2, PR_CY+0.52,
    "param_write_en / param_addr[2:0] / param_data[15:0]",
    sz=10, color=C["tp"])
 
