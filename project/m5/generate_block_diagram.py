@@ -124,14 +124,14 @@ tip(ax, HX+HW/2, HY, HX+HW/2, QY+QH, C["feat_edge"])
 
 # ── CARAVEL user_project_wrapper BOUNDARY ─────────────────────────
 # Outer boundary encompassing chip + wishbone interface
-WPX, WPY, WPW, WPH = 6.4, 4.6, 11.4, 16.6
+WPX, WPY, WPW, WPH = 6.4, 5.2, 11.4, 16.0
 bx(ax, WPX, WPY, WPW, WPH, C["wrap_face"], C["wrap_edge"], lw=1.5, ls="--")
 tx(ax, WPX+WPW/2, WPY+WPH-0.26,
    "user_project_wrapper  (Caravel SoC)",
    sz=11, color="#3050a0", weight="bold")
 
 # ── CHIP BOUNDARY (svm_compute_core + glue) ───────────────────────
-CBX, CBY, CBW, CBH = 6.7, 4.8, 11.0, 16.2
+CBX, CBY, CBW, CBH = 6.7, 5.3, 11.0, 15.7
 bx(ax, CBX, CBY, CBW, CBH, C["chip_face"], C["chip_edge"], lw=2.0, ls="--")
 tx(ax, CBX+CBW/2, CBY+0.25, "svm_compute_core  +  glue logic",
    sz=10, color="#888", weight="bold")
@@ -167,7 +167,7 @@ tx(ax, FIX+FIW/2, FIY+0.35,
    "GPIO[28:10]=addr[18:0]  GPIO[29]=ren  LA[15:0]=rdata", sz=10, color="#555")
 
 # ── FEATURE BANK ──────────────────────────────────────────────────
-FBX, FBY, FBW, FBH = 7.2, 15.3, 5.7, 2.2
+FBX, FBY, FBW, FBH = 7.2, 15.8, 5.7, 2.2
 bx(ax, FBX, FBY, FBW, FBH, C["feat_face"], C["feat_edge"], lw=1.5)
 tx(ax, FBX+FBW/2, FBY+FBH-0.30,
    "Feature Bank  (ON-CHIP REGs)", sz=12, color=C["tgr"], weight="bold")
@@ -178,7 +178,7 @@ tx(ax, FBX+FBW/2, FBY+0.35,
 
 
 # ── DISTANCE MATRIX ENGINE ────────────────────────────────────────
-DMX, DMY, DMW, DMH = 7.2, 12.8, 7.0, 2.2
+DMX, DMY, DMW, DMH = 7.2, 13.3, 7.0, 2.2
 bx(ax, DMX, DMY, DMW, DMH, C["compute_face"], C["compute_edge"],
    lw=2.0, ls="--")
 tx(ax, DMX+DMW/2, DMY+DMH-0.30,
@@ -198,7 +198,7 @@ tx(ax, FB_CX+0.12, (FBY+DMY+DMH)/2,
    "feature_in", sz=11, color=C["to"], ha="left")
 
 # ── LUT RANGE-REDUCTION HORNER ENGINE ────────────────────────────
-HEX, HEY, HEW, HEH = 7.2, 8.9, 7.0, 3.6
+HEX, HEY, HEW, HEH = 7.2, 9.4, 7.0, 3.6
 bx(ax, HEX, HEY, HEW, HEH, C["compute_face"], C["compute_edge"],
    lw=2.0, ls="--")
 tx(ax, HEX+HEW/2, HEY+HEH-0.30,
@@ -237,7 +237,7 @@ tx(ax, 17.0, (PRY+HE_CY)/2, "γ  (Q6.10)",
    sz=11, color=C["tp"], ha="left")
 
 # ── FSM CONTROLLER ────────────────────────────────────────────────
-FCX, FCY, FCW, FCH = 7.2, 6.6, 10.0, 2.0
+FCX, FCY, FCW, FCH = 7.2, 7.1, 10.0, 2.0
 bx(ax, FCX, FCY, FCW, FCH, C["compute_face"], C["compute_edge"],
    lw=2.0, ls="--")
 tx(ax, FCX+FCW/2, FCY+FCH-0.30,
@@ -257,8 +257,8 @@ tx(ax, HE_CX+0.12, (HEY+FCY+FCH)/2,
    "kernel_out / kernel_valid (Q6.10)", sz=11, color=C["tb"], ha="left")
 
 _de_y, _de_cx = FCY+1.5, 6.56
-seg(ax, [FCX, CBX, _de_cx, _de_cx], [_de_y, _de_y, _de_y, 18.5], "#444", lw=1.3)
-tip(ax, _de_cx, 18.5, HX+HW, 18.5, "#444", lw=1.3)
+seg(ax, [FCX, CBX, _de_cx, _de_cx], [_de_y, _de_y, _de_y, 19.0], "#444", lw=1.3)
+tip(ax, _de_cx, 19.0, HX+HW, 19.0, "#444", lw=1.3)
 tx(ax, CBX-0.10, _de_y+0.25, "done / error", sz=10, color="#444", ha="right")
 
 # ── vbatt_warn / vbatt_ok input pins ─────────────────────────────
@@ -279,7 +279,7 @@ tx(ax, SVX+SVW/2, SVY+SVH/2-0.05,
    sz=10, color="#333")
 
 # ── WORKSPACE RAM  (on-chip, routing-congestion fix) ──────────────
-WRX, WRY, WRW, WRH = 8.8, 5.05, 5.0, 1.35
+WRX, WRY, WRW, WRH = 8.8, 5.55, 5.0, 1.35
 bx(ax, WRX, WRY, WRW, WRH, C["feat_face"], C["feat_edge"], lw=1.5)
 tx(ax, WRX+WRW/2, WRY+WRH-0.28,
    "Workspace RAM  (ON-CHIP, regs)", sz=11, color=C["tgr"], weight="bold")
