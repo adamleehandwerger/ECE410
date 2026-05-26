@@ -70,9 +70,15 @@ Per-class breakdown (300 test samples, 60 per class):
 |--------|-----|-----------|-------------|
 | `ram_addr[18:0]` | GPIO[28:10] | ASIC out | {row[10:0], col[7:0]} |
 | `ram_ren` | GPIO[29] | ASIC out | Read strobe |
-| `ram_rdata[15:0]` | LA[15:0] | Host in→ASIC | 1-cycle latency response |
+| `ram_rdata[15:0]` | LA[15:0] | Host in→ASIC | Data valid after `RAM_LATENCY` cycles |
 
 Address layout: rows 0..499 = SV matrix; rows 500..1499 = input matrix.
+
+**`RAM_LATENCY` parameter** — configures the number of clock cycles between `ram_ren`
+assertion and valid `ram_rdata`. Default is 1 (same-cycle combinational SRAM model used
+in cosim). Set to 3 for the IS61WV51216 async SRAM (10 ns access at 40 MHz → 3-cycle
+pipeline). The core inserts wait states automatically; the host does not need to pad
+responses. Verified by `svm_ram_latency_tb.sv` (10-beat, LAT=3, PASS in ~208 cycles/beat).
 
 ### What the Host Does
 
@@ -86,13 +92,17 @@ MCU (low-power, continuous)
     │  5. Write alpha coefficients via ALPHA_WR (Wishbone 0x28)
     │  6. Fire CONTROL[start]
     │
-    ▼  ASIC takes over:
-    ├── LOAD_INPUT per beat: 256 cycles (reads from SRAM rows 500+)
-    ├── COMPUTE_DIST per SV: 258 cycles (reads SV from SRAM rows 0–499)
-    ├── COMPUTE_KERNEL: ~18 cycles (Horner LUT exp approximation)
+    ▼  ASIC takes over (timing shown for RAM_LATENCY=1 / RAM_LATENCY=3):
+    ├── LOAD_INPUT per beat:    256 / 768 cycles  (reads from SRAM rows 500+)
+    ├── COMPUTE_DIST per SV:   258 / 770 cycles  (reads SV from SRAM rows 0–499)
+    ├── COMPUTE_KERNEL: ~18 cycles (Horner LUT exp approximation, LAT-independent)
     └── WRITE_CLASS: argmax+alpha → sample_rdy (IRQ[0]) per beat
                     last beat → done (IRQ[1])
 ```
+
+Inference time scales linearly with `RAM_LATENCY`. At 40 MHz:
+- LAT=1 (cosim default): **3.23 ms / beat** (500 SVs × 256 dim)
+- LAT=3 (IS61WV51216 SRAM): **~9.7 ms / beat** — still well within the 750 ms heartbeat period
 
 ---
 
@@ -170,4 +180,4 @@ DOI: [10.13026/C2F305](https://doi.org/10.13026/C2F305)
 
 ---
 
-*Document version: m5/v9 · 2026-05-25 — hardening complete, cosim 97.67% = sklearn*
+*Document version: m5/v9 · 2026-05-26 — RAM_LATENCY parameter added; cosim 97.67% = sklearn*

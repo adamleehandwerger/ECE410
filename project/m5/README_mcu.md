@@ -305,11 +305,15 @@ Before the first beat, the MCU must:
 2. Write `NUM_SAMPLES` with the number of beats per batch.
 3. Write `PARAM_WR` entries to load gamma, C, and the five bias values.
 4. Set `vbatt_ok` in CONTROL.
-5. Supply SV RAM data on `LA[15:0]` in response to `GPIO[25]` (`sv_ram_ren`) and
-   `GPIO[24:10]` (`sv_ram_addr`) during each classification run.
+5. Pre-load the off-chip SRAM before asserting `start`:
+   - Rows 0–499: SV matrix (500 SVs × 256 features, Q6.10)
+   - Rows 500–1499: input matrix (up to 1000 beats × 256 features, Q6.10)
 
-The support vector data lives in host-side flash and is streamed to the core
-one word at a time via `LA[15:0]` — the MCU acts as the SV RAM controller.
+The ASIC reads both matrices autonomously via `GPIO[28:10]` (`ram_addr[18:0]`),
+`GPIO[29]` (`ram_ren`), and `LA[15:0]` (`ram_rdata[15:0]`). The `RAM_LATENCY`
+RTL parameter configures how many cycles after `ram_ren` the data must be valid.
+With the IS61WV51216 async SRAM (10 ns access) at 40 MHz, set `RAM_LATENCY=3`.
+The core inserts wait states automatically — no MCU involvement during classification.
 
 ---
 
