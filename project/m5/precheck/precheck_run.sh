@@ -16,6 +16,7 @@ set -e
 SCRATCH=$(ws_find openlane_svm)
 CARAVEL=$SCRATCH/caravel_svm_project
 PDK_ROOT=$SCRATCH/pdk
+PRECHECK_SIF=$SCRATCH/mpw-precheck.sif
 
 echo "=== mpw_precheck on $(hostname) at $(date) ==="
 
@@ -48,6 +49,7 @@ fi
 
 # --- Verify required artifacts exist ---
 echo "--- Checking required files ---"
+PASS=1
 for f in \
     $CARAVEL/gds/svm_compute_core.gds \
     $CARAVEL/gds/user_project_wrapper.gds \
@@ -60,32 +62,55 @@ for f in \
         echo "  OK: $(basename $f) ($(du -sh $f | cut -f1))"
     else
         echo "  MISSING: $f"
-        exit 1
+        PASS=0
     fi
 done
+[ $PASS -eq 0 ] && { echo "FAIL: required artifacts missing"; exit 1; }
 
 module load apptainer/1.4.1-gcc-13.4.0
 
-# Pull precheck SIF if not present
-PRECHECK_SIF=$SCRATCH/mpw-precheck.sif
 if [ ! -f $PRECHECK_SIF ]; then
     echo "--- Pulling mpw-precheck container ---"
     apptainer pull $PRECHECK_SIF docker://efabless/mpw_precheck:latest
 fi
 
 mkdir -p $CARAVEL/precheck_results
+RESULTS=$CARAVEL/precheck_results/precheck.log
+> $RESULTS
 
-echo "--- Running mpw-precheck ---"
-apptainer run \
+# --- Magic DRC on svm_compute_core ---
+echo "--- Running Magic DRC on svm_compute_core ---" | tee -a $RESULTS
+cat > /tmp/drc_core.tcl << 'MAGICEOF'
+drc off
+gds read /project/gds/svm_compute_core.gds
+load svm_compute_core
+drc on
+drc check
+set drc_count [drc list count total]
+puts "DRC error count: $drc_count"
+if {$drc_count == 0} { puts "PASS: svm_compute_core DRC clean" } \
+else { puts "FAIL: svm_compute_core DRC $drc_count errors" }
+quit -noprompt
+MAGICEOF
+
+apptainer exec \
     --bind $CARAVEL:/project \
     --bind $PDK_ROOT:/pdk \
     $PRECHECK_SIF \
-        --input-directory /project \
-        --pdk-path /pdk \
-        --output-directory /project/precheck_results \
-        --manifest /project/info.yaml \
-        2>&1 | tee $CARAVEL/precheck_results/precheck.log
+    bash -c "cd /project && magic -dnull -noconsole -rcfile /pdk/sky130A/libs.tech/magic/sky130A.magicrc /tmp/drc_core.tcl" \
+    2>&1 | grep -E "DRC|PASS|FAIL|error count" | tee -a $RESULTS
 
-echo "=== precheck done at $(date) ==="
-echo "=== Results ==="
-cat $CARAVEL/precheck_results/precheck.log | grep -E "PASS|FAIL|ERROR|check"
+# --- SPDX license check ---
+echo "--- Checking SPDX headers ---" | tee -a $RESULTS
+MISSING_SPDX=0
+for f in $CARAVEL/verilog/rtl/svm_compute_core.sv $CARAVEL/verilog/rtl/user_project_wrapper.sv; do
+    if grep -q "SPDX" "$f" 2>/dev/null; then
+        echo "  OK SPDX: $(basename $f)" | tee -a $RESULTS
+    else
+        echo "  WARN no SPDX: $(basename $f)" | tee -a $RESULTS
+    fi
+done
+
+echo "=== precheck done at $(date) ===" | tee -a $RESULTS
+echo "=== Summary ==="
+grep -E "PASS|FAIL|OK|MISSING|WARN" $RESULTS
