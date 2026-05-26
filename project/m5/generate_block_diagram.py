@@ -160,11 +160,11 @@ tx(ax, (HX+HW + CBX)/2, PR_CY+0.28,
 FIX, FIY, FIW, FIH = 7.2, 16.8, 5.7, 2.2
 bx(ax, FIX, FIY, FIW, FIH, C["mem_face"], C["mem_edge"], lw=1.5)
 tx(ax, FIX+FIW/2, FIY+FIH-0.30,
-   "Input FIFO  (ON-CHIP REGs)", sz=12, color=C["tr"], weight="bold")
+   "Input Matrix  (OFF-CHIP SRAM)", sz=12, color=C["tr"], weight="bold")
 tx(ax, FIX+FIW/2, FIY+FIH/2-0.05,
-   "512 × 16-bit  =  1 KB  (2 heartbeats deep)", sz=11, color="#333")
+   "1000 × 256 × 16-bit  =  512 KB", sz=11, color="#333")
 tx(ax, FIX+FIW/2, FIY+0.35,
-   "full / empty / count[9:0]", sz=10, color="#555")
+   "ram_addr[18:0] / ram_ren / ram_rdata[15:0]", sz=10, color="#555")
 
 QR_Y = QY + QH / 2
 FI_Y = FIY + FIH / 2
