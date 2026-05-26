@@ -293,7 +293,7 @@ tip(ax, SV_ARR_X, FCY, SV_ARR_X, SVY+SVH, C["offchip_edge"], lw=1.3)
 tx(ax, SV_ARR_X+0.12, (FCY + SVY+SVH)/2,
    "sv_ram_addr[15:0]\nsv_ram_ren", sz=10, color=C["tg"], ha="left")
 
-IM_ARR_X = FIX + 0.5
+IM_ARR_X = WRX + WRW + 0.4   # right of Workspace RAM (WRX+WRW=13.8)
 tip(ax, IM_ARR_X, FCY, IM_ARR_X, FIY+FIH, C["offchip_edge"], lw=1.3)
 tx(ax, IM_ARR_X+0.12, (FCY + FIY+FIH)/2,
    "LOAD_FEATURES\nram_addr[18:0]", sz=10, color=C["offchip_edge"], ha="left")
