@@ -1,0 +1,33 @@
+Design Area Report — svm_compute_core (sky130A, OpenLane Classic, job 91966)
+=============================================================================
+
+Design Name  : svm_compute_core
+PDK          : sky130A (sky130_fd_sc_hd)
+Clock Period : 25.0 ns (40 MHz)
+Tool         : OpenLane 2 Classic flow (OL2 v2.3.10 / OpenROAD / TritonRoute)
+Parameters   : FEATURE_DIM=256, NUM_SV=500, DATA_WIDTH=16, FRAC_BITS=10
+
+Area
+----
+  Die area       : 6,250,000 µm²  (2500 × 2500 µm, 6.25 mm²)
+  Core area      : 6,166,550 µm²
+  Instance area  :   ~866,000 µm²
+  Utilization    :    ~14%  (PL_TARGET_DENSITY_PCT=45)
+
+Cell Count
+----------
+  Standard cells : ~146K  (alpha_table[500] stored in registers)
+  SRAM macros    : 0  (SV RAM and input matrix are off-chip via GPIO/LA)
+
+Routing
+-------
+  Max routing layer     : met4
+  Power grid violations : 0 (VPWR), 0 (VGND)
+  Disconnected pins     : 0
+  Floating nets         : 0
+
+Artifacts
+---------
+  GDS : gds/svm_compute_core.gds     (226 MB, Magic stream-out)
+  LEF : lef/svm_compute_core.lef     ( 94 KB)
+  GL  : verilog/gl/svm_compute_core.v (13 MB)

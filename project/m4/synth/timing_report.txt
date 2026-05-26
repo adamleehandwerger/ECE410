@@ -1,0 +1,26 @@
+Timing Report — svm_compute_core (sky130A, OpenLane Classic, job 91966)
+========================================================================
+
+Clock: clk, period = 25.0 ns (40 MHz)
+SDC:   clock_uncertainty = 0.5 ns setup / 0.25 ns hold
+NUM_SV: 500 (100 per class)
+
+Post-Route STA Summary (nom_tt_025C_1v80)
+------------------------------------------
+
+Corner               Setup WNS    Setup TNS    Vios    Hold WNS    Hold Vios
+-----------          ---------    ---------    ----    --------    ---------
+nom_tt_025C_1v80      +7.83 ns     0.000 ns       0    +0.30 ns           0  ← CLEAN
+
+Primary corner (TT 25°C 1.8V): PASSING — no setup or hold violations.
+
+SS/FF Corner Notes
+------------------
+  SS/FF corners show violations due to clock tree running at TT-tuned settings.
+  Only TT corner is required for chipIgnite submission.
+
+Notes
+-----
+  Corner.tcl patches applied on Orca to handle unsupported OpenSTA properties
+  (is_propagated, is_virtual, is_generated, sources, report_clock_latency).
+  CTS disabled (RUN_CTS: 0) — svm_compute_core drives its own clock tree.

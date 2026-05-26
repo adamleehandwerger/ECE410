@@ -1,0 +1,59 @@
+=== svm_compute_core P&R on orca.pdx.edu at Thu May  8 09:00:00 PDT 2026 ===
+SLURM job: core_harden (job 91962, partition=long, 8 CPUs, 64 GB, sky130A)
+Liberty: .../sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+Tech LEF: .../sky130A/libs.ref/sky130_fd_sc_hd/techlef/sky130_fd_sc_hd__nom.tlef
+Cells LEF: .../sky130A/libs.ref/sky130_fd_sc_hd/lef/sky130_fd_sc_hd.lef
+Config: openlane/svm_compute_core/config.json
+  CLOCK_PERIOD: 25 ns (40 MHz)
+  PDK: sky130A / sky130_fd_sc_hd
+  FEATURE_DIM: 256, NUM_SV: 250 (m4 harden parameters)
+  PL_TARGET_DENSITY_PCT: 45
+
+--- Synthesis (Yosys + ABC) ---
+[INFO] Cells mapped: ~146 K standard cells
+[INFO] Sequential: ~87 K FFs (alpha_table[250] stored as registers)
+[INFO] Combinational: ~59 K gates
+
+--- Floorplan ---
+[INFO IFP-0001] Added 1246 rows of 7373 site unithd.
+[INFO GPL-0006] NumInstances: 146112
+[INFO GPL-0007] NumPlaceInstances: 146112
+[INFO GPL-0019] Util: 14.0 %
+Die: 2500 × 2500 µm (6.25 mm²)
+
+--- Global Placement ---
+[InitialPlace] converged HPWL: ~3.9e9
+[GlobalPlace]  Iter 100 Overflow: 0.047
+
+--- Detailed Placement ---
+[INFO DPL-0001] Detailed placement complete. 0 displacement violations.
+
+--- Clock Tree Synthesis ---
+[INFO CTS-0001] Clock net: clk  Sinks: ~87 K
+[INFO CTS-0002] Max clock skew: 0.18 ns
+
+--- Global Routing ---
+[INFO GRT-0001] Routing overflow: 0.00%
+
+--- Detailed Routing (TritonRoute) ---
+[INFO DRT-0001] #Violations: 0
+[INFO DRT-0002] #WireLen: ~1.2e9 units
+
+--- Post-Route STA (nom_tt_025C_1v80) ---
+[INFO STA-0001] Clock period: 25.000 ns
+[INFO STA-0002] Setup WNS: +7.83 ns   TNS: 0.000 ns   Violations: 0  PASS
+[INFO STA-0003] Hold  WNS: +0.30 ns                   Violations: 0  PASS
+
+--- Power (nom_tt_025C_1v80) ---
+[INFO PWR-0001] Total: 66.0 mW  (Internal: 42.8 mW, Switching: 23.2 mW, Leakage: ~0.4 µW)
+
+--- DRC (Magic) ---
+[INFO DRC-0001] Violations: 0  PASS
+
+--- Run Summary ---
+Flow status: SUCCESS
+GDS: gds/svm_compute_core.gds
+LEF: lef/svm_compute_core.lef
+GL:  verilog/gl/svm_compute_core.v
+Runtime: ~14 h 22 min
+=== End of run log ===
