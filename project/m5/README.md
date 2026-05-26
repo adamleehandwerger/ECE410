@@ -129,9 +129,16 @@ Address: {row[10:0], col[7:0]} = 19-bit
   Rows 500–1499 → input matrix  (1000 × 256 × 2 B = 512 KB)
 
 GPIO[28:10] = ram_addr[18:0]   (ASIC drives)
-GPIO[29]    = ram_ren           (ASIC drives, 1-cycle strobe)
-LA[15:0]    = ram_rdata[15:0]  (host drives, 1-cycle latency)
+GPIO[29]    = ram_ren           (ASIC drives)
+LA[15:0]    = ram_rdata[15:0]  (host drives, valid after RAM_LATENCY cycles)
 ```
+
+**Suggested SRAM:** IS61WV51216 (512K × 16-bit async SRAM, 10 ns access time).  
+At 40 MHz (25 ns/cycle) a 10 ns device meets timing with margin; set `RAM_LATENCY=3`
+in the RTL to pipeline the address for 3 cycles before sampling `ram_rdata`.
+The core inserts wait states automatically — no MCU action needed during a read.
+
+Simulation verified by `sim/svm_ram_latency_tb.sv` (FEAT=4, NSV=5, LAT=3 → PASS, ~208 cycles/beat).
 
 ---
 
@@ -148,4 +155,4 @@ LA[15:0]    = ram_rdata[15:0]  (host drives, 1-cycle latency)
 
 ---
 
-*Last updated: 2026-05-25*
+*Last updated: 2026-05-26 — RAM_LATENCY parameter; IS61WV51216 SRAM recommendation*
