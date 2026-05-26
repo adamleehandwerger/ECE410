@@ -260,7 +260,7 @@ def load_asic_preds(n_expected):
             print(f"  Loaded ASIC predictions from cocotb: {cosim_csv} ({n_got}/{n_expected} samples)")
         else:
             print(f"  Loaded ASIC predictions from cocotb: {cosim_csv}")
-        return data[:n_got], "ASIC RTL\n(cocotb simulation)", n_got
+        return data[:n_got], "ASIC Caravel Implementation\n(cocotb simulation)", n_got
 
     hex_path = os.path.join(M4_TB_DIR, "expected_preds.hex")
     if os.path.exists(hex_path):
@@ -273,7 +273,7 @@ def load_asic_preds(n_expected):
         preds = np.array(preds[:n_expected], dtype=int)
         print(f"  Loaded ASIC predictions from expected_preds.hex ({len(preds)} samples)")
         if len(preds) >= n_expected:
-            return preds, "ASIC RTL\n(svm_compute_core, job 91947)", n_expected
+            return preds, "ASIC Caravel Implementation\n(svm_compute_core, job 91947)", n_expected
         print(f"  WARNING: only {len(preds)}/{n_expected} predictions in hex file")
         return None, None, 0
 
@@ -328,7 +328,7 @@ def main():
     if asic_preds is None:
         y_pred_asic = y_pred_opt
         y_te_asic   = y_te
-        asic_label  = "ASIC RTL\n(sklearn stand-in — run cocotb to replace)"
+        asic_label  = "ASIC Caravel Implementation\n(sklearn stand-in — run cocotb to replace)"
         asic_note   = "* RTL simulation pending. ASIC column = sklearn output."
     else:
         y_pred_asic = asic_preds
