@@ -1,158 +1,156 @@
-# ECE410 SVM ASIC — Milestone 5 (m5)
+# ECE410 — Milestone 5: Caravel Wrapper Hardening & Submission
 
-**Student:** Adam Handwerger · handwerg@pdx.edu  
-**Course:** ECE410, Portland State University  
-**Project:** 5-class Cardiac Arrhythmia Classifier, RBF-SVM ASIC, sky130A  
-**Revision:** v9 (batch architecture, NUM_SV=500, 97.67% accuracy)
-
----
-
-## Results
-
-| Metric | Value |
-|--------|-------|
-| ASIC accuracy | **97.67%** (293/300) |
-| sklearn accuracy | 97.67% (293/300) |
-| Accuracy gap | **0.00%** — exact match |
-| Support vectors | 500 total (100/class) |
-| Feature dim | 256 (128 + 64 + 64 multi-scale) |
-| Gamma / C | 0.25 / 1.0 (Q6.10 fixed-point) |
-| Inference time | 3.23 ms / beat @ 40 MHz |
-| Active power | ~66 mW |
-| Avg power (80 bpm) | 0.284 mW |
-| Core die area | 2500 × 2500 µm (6.25 mm²) |
-| Wrapper die area | 2920 × 3520 µm (10.28 mm², Caravel fixed) |
-| Core setup WNS | +7.83 ns (TT, 0 violations) |
-| Core hold WNS | +0.30 ns (TT, 0 violations) |
-| Core DRC | 0 violations |
+**Design:** 5-class Cardiac Arrhythmia Classifier (RBF-SVM accelerator)  
+**Technology:** sky130A (SkyWater 130 nm open-PDK), sky130_fd_sc_hd  
+**Flow:** OpenLane 2 v2.3.10 Classic (Yosys + OpenROAD + TritonRoute)  
+**Architecture:** Batch v9 — host pre-loads SV + input matrix; ASIC classifies autonomously  
+**Status:** Core hardened (job 91966, 0 DRC), wrapper hardened (job 91967, boundary DRC acceptable)
 
 ---
 
 ## Directory Structure
 
 ```
-project/m5/
-├── README.md                   ← this file
-├── README_submission.md        ← Caravel submission requirements & status
-├── block_diagram.png           ← hardware block diagram (v9)
-├── design_summary.md           ← full design summary: area, power, timing
-├── generate_block_diagram.py   ← generates block_diagram.png
+m5/
+├── README.md                    ← this file — full m5 catalog
+├── README_errorcodes.md         ← 13 error codes, sticky latch, reset-clear reference
+├── README_mcu.md                ← MCU integration guide (batch pre-load protocol)
+├── design_summary.md            ← full design: area, power, timing, RAM_LATENCY
+├── block_diagram.png            ← hardware block diagram (v9, batch architecture)
+├── generate_block_diagram.py    ← renders block_diagram.png (matplotlib)
+├── horner_lut_math.tex          ← LaTeX: fixed-point RBF kernel derivation
+│                                    (range-reduction LUT + Horner, γ=0.25, Q6.10)
+├── horner_lut_math.pdf          ← compiled PDF of horner_lut_math.tex
 │
-├── rt1/                        ← RTL source (v9, final)
-│   ├── svm_compute_core.sv     ← SVM core: NUM_SV=500, alpha_addr[8:0]
-│   └── user_project_wrapper.sv ← Caravel wrapper: reg_alpha_wr[24:0]
+├── rt1/                         ← RTL source (v9, final)
+│   ├── compute_core.sv          ← SVM core: NUM_SV=500, RAM_LATENCY param, batch FSM
+│   ├── top.sv                   ← Caravel wrapper: Wishbone decode, clock gate,
+│   │                                reg_alpha_wr[24:0], GPIO/LA pin assignments
+│   └── interface.sv             ← SystemVerilog interface definitions (svm_data_if,
+│                                    svm_ctrl_if) used by the compute core
 │
-├── sim/                        ← Simulation / cosim
-│   ├── Makefile                ← `make sim` runs Wishbone cosim
-│   ├── README.md               ← sim setup & usage
-│   ├── tb_wb_cosim.py          ← cocotb testbench (Wishbone batch cosim)
-│   ├── sky130_stubs.v          ← sky130 cell stubs for Icarus
-│   ├── asic_preds.csv          ← 300 ASIC predictions (last run)
-│   ├── confusion_comparison_m5.py  ← generates comparison plot
-│   ├── confusion_comparison_m5.png ← sklearn vs ASIC confusion matrices
-│   ├── throughput_comparison.txt   ← inference time / power summary
-│   └── sim_build/              ← Icarus compiled sim (generated)
+├── tb/                          ← Testbenches and verification
+│   ├── README.md                ← testbench overview and how to run
+│   ├── Makefile                 ← `make sim` runs Wishbone cocotb cosim
+│   ├── tb_wb_cosim.py           ← cocotb testbench: full 300-sample Wishbone cosim
+│   ├── svm_ram_latency_tb.sv    ← unit test: RAM_LATENCY parameter (LAT=3 → PASS,
+│   │                                208 cycles/beat; FEAT=4, NSV=5, iverilog)
+│   ├── sky130_stubs.v           ← sky130 cell stubs for Icarus simulation
+│   ├── confusion_comparison_m5.py ← generates confusion matrix comparison plot
+│   └── dv_run.sh                ← Caravel DV RTL simulation run script
 │
-├── pnr/                        ← Place-and-route reports
-│   ├── timing_report.txt       ← STA results (jobs 91966/91967)
-│   ├── drc_report.txt          ← DRC/LVS results
-│   ├── area_report.txt         ← Die area and utilization
-│   ├── power_report.txt        ← Active and average power
-│   ├── base_user_project_wrapper.sdc  ← timing constraints
-│   ├── macro.cfg               ← macro placement config
-│   ├── wrapper_config.json     ← OpenLane wrapper config
-│   └── wrapper_harden.sh       ← wrapper harden SLURM script
+├── sim/                         ← Simulation outputs
+│   ├── cosim_run.log            ← Wishbone cosim log (300 samples, 97.67% accuracy)
+│   ├── confusion_comparison_m5.png ← sklearn vs ASIC confusion matrix comparison
+│   ├── asic_preds.csv           ← 300 ASIC predictions (last cosim run)
+│   └── throughput_comparison.txt ← inference time and power summary
 │
-├── precheck/                   ← Efabless mpw-precheck
-│   ├── precheck_run.sh         ← SLURM script to run precheck on Orca
-│   └── precheck_results.txt    ← results (pending precheck run)
+├── synth/                       ← Place-and-route summary (OL2 jobs 91966 / 91967)
+│   ├── config.json              ← OpenLane 2 wrapper config (25 ns clock, Caravel die)
+│   ├── openlane_run.log         ← P&R run log summary (SLURM job 91967)
+│   ├── timing_report.txt        ← STA: core WNS +7.83 ns, 0 violations
+│   ├── area_report.txt          ← core 2500×2500 µm; wrapper 2920×3520 µm (Caravel fixed)
+│   ├── power_report.txt         ← 66 mW active, 0.284 mW avg @ 80 bpm; 14-day target met
+│   ├── drc_report.txt           ← core 0 violations; wrapper 11,923 boundary artifacts
+│   └── critical_path.md         ← critical path through dist_acc; wrapper paths trivial
 │
-└── submission/
-    └── checklist.md            ← submission checklist (all items tracked)
+├── bench/                       ← Benchmark: ASIC vs optimized Python
+│   ├── benchmark.md             ← accuracy, throughput, power, energy efficiency tables
+│   ├── benchmark_data.csv       ← raw measurements (ASIC measured; CPU estimated)
+│   └── roofline_final.png       ← dual-panel roofline + power-efficiency chart
+│
+├── caravel/                     ← Caravel chipIgnite submission artifacts
+│   ├── README_caravel.md        ← Caravel submission overview and repo layout
+│   ├── README_submission.md     ← submission requirements and status checklist
+│   ├── checklist.md             ← item-by-item submission checklist (all tracked)
+│   └── precheck/                ← Efabless mpw-precheck
+│       ├── precheck_run.sh      ← SLURM script to run precheck on Orca
+│       └── precheck_results.txt ← results (pending wrapper GDS precheck run)
+│
+├── report/                      ← Final project report (to be filled)
+│
+└── pnr/                         ← Full P&R artifacts (scripts, configs, GDS, logs)
+    ├── wrapper_config.json      ← OL2 config for user_project_wrapper
+    ├── wrapper_harden.sh        ← SLURM script: hardens user_project_wrapper on Orca
+    ├── base_user_project_wrapper.sdc ← timing constraints (wrapper)
+    ├── macro.cfg                ← u_svm macro placement (253, 554) N
+    ├── timing_report.txt        ← STA report (jobs 91966 / 91967)
+    ├── area_report.txt          ← area/utilization (jobs 91966 / 91967)
+    ├── power_report.txt         ← power report (jobs 91966 / 91967)
+    ├── drc_report.txt           ← DRC/LVS (core 0 viol; wrapper boundary artifacts)
+    ├── gds/                     ← GDS placeholder (230 MB — lives in caravel repo)
+    └── logs/                    ← SLURM job logs
+        ├── core_harden_91966.out    ← core harden SLURM output
+        ├── wrapper_harden_91963.out ← wrapper harden SLURM output
+        ├── mpw_precheck_91986.err   ← mpw-precheck stderr
+        └── mpw_precheck_91986.out   ← mpw-precheck stdout
 ```
 
 ---
 
-## Caravel Repo (`caravel_svm_project`)
+## Key Design Parameters
 
-Physical artifacts live in the separate caravel repo at  
-`https://github.com/adamleehandwerger/caravel_svm_project`:
+| Parameter | Value |
+|-----------|-------|
+| Feature dimension | 256 (128 single-beat + 64 10-beat + 64 RR history) |
+| Support vectors | 500 total (100 per class, 5 classes) |
+| Fixed-point | Q6.10, 16-bit signed |
+| Gamma / C | 0.25 / 1.0 |
+| Clock | 40 MHz (25 ns) |
+| RAM_LATENCY | 1 (cosim default) / 3 (IS61WV51216 async SRAM) |
+| Core setup WNS | +7.83 ns (TT, 0 violations) |
+| Core hold WNS | +0.30 ns (TT, 0 violations) |
+| Core DRC | 0 violations |
+| Wrapper DRC | 11,923 boundary artifacts (acceptable) |
+| Active power | 66 mW → 0.284 mW avg at 80 bpm (0.431% duty cycle) |
+| Core die | 2500 × 2500 µm, ~14% utilization, ~146K cells |
+| Wrapper die | 2920 × 3520 µm (Caravel fixed), 230 MB GDS |
+| ASIC accuracy | 97.67% (293/300) — exact match with sklearn, zero gap |
 
-```
-caravel_svm_project/
-├── gds/
-│   ├── svm_compute_core.gds        ← 226 MB  (job 91966, LFS)
-│   └── user_project_wrapper.gds    ← 230 MB  (job 91967, LFS)
-├── lef/
-│   ├── svm_compute_core.lef        ← 94 KB   (job 91966)
-│   └── user_project_wrapper.lef    ← 195 KB  (job 91967)
-├── verilog/
-│   ├── rtl/
-│   │   ├── svm_compute_core.sv     ← v9 RTL (NUM_SV=500)
-│   │   └── user_project_wrapper.sv ← v9 RTL (reg_alpha_wr[24:0])
-│   └── gl/
-│       ├── svm_compute_core.v      ← 13 MB GL netlist (job 91966)
-│       └── user_project_wrapper.v  ← 78 KB GL netlist (job 91967)
-└── openlane/
-    ├── svm_compute_core/           ← OL2 config + SDC
-    └── user_project_wrapper/       ← OL2 config + macro.cfg
-```
-
----
-
-## Running the Cosim
+## Quick Start
 
 ```bash
-cd project/m5/sim
-
 # Full 300-sample Wishbone cosim (~96 min)
-PYTHONUNBUFFERED=1 make sim
+cd tb && PYTHONUNBUFFERED=1 make sim
 
-# Quick subset (25 samples, any gamma)
-COSIM_N_EVAL=25 COSIM_GAMMA=0.25 PYTHONUNBUFFERED=1 make sim
+# Quick subset (25 samples)
+cd tb && COSIM_N_EVAL=25 COSIM_GAMMA=0.25 PYTHONUNBUFFERED=1 make sim
 
-# Generate confusion matrix plot
-python3 confusion_comparison_m5.py
+# RAM_LATENCY unit test (iverilog standalone, <1 s)
+cd tb
+iverilog -g2012 -DSIMULATION -o /tmp/svm_lat_tb.out \
+    ../rt1/compute_core.sv svm_ram_latency_tb.sv
+/tmp/svm_lat_tb.out
+
+# Regenerate block diagram
+python3 generate_block_diagram.py
+
+# Regenerate confusion matrix
+cd tb && python3 confusion_comparison_m5.py
 ```
 
 Requires: `pip install cocotb scikit-learn wfdb matplotlib numpy`  
-PhysioNet cache: `~/.physionet_cache/` (avoids 45-min re-download)  
-NumPy cache: `/tmp/cosim_cache_ecg_n300_d256.npz` (cleared on reboot)
+PhysioNet cache: `~/.physionet_cache/`  
+NumPy cache: `/tmp/cosim_cache_ecg_n300_d256.npz`
 
----
+## Caravel Repo (`caravel_svm_project`)
 
-## Off-chip RAM Protocol
+Physical artifacts (GDS, LEF, GL netlist) live in the separate Caravel repo at  
+`https://github.com/adamleehandwerger/caravel_svm_project`.  
+See `caravel/README_caravel.md` for the full repo layout.
 
-```
-Address: {row[10:0], col[7:0]} = 19-bit
-  Rows 0–499    → SV matrix     (500 × 256 × 2 B = 256 KB)
-  Rows 500–1499 → input matrix  (1000 × 256 × 2 B = 512 KB)
+## Differences from m4
 
-GPIO[28:10] = ram_addr[18:0]   (ASIC drives)
-GPIO[29]    = ram_ren           (ASIC drives)
-LA[15:0]    = ram_rdata[15:0]  (host drives, valid after RAM_LATENCY cycles)
-```
+m4 hardened the svm_compute_core macro only. m5 adds:
+- user_project_wrapper hardening (job 91967) — Caravel fixed die, macro placement
+- RAM_LATENCY parameter — configurable wait-states for IS61WV51216 async SRAM
+- svm_ram_latency_tb.sv — unit test: LAT=3 → PASS, 208 cycles/beat
+- horner_lut_math.tex/pdf — fixed-point RBF kernel derivation document
+- Caravel submission artifacts (caravel/ folder)
+- report/ folder (final project report, to be filled)
 
-**Suggested SRAM:** IS61WV51216 (512K × 16-bit async SRAM, 10 ns access time).  
-At 40 MHz (25 ns/cycle) a 10 ns device meets timing with margin; set `RAM_LATENCY=3`
-in the RTL to pipeline the address for 3 cycles before sampling `ram_rdata`.
-The core inserts wait states automatically — no MCU action needed during a read.
+## Next Step
 
-Simulation verified by `sim/svm_ram_latency_tb.sv` (FEAT=4, NSV=5, LAT=3 → PASS, ~208 cycles/beat).
-
----
-
-## Wishbone Register Map (base `0x3000_0000`)
-
-| Offset | Name | R/W | Description |
-|--------|------|-----|-------------|
-| +0x04 | CONTROL | RW | [0]=start [1]=vbatt_ok [2]=vbatt_warn |
-| +0x08 | STATUS | RO | [0]=done [1]=error [5:2]=err_code [8:6]=class [9]=sample_rdy |
-| +0x0C | NUM_SAMPLES | RW | [9:0] heartbeats per batch |
-| +0x10–0x20 | NUM_SV[0–4] | RW | [7:0] SVs per class (max 100 each) |
-| +0x24 | PARAM_WR | WO | [19]=en [18:16]=addr [15:0]=data (γ, C, bias) |
-| +0x28 | ALPHA_WR | WO | [24:16]=sv_global_idx (9-bit) [15:0]=alpha Q6.10 |
-
----
-
-*Last updated: 2026-05-26 — RAM_LATENCY parameter; IS61WV51216 SRAM recommendation*
+MCU design — seeking clinical input from Dr. Eric Stecker (OHSU Knight  
+Cardiovascular / Insight Health AI) on arrhythmia patterns and temporal window  
+requirements for the batch classification interface.

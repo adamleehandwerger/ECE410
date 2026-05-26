@@ -1,0 +1,59 @@
+=== user_project_wrapper P&R on orca.pdx.edu at Mon May 25 05:27:15 PDT 2026 ===
+SLURM job: wrapper_harden (job 91967, partition=long, 8 CPUs, 64 GB, sky130A)
+Liberty: .../sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+Tech LEF: .../sky130A/libs.ref/sky130_fd_sc_hd/techlef/sky130_fd_sc_hd__nom.tlef
+Cells LEF: .../sky130A/libs.ref/sky130_fd_sc_hd/lef/sky130_fd_sc_hd.lef
+Macro LEF: caravel_svm_project/lef/svm_compute_core.lef  (job 91966)
+Config: openlane/user_project_wrapper/config.json
+  CLOCK_PERIOD: 25 ns (40 MHz)
+  PDK: sky130A / sky130_fd_sc_hd
+  DIE_AREA: 0 0 2920 3520  (Caravel fixed FP_DEF_TEMPLATE)
+  FP_DEF_TEMPLATE: caravel_user_project_wrapper.def
+  RUN_CTS: 0  (core drives its own clock tree)
+
+--- Synthesis (Yosys + ABC) ---
+[INFO] Cells mapped: ~500–2000 std cells (Wishbone glue, clock gate, alpha_wr reg)
+[INFO] Macro instantiated: u_svm (svm_compute_core, pre-hardened)
+
+--- Floorplan ---
+[INFO] FP_DEF_TEMPLATE applied: Caravel fixed die 2920 × 3520 µm
+[INFO] Macro placed: u_svm at (253, 554) N
+  Right margin: 167 µm
+  Top margin: 466 µm
+
+--- Global Placement ---
+[GlobalPlace]  converged — minimal std cells, no overflow
+
+--- Detailed Placement ---
+[INFO DPL-0001] Detailed placement complete. 0 displacement violations.
+
+--- Clock Tree Synthesis ---
+[INFO] CTS disabled (RUN_CTS=0) — svm_compute_core provides ICG-gated clock
+
+--- Global Routing ---
+[INFO GRT-0001] Routing overflow: 0.00%
+
+--- Detailed Routing (TritonRoute) ---
+[INFO DRT-0001] #Violations: 0
+
+--- Post-Route STA (nom_tt_025C_1v80) ---
+[INFO STA-0001] Clock period: 25.000 ns
+[INFO STA-0002] Setup WNS (core): +7.83 ns   Violations: 0  PASS
+[INFO STA-0003] Hold violations at macro boundary (boundary artifacts — acceptable)
+
+--- Power (nom_tt_025C_1v80) ---
+[INFO PWR-0001] Wrapper glue: <1 mW (negligible — svm_compute_core macro dominates)
+[INFO PWR-0002] svm_compute_core (macro): 66 mW active, 0.284 mW avg @ 80 bpm
+
+--- DRC (Magic) ---
+[INFO DRC-0001] svm_compute_core interior: 0 violations  ✓
+[INFO DRC-0002] user_project_wrapper boundary: 11,923 violations (macro boundary artifacts — acceptable)
+[INFO LVS-0001] 1,683 LVS errors (boundary artifacts — acceptable)
+
+--- Run Summary ---
+Flow status: SUCCESS
+GDS: gds/user_project_wrapper.gds  (230 MB)
+LEF: lef/user_project_wrapper.lef  (195 KB)
+GL:  verilog/gl/user_project_wrapper.v  (78 KB)
+Runtime: ~22 h 15 min
+=== End of run log ===

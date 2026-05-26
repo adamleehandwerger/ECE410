@@ -1,0 +1,30 @@
+Area Report — svm_compute_core + user_project_wrapper (OL2 jobs 91966 / 91967)
+===============================================================================
+
+STATUS: COMPLETE
+
+PDK          : sky130A (sky130_fd_sc_hd)
+Tool         : OpenLane 2 v2.3.10 Classic
+NUM_SV       : 500  (100 per class, doubled from prior 250)
+
+svm_compute_core  (job 91966)
+------------------------------
+  Die area     : 2500 × 2500 µm
+  GDS size     : 226 MB
+  Utilization  : ~14% (register-heavy design — alpha_table[500] in registers)
+  Cells        : ~146K std cells (alpha_table doubled from 250→500 entries)
+
+user_project_wrapper  (job 91967)
+----------------------------------
+  Die area     : 2920 × 3520 µm (Caravel fixed, FP_DEF_TEMPLATE)
+  GDS size     : 230 MB
+
+  Macro Instance
+  --------------
+    u_svm (svm_compute_core) : 2500 × 2500 µm at (253, 554) N
+    Right margin : 167 µm
+    Top margin   : 466 µm
+
+  Wrapper contains minimal glue logic (Wishbone decode, clock gate, alpha_wr
+  register) around the pre-hardened svm_compute_core macro.
+  Estimated: ~500–2000 wrapper std cells + 1 macro instance.

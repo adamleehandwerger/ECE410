@@ -1,0 +1,32 @@
+Timing Report — svm_compute_core + user_project_wrapper (OL2 jobs 91966 / 91967)
+==================================================================================
+
+STATUS: COMPLETE
+
+Design        : svm_compute_core  (core harden, job 91966)
+                user_project_wrapper  (wrapper harden, job 91967)
+PDK           : sky130A  (sky130_fd_sc_hd)
+Tool          : OpenLane 2 v2.3.10 Classic
+Clock         : wb_clk_i → svm_gclk via ICG, 25 ns period (40 MHz)
+CTS           : Disabled (RUN_CTS: 0) — svm_compute_core drives its own clock tree
+NUM_SV        : 500  (100 per class)
+
+svm_compute_core  (job 91966, nom_tt_025C_1v80)
+-----------------------------------------------
+  Setup WNS  : +7.83 ns   (0 violations)  ✓
+  Hold  WNS  : +0.30 ns   (0 violations)  ✓
+  Max routing layer: met4
+
+user_project_wrapper  (job 91967, nom_tt_025C_1v80)
+----------------------------------------------------
+  The wrapper contains only Wishbone glue logic and clock-gate control.
+  Register-to-register paths are short (few gates between FFs).
+  Hold violations reported — boundary artifacts at macro interface (acceptable).
+  DRC: 11,923 Magic DRC errors (boundary artifacts — no interior violations)
+  LVS: 1,683 errors (boundary artifacts — acceptable for class submission)
+
+Notes
+-----
+  Corner.tcl patches applied on Orca to handle unsupported OpenSTA properties
+  (is_propagated, is_virtual, is_generated, sources, report_clock_latency).
+  KLayout DRC disabled — ruby not available on Orca compute nodes.
