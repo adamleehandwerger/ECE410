@@ -1,4 +1,4 @@
-# m4 Benchmark — ASIC vs Optimized Python
+# m5 Benchmark — ASIC vs Optimized Python + RAM_LATENCY Timing
 
 **Design:** svm_compute_core (sky130A, 40 MHz)  
 **Dataset:** MIT-BIH Arrhythmia Database, 300 test samples, 5 classes  
@@ -76,7 +76,35 @@ Wearable duty cycle at 80 bpm: 3.23 ms / 750 ms = **0.431%**
 
 ---
 
-## 5. Roofline Summary
+## 5. RAM_LATENCY Benchmark (m5)
+
+The `RAM_LATENCY` parameter inserts wait-state cycles between `ram_ren` and valid
+`ram_rdata`, allowing the core to interface with SRAM devices of varying access times.
+The dominant cost is COMPUTE_DIST, which performs 500 × 256 = 128,000 RAM reads per beat.
+
+| Configuration | SRAM Device | RAM_LATENCY | Inference Time | Throughput | Duty Cycle (80 bpm) | Avg Power |
+|--------------|------------|------------|---------------|-----------|--------------------|----|
+| LAT=1 (cosim) | ideal / logic RAM | 1 | **3.23 ms** | 309 inf/s | 0.431% | **0.284 mW** |
+| LAT=3 (real SRAM) | IS61WV51216 (10 ns) | 3 | **~9.7 ms** | ~103 inf/s | 1.29% | **0.852 mW** |
+
+Both configurations are well within the 750 ms heartbeat window at 80 bpm (1.34 inf/s required).
+LAT=3 increases average power ~3× but the 14-day target remains comfortably met.
+
+**Cycle breakdown comparison (256-dim, 500 SVs):**
+
+| Stage | LAT=1 cycles | LAT=3 cycles | Δ |
+|-------|-------------|-------------|---|
+| LOAD_INPUT (256 reads) | 256 | 768 | +512 |
+| COMPUTE_DIST (128,000 reads) | ~129,000 | ~387,000 | +258,000 |
+| COMPUTE_KERNEL (no RAM) | ~9,000 | ~9,000 | — |
+| WRITE_CLASS | 1 | 1 | — |
+| **Total** | **~138,257** | **~396,769** | **+258,512** |
+
+Verified by `tb/svm_ram_latency_tb.sv` (FEAT=4, NSV=5, LAT=3 → PASS, 208 cycles/beat).
+
+---
+
+## 6. Roofline Summary
 
 All three implementations share the same operational intensity (~2.0 ops/byte)
 because the algorithm is identical — only the execution substrate changes.
@@ -94,4 +122,4 @@ Raw data: `benchmark_data.csv`.
 
 ---
 
-*ECE410 — Portland State University · Adam Handwerger · m4 (batch architecture, sky130A)*
+*ECE410 — Portland State University · Adam Handwerger · m5 (batch architecture, sky130A, RAM_LATENCY)*
