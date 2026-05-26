@@ -1,0 +1,58 @@
+=== dv_run: svm_wb_test on orcaga03 at Mon May 25 07:32:31 PM PDT 2026 ===
+--- git sync caravel ---
+HEAD is now at 0e2bb96 Add missing Caravel power ports to user_project_wrapper
+--- Running: make SIM=RTL TOOLCHAIN=GCC ---
+iverilog -Ttyp -DFUNCTIONAL -DSIM -DUSE_POWER_PINS -DUNIT_DELAY=#1 -g2012 \
+-f/scratch/funphin-openlane_svm/caravel_mgmt_soc_litex/verilog/includes/includes.rtl.caravel \
+-f/scratch/funphin-openlane_svm/caravel_svm_project/verilog/includes/includes.rtl.caravel_user_project \
+-o svm_wb_test.vvp svm_wb_test_tb.v
+/scratch/funphin-openlane_svm/caravel-lite/verilog/rtl/caravel.v:236: warning: input port clock is coerced to inout.
+/scratch/funphin-openlane_svm/caravel_svm_project/verilog/rtl/svm_compute_core.sv:332: sorry: constant selects in always_* processes are not currently supported (all bits will be included).
+/scratch/funphin-openlane_svm/caravel_svm_project/verilog/rtl/svm_compute_core.sv:332: sorry: constant selects in always_* processes are not currently supported (all bits will be included).
+vvp  svm_wb_test.vvp
+Reading svm_wb_test.hex
+svm_wb_test.hex loaded into memory
+Memory 5 bytes = 0x6f 0x00 0x00 0x0b 0x13
+FST info: dumpfile svm_wb_test.vcd opened for output.
+Monitor: SVM WB test started
+Monitor: SVM WB Test (RTL) Passed
+svm_wb_test_tb.v:66: $finish called at 879462500 (1ps)
+mv svm_wb_test.vcd RTL-svm_wb_test.vcd
+/foss/tools/riscv-gnu-toolchain-rv32i/217e7f3debe424d61374d31e33a091a630535937/bin/riscv32-unknown-linux-gnu-gcc -g \
+-I/scratch/funphin-openlane_svm/caravel_mgmt_soc_litex/verilog/dv/firmware \
+-I/scratch/funphin-openlane_svm/caravel_mgmt_soc_litex/verilog/dv/generated \
+-I/scratch/funphin-openlane_svm/caravel_mgmt_soc_litex/verilog/dv/ \
+-I/scratch/funphin-openlane_svm/caravel_mgmt_soc_litex/verilog/common \
+  -march=rv32i      -mabi=ilp32 -D__vexriscv__ \
+-Wl,-Bstatic,-T,/scratch/funphin-openlane_svm/caravel_mgmt_soc_litex/verilog/dv/firmware/sections.lds,--strip-debug \
+-ffreestanding -nostdlib -o svm_wb_test.elf /scratch/funphin-openlane_svm/caravel_mgmt_soc_litex/verilog/dv/firmware/crt0_vex.S /scratch/funphin-openlane_svm/caravel_mgmt_soc_litex/verilog/dv/firmware/isr.c svm_wb_test.c
+In file included from /scratch/funphin-openlane_svm/caravel_mgmt_soc_litex/verilog/dv/firmware/isr.c:8:
+/scratch/funphin-openlane_svm/caravel_mgmt_soc_litex/verilog/dv/firmware/defs.h:273: warning: "reg_debug_2" redefined
+  273 | #define reg_debug_2 (*(volatile unsigned int*)(USER_SPACE_ADDR + USER_SPACE_SIZE))
+      | 
+/scratch/funphin-openlane_svm/caravel_mgmt_soc_litex/verilog/dv/firmware/defs.h:147: note: this is the location of the previous definition
+  147 | #define reg_debug_2 (*(volatile uint32_t*)0x300FFFFC)
+      | 
+/scratch/funphin-openlane_svm/caravel_mgmt_soc_litex/verilog/dv/firmware/defs.h:274: warning: "reg_debug_1" redefined
+  274 | #define reg_debug_1 (*(volatile unsigned int*)(USER_SPACE_ADDR + USER_SPACE_SIZE - 4))
+      | 
+/scratch/funphin-openlane_svm/caravel_mgmt_soc_litex/verilog/dv/firmware/defs.h:146: note: this is the location of the previous definition
+  146 | #define reg_debug_1 (*(volatile uint32_t*)0x300FFFF8)
+      | 
+In file included from svm_wb_test.c:24:
+/scratch/funphin-openlane_svm/caravel_mgmt_soc_litex/verilog/dv/firmware/defs.h:273: warning: "reg_debug_2" redefined
+  273 | #define reg_debug_2 (*(volatile unsigned int*)(USER_SPACE_ADDR + USER_SPACE_SIZE))
+      | 
+/scratch/funphin-openlane_svm/caravel_mgmt_soc_litex/verilog/dv/firmware/defs.h:147: note: this is the location of the previous definition
+  147 | #define reg_debug_2 (*(volatile uint32_t*)0x300FFFFC)
+      | 
+/scratch/funphin-openlane_svm/caravel_mgmt_soc_litex/verilog/dv/firmware/defs.h:274: warning: "reg_debug_1" redefined
+  274 | #define reg_debug_1 (*(volatile unsigned int*)(USER_SPACE_ADDR + USER_SPACE_SIZE - 4))
+      | 
+/scratch/funphin-openlane_svm/caravel_mgmt_soc_litex/verilog/dv/firmware/defs.h:146: note: this is the location of the previous definition
+  146 | #define reg_debug_1 (*(volatile uint32_t*)0x300FFFF8)
+      | 
+/foss/tools/riscv-gnu-toolchain-rv32i/217e7f3debe424d61374d31e33a091a630535937/bin/riscv32-unknown-linux-gnu-objdump -d -S svm_wb_test.elf > svm_wb_test.lst
+rm svm_wb_test.elf
+--- RTL sim done ---
+=== dv_run complete at Mon May 25 07:32:48 PM PDT 2026 ===
