@@ -1,7 +1,20 @@
-# m5 Simulation — Best CPU vs. ASIC (Wishbone Interface)
+# m5 Testbenches
 
-Final simulation for m5 compares the ASIC output against the Numba-optimized
-software reference that exactly mirrors the hardware algorithm.
+## Interface Coverage
+
+There are two distinct test interfaces used in m5 — **not all tests go through Wishbone**:
+
+| Testbench | Interface | What it exercises |
+|-----------|-----------|-------------------|
+| `tb_wb_cosim.py` | **Wishbone only** | Full Caravel wrapper — all stimulus via WB register map (CONTROL, STATUS, NUM_SAMPLES, ALPHA_WR, etc.); the testbench acts as the host MCU |
+| `dv_run.sh` / `svm_wb_test.c` | **Wishbone only** | Caravel DV framework — management SoC firmware drives the same WB registers over the RTL bus |
+| `svm_ram_latency_tb.sv` | **Direct RTL port** | Instantiates `svm_compute_core` directly, no wrapper, no Wishbone — drives `start`, `ram_rdata`, `num_samples` pins to isolate and verify the `RAM_LATENCY` wait-state logic |
+
+The 300-sample accuracy cosim (`tb_wb_cosim.py`) is the primary validation and exercises
+the full Wishbone path end-to-end. The RAM_LATENCY unit test is intentionally wrapper-free
+so that wait-state timing can be verified against the core in isolation.
+
+---
 
 ## Comparison
 
