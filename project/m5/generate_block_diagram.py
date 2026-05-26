@@ -156,22 +156,15 @@ tx(ax, (HX+HW + CBX)/2, PR_CY+0.28,
    "param_write_en / param_addr[2:0] / param_data[15:0]",
    sz=10, color=C["tp"])
 
-# ── INPUT FIFO ────────────────────────────────────────────────────
-FIX, FIY, FIW, FIH = 7.2, 16.8, 5.7, 2.2
-bx(ax, FIX, FIY, FIW, FIH, C["mem_face"], C["mem_edge"], lw=1.5)
+# ── INPUT MATRIX  (off-chip SRAM, right of SV RAM) ───────────────
+FIX, FIY, FIW, FIH = 11.8, 1.2, 5.5, 2.35
+bx(ax, FIX, FIY, FIW, FIH, C["offchip_face"], C["offchip_edge"], lw=1.5)
 tx(ax, FIX+FIW/2, FIY+FIH-0.30,
-   "Input Matrix  (OFF-CHIP SRAM)", sz=12, color=C["tr"], weight="bold")
+   "Input Matrix  (OFF-CHIP SRAM)", sz=12, color=C["tg"], weight="bold")
 tx(ax, FIX+FIW/2, FIY+FIH/2-0.05,
    "1000 × 256 × 16-bit  =  512 KB", sz=11, color="#333")
 tx(ax, FIX+FIW/2, FIY+0.35,
-   "ram_addr[18:0] / ram_ren / ram_rdata[15:0]", sz=10, color="#555")
-
-QR_Y = QY + QH / 2
-FI_Y = FIY + FIH / 2
-seg(ax, [QX+QW, 6.85, 6.85], [QR_Y, QR_Y, FI_Y], C["qspi_edge"], lw=1.4)
-tip(ax, 6.85, FI_Y, FIX, FI_Y, C["qspi_edge"], lw=1.4)
-tx(ax, 6.6, (QR_Y+FI_Y)/2, "qspi_valid\ndata / ready",
-   sz=10, color=C["qspi_edge"], ha="right")
+   "GPIO[28:10]=addr[18:0]  GPIO[29]=ren  LA[15:0]=rdata", sz=10, color="#555")
 
 # ── FEATURE BANK ──────────────────────────────────────────────────
 FBX, FBY, FBW, FBH = 7.2, 14.3, 5.7, 2.2
@@ -183,10 +176,6 @@ tx(ax, FBX+FBW/2, FBY+FBH/2-0.05,
 tx(ax, FBX+FBW/2, FBY+0.35,
    "Written once per heartbeat; re-read × N_SV", sz=10, color="#555")
 
-FI_CX = FIX + FIW/2
-tip(ax, FI_CX, FIY, FI_CX, FBY+FBH, C["feat_edge"], lw=1.4)
-tx(ax, FI_CX+0.12, (FIY+FBY+FBH)/2,
-   "LOAD_FEATURES", sz=11, color=C["tgr"], ha="left")
 
 # ── DISTANCE MATRIX ENGINE ────────────────────────────────────────
 DMX, DMY, DMW, DMH = 7.2, 11.8, 7.0, 2.2
@@ -303,6 +292,11 @@ SV_ARR_X = SVX + 0.5
 tip(ax, SV_ARR_X, FCY, SV_ARR_X, SVY+SVH, C["offchip_edge"], lw=1.3)
 tx(ax, SV_ARR_X+0.12, (FCY + SVY+SVH)/2,
    "sv_ram_addr[15:0]\nsv_ram_ren", sz=10, color=C["tg"], ha="left")
+
+IM_ARR_X = FIX + 0.5
+tip(ax, IM_ARR_X, FCY, IM_ARR_X, FIY+FIH, C["offchip_edge"], lw=1.3)
+tx(ax, IM_ARR_X+0.12, (FCY + FIY+FIH)/2,
+   "LOAD_FEATURES\nram_addr[18:0]", sz=10, color=C["offchip_edge"], ha="left")
 
 WR_CX = WRX + WRW/2
 tip(ax, WR_CX, FCY, WR_CX, WRY+WRH, C["feat_edge"], lw=1.3, shrink=0)
