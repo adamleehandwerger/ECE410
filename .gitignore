@@ -5,6 +5,7 @@
 # Keep these
 !.gitignore
 !.gitattributes
+!LICENSE
 !/project/
 !/codefest/
 
