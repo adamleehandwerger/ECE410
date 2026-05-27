@@ -180,4 +180,89 @@ DOI: [10.13026/C2F305](https://doi.org/10.13026/C2F305)
 
 ---
 
-*Document version: m5/v9 · 2026-05-26 — RAM_LATENCY parameter added; cosim 97.67% = sklearn*
+*Document version: m5/v9 · 2026-05-27 — RAM_LATENCY parameter added; cosim 97.67% = sklearn; Appendix A added*
+
+---
+
+## Appendix A — Runtime Model Reload Procedure
+
+The ASIC is fully runtime-reprogrammable. A new trained SVM model can be loaded without
+resetting the chip or re-synthesizing. The on-chip alpha table and the off-chip SRAM are
+simply overwritten in place.
+
+### What constitutes a "model"
+
+| Parameter | Location | Size |
+|-----------|----------|------|
+| SV matrix (500 × 256 × 16-bit features) | Off-chip SRAM, rows 0–499 | 256 KB |
+| Alpha coefficients (500 × 16-bit) | On-chip `alpha_table[]` registers | 8 KB |
+| Gamma (γ, Q6.10) | On-chip `gamma_reg` shadow register | 2 bytes |
+| SV counts per class (`NUM_SV[0–4]`) | On-chip Wishbone registers | 5 bytes |
+
+### Reload sequence
+
+Perform these steps while the ASIC is idle (`STATUS[done]=1` or after reset).
+Do **not** fire `CONTROL[start]` until all steps are complete.
+
+**Step 1 — Write new SV matrix to off-chip SRAM**
+
+Write 500 rows × 256 columns of Q6.10 feature values to SRAM address rows 0–499.
+Address encoding: `addr[18:0] = {sv_global_idx[10:0], feat_dim[7:0]}`.
+This is a bulk SRAM write from the MCU and does not involve the Wishbone bus.
+
+```
+for sv in range(500):
+    for feat in range(256):
+        sram_write(addr=(sv << 8) | feat, data=sv_matrix[sv][feat])
+```
+
+**Step 2 — Write new alpha coefficients via ALPHA_WR**
+
+Write all 500 alpha values over Wishbone. Each write encodes the SV global index
+and the alpha value in a single 32-bit word:
+
+```
+WB base = 0x3000_0000
+ALPHA_WR offset = 0x28
+
+for idx in range(500):
+    word = (idx << 16) | (alpha[idx] & 0xFFFF)   # [24:16]=sv_idx, [15:0]=alpha Q6.10
+    wishbone_write(WB_BASE + 0x28, word)
+```
+
+**Step 3 — Update gamma via PARAM_WR**
+
+```
+PARAM_WR offset = 0x24
+# addr=0 is gamma register; [19]=en, [18:16]=addr, [15:0]=value
+word = (1 << 19) | (0 << 16) | gamma_Q6_10
+wishbone_write(WB_BASE + 0x24, word)
+```
+
+**Step 4 — Update SV counts if changed**
+
+Only required if the new model has different SVs per class than the previous model.
+
+```
+NUM_SV offsets: class 0 = 0x10, class 1 = 0x14, ..., class 4 = 0x20
+for c in range(5):
+    wishbone_write(WB_BASE + 0x10 + c*4, num_sv[c])
+```
+
+**Step 5 — Fire start**
+
+```
+wishbone_write(WB_BASE + 0x04, 0x0B)   # CONTROL: start=1, vbatt_ok=1, kern_ready=1
+```
+
+### Constraints
+
+- Total SV count must not exceed 500 (100 per class maximum). Models exceeding this
+  require re-synthesis with updated `NUM_SV` parameters.
+- Gamma must be representable in Q6.10 (range 0–63.999, resolution ~0.001).
+- Alpha values must be representable in Q6.10 (signed, range −32 to +31.999).
+- The reload can be performed between any two batches. The ASIC does not need to be
+  held in reset during the write sequence — the alpha table and gamma register are
+  shadow-registered and only take effect when `start` fires.
+- Writing ALPHA_WR while `STATUS[done]=0` (i.e., during active inference) has
+  undefined behavior and must be avoided.
