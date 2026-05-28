@@ -430,17 +430,24 @@ the ridge point (~16 ops/byte at 100 GB/s / 1.6 TOPS) and is firmly
 
 ### B.8 Comparison Table
 
-| Metric | Wearable ASIC (sky130A) | Hospital ASIC (28nm) | sklearn (1-core Xeon) | Numba (8-core Xeon) |
-|--------|------------------------|---------------------|----------------------|---------------------|
+**Throughput and latency:**
+
+| Metric | Wearable ASIC | Hospital ASIC | sklearn | Numba (8-core) |
+|--------|--------------|---------------|---------|----------------|
 | Throughput | 309 inf/s | **1,280,000 inf/s** | 4,200 inf/s | 95,000 inf/s |
 | Latency / 100 beats | 323 ms | **0.078 ms** | 23.8 ms | 1.05 ms |
+| Speedup vs sklearn | 0.07× | **305×** | 1× | 22.6× |
+
+**Power, area and roofline:**
+
+| Metric | Wearable ASIC | Hospital ASIC | sklearn | Numba (8-core) |
+|--------|--------------|---------------|---------|----------------|
 | Active power | 66 mW | 300 mW | 15,000 mW | 80,000 mW |
 | Avg power (80 bpm) | **0.284 mW** | 3.5 mW | ~15,000 mW | ~80,000 mW |
-| Die / chip area | 6.25 mm² | ~1.0 mm² | N/A | N/A |
-| Operational intensity | 2.0 ops/byte | **83 ops/byte** | ~2.0 ops/byte | ~2.0 ops/byte |
+| Die area | 6.25 mm² | ~1.0 mm² | N/A | N/A |
+| Process | sky130A (180nm) | TSMC 28nm | Intel 10nm | Intel 10nm |
+| Ops/byte | 2.0 | **83** | ~2.0 | ~2.0 |
 | Roofline regime | Memory-bound | **Compute-bound** | Memory-bound | Memory-bound |
-| Process | sky130A (180nm) | TSMC 28nm | Xeon (Intel 10nm) | Xeon (Intel 10nm) |
-| Speedup vs sklearn | 0.07× | **305×** | 1× (baseline) | 22.6× |
 
 **Key observations:**
 
