@@ -15,9 +15,11 @@ m5/
 ├── README.md                    ← this file — full m5 catalog
 ├── README_errorcodes.md         ← 13 error codes, sticky latch, reset-clear reference
 ├── README_mcu.md                ← MCU integration guide (batch pre-load protocol)
-├── design_summary.md            ← full design: area, power, timing, RAM_LATENCY
 ├── block_diagram.png            ← hardware block diagram (v9, batch architecture)
 ├── generate_block_diagram.py    ← renders block_diagram.png (matplotlib)
+├── design_summary.md            ← full design: area, power, timing, RAM_LATENCY,
+│                                    Appendix A (model reload), Appendix B (hospital design)
+├── design_summary.pdf           ← compiled PDF of design_summary.md
 ├── horner_lut_math.tex          ← LaTeX: fixed-point RBF kernel derivation
 │                                    (range-reduction LUT + Horner, γ=0.25, Q6.10)
 ├── horner_lut_math.pdf          ← compiled PDF of horner_lut_math.tex
@@ -37,10 +39,13 @@ m5/
 │   │                                208 cycles/beat; FEAT=4, NSV=5, iverilog)
 │   ├── sky130_stubs.v           ← sky130 cell stubs for Icarus simulation
 │   ├── confusion_comparison_m5.py ← generates confusion matrix comparison plot
+│   ├── testbench_summary.md     ← summary of all m5 testbenches and pass/fail results
 │   └── dv_run.sh                ← Caravel DV RTL simulation run script
 │
 ├── sim/                         ← Simulation outputs
-│   ├── cosim_run.log            ← Wishbone cosim log (300 samples, 97.67% accuracy)
+│   ├── final_run.log            ← Wishbone cosim log (300 samples, 97.67% accuracy)
+│   ├── final_waveform.png       ← timing diagram: wb_stb, ram_ren, sample_rdy,
+│   │                                STATUS.done, class bus — 5 representative beats
 │   ├── confusion_comparison_m5.png ← sklearn vs ASIC confusion matrix comparison
 │   ├── asic_preds.csv           ← 300 ASIC predictions (last cosim run)
 │   └── throughput_comparison.txt ← inference time and power summary
@@ -57,7 +62,8 @@ m5/
 ├── bench/                       ← Benchmark: ASIC vs optimized Python
 │   ├── benchmark.md             ← accuracy, throughput, power, energy efficiency tables
 │   ├── benchmark_data.csv       ← raw measurements (ASIC measured; CPU estimated)
-│   └── roofline_final.png       ← dual-panel roofline + power-efficiency chart
+│   ├── roofline_final.png       ← dual-panel roofline + power-efficiency chart
+│   └── roofline_final.py        ← script that generates roofline_final.png (matplotlib)
 │
 ├── caravel/                     ← Caravel chipIgnite submission artifacts
 │   ├── README_caravel.md        ← Caravel submission overview and repo layout
@@ -67,7 +73,14 @@ m5/
 │       ├── precheck_run.sh      ← SLURM script to run precheck on Orca
 │       └── precheck_results.txt ← results (pending wrapper GDS precheck run)
 │
-├── report/                      ← Final project report (to be filled)
+├── report/                      ← Final project report
+│   ├── final_report.md          ← 10-section design justification report (markdown)
+│   ├── final_report.pdf         ← compiled PDF (pandoc + xelatex)
+│   ├── design_justification.pdf ← copy of final_report.pdf for Caravel submission
+│   └── figures/                 ← embedded report figures
+│       ├── fig_A1_block_diagram.png  ← hardware block diagram (referenced §4.1)
+│       ├── fig_A2_confusion_matrix.png ← confusion matrix (referenced §8.1)
+│       └── fig_A3_roofline.png       ← roofline chart (referenced §5.2, §8.2)
 │
 └── pnr/                         ← Full P&R artifacts (scripts, configs, GDS, logs)
     ├── wrapper_config.json      ← OL2 config for user_project_wrapper
