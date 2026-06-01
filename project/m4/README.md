@@ -1,10 +1,10 @@
-# ECE410 — Milestone 4: Place-and-Route & Tape-Out Submission
+# ECE410 — Milestone 4: Place-and-Route
 
 **Design:** 5-class Cardiac Arrhythmia Classifier (RBF-SVM accelerator)  
 **Technology:** sky130A (SkyWater 130 nm open-PDK), sky130_fd_sc_hd  
 **Flow:** OpenLane 2 v2.3.10 Classic (Yosys + OpenROAD + TritonRoute)  
 **Architecture:** Batch v9 — host pre-loads SV + input matrix; ASIC classifies autonomously  
-**Status:** svm_compute_core hardened (job 91966, 0 DRC, +7.83 ns WNS). Wrapper → m5.
+**Status:** `svm_compute_core` hardened (job 91966, 0 DRC, +7.83 ns WNS). `user_project_wrapper` hardening and Caravel submission → m5.
 
 ---
 
@@ -13,7 +13,7 @@
 ```
 m4/
 ├── README.md                    ← this file — full m4 catalog
-├── README_caravel.md            ← Caravel chipIgnite submission overview
+├── README_caravel.md            ← Caravel chipIgnite overview (reference; submission in m5)
 ├── README_errorcodes.md         ← 13 error codes, sticky latch, reset-clear reference
 ├── README_mcu.md                ← MCU integration guide (batch pre-load protocol)
 ├── design_summary.md            ← P&R results: area, power, timing, architecture
@@ -21,7 +21,7 @@ m4/
 ├── generate_block_diagram.py    ← renders block_diagram.png (matplotlib)
 ├── confusion_comparison_m4.py   ← Numba Q6.10 vs ASIC confusion matrix script
 ├── confusion_comparison_m4.png  ← sklearn vs ASIC confusion matrix plot
-├── throughput_comparison.txt    ← inference time and power summary
+├── throughput_comparison.txt    ← inference time and power comparison summary (ASIC vs CPU)
 │
 ├── rt1/                         ← RTL source (v9, final)
 │   ├── top.sv                   ← top-level Caravel wrapper (user_project_wrapper)
@@ -32,6 +32,7 @@ m4/
 ├── tb/                          ← Unit testbenches (13 tests, all PASS)
 │   ├── README.md                ← testbench overview and how to run
 │   ├── Makefile                 ← iverilog/cocotb build rules; `make all` runs all tests
+│   ├── dv_Makefile              ← Caravel DV framework Makefile (Wishbone C test)
 │   ├── tb_top.sv                ← full-pipeline 5-heartbeat classification testbench
 │   ├── tb_svm_params.svh        ← auto-generated SV include: dual coefficients,
 │   │                                intercepts, SV counts for all 5 classes
@@ -73,7 +74,8 @@ m4/
 ├── bench/                       ← Benchmark: ASIC vs optimized Python
 │   ├── benchmark.md             ← accuracy, throughput, power, energy efficiency tables
 │   ├── benchmark_data.csv       ← raw measurements (ASIC measured; CPU estimated)
-│   └── roofline_final.png       ← dual-panel roofline + power-efficiency chart
+│   ├── roofline_final.png       ← dual-panel roofline + power-efficiency chart
+│   └── roofline_final.py        ← script that generates roofline_final.png (matplotlib)
 │
 └── pnr/                         ← Full P&R artifacts (scripts, GDS, SDC)
     ├── config.json              ← OL2 wrapper config
