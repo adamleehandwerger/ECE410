@@ -129,7 +129,7 @@ Inference time scales linearly with `RAM_LATENCY`. At 40 MHz:
 | BLE (optional, logging) | ~10 mW | ~0.1% | ~0.01 mW |
 | **Total estimated** | — | — | **~1.04 mW** |
 
-Battery budget: 200 mAh @ 3.7V = 740 mWh → **740 h / 1.04 mW ≈ 711 hours (~29.6 days)**.
+Battery budget: 200 mAh @ 3.7V = 740 mWh → **740 mWh / 1.04 mW ≈ 711 hours (~29.6 days)**.
 14-day target met with 2.1× margin. SVM core alone: ~2606 hours (~108 days).
 
 ---
