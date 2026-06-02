@@ -139,12 +139,19 @@ Battery budget: 200 mAh @ 3.7V = 740 mWh → **740 mWh / 1.04 mW ≈ 711 hours (
 **Repository:** [github.com/adamleehandwerger/caravel_svm_project](https://github.com/adamleehandwerger/caravel_svm_project)  
 **GDS Release:** [v2.0-hardened](https://github.com/adamleehandwerger/caravel_svm_project/releases/tag/v2.0-hardened) (226 MB core / 230 MB wrapper)
 
+**Layout artifacts:**
+
 | File | Size | Job | Status |
 |------|------|-----|--------|
 | `gds/svm_compute_core.gds` | 226 MB | 91966 | ✅ |
-| `gds/user_project_wrapper.gds` | 230 MB | 91967 | ✅ (LFS push pending) |
+| `gds/user_project_wrapper.gds` | 230 MB | 91967 | ✅ |
 | `lef/svm_compute_core.lef` | 94 KB | 91966 | ✅ |
 | `lef/user_project_wrapper.lef` | 195 KB | 91967 | ✅ |
+
+**Verilog artifacts:**
+
+| File | Size | Job | Status |
+|------|------|-----|--------|
 | `verilog/gl/svm_compute_core.v` | 13 MB | 91966 | ✅ |
 | `verilog/gl/user_project_wrapper.v` | 78 KB | 91967 | ✅ |
 | `verilog/rtl/svm_compute_core.sv` | — | v9 | ✅ |
