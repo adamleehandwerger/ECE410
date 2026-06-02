@@ -49,9 +49,36 @@
 | sklearn OVR (float) | 97.67% | 416 total (unlimited) | float precision |
 | ASIC binary OVR (Q6.10) | 97.67% | 500 total (100×5) | gamma=0.25, C=1.0 |
 
-**Zero accuracy gap** — ASIC exactly matches sklearn on all 300 test samples.
+**Zero accuracy gap** — ASIC exactly matches sklearn on all 300 test samples. See Testing Set section for per-class breakdown.
 
-Per-class breakdown (300 test samples, 60 per class):
+---
+
+## Training Set
+
+| Parameter | Value |
+|-----------|-------|
+| Source | MIT-BIH Arrhythmia Database (PhysioNet) |
+| Split | 80% train / 20% test — stratified, `random_state=42` |
+| Beats per class | 240 |
+| Classes | Normal (N), PVC, AFib, VT, SVT |
+| **Total training beats** | **1,200** |
+| Feature dimension | 256 (128 single-beat + 64 10-beat mean + 64 RR history) |
+| Precision | Q6.10 fixed-point (16-bit signed) |
+
+---
+
+## Testing Set
+
+| Parameter | Value |
+|-----------|-------|
+| Source | MIT-BIH Arrhythmia Database (PhysioNet) — held-out 20% |
+| Beats per class | 60 |
+| **Total test beats** | **300** |
+| sklearn accuracy | 97.67% (293/300) |
+| ASIC accuracy | 97.67% (293/300) — zero gap vs. float |
+
+Per-class test results:
+
 | Class | Correct | Accuracy |
 |-------|---------|----------|
 | Normal (N) | 60/60 | 100.0% |
