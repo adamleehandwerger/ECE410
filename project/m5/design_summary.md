@@ -141,7 +141,7 @@ Inference time scales linearly with `RAM_LATENCY`. At 40 MHz:
 | +0x08 | STATUS | RO | [0]=done [1]=error [5:2]=error_code [8:6]=class [9]=sample_rdy |
 | +0x0C | NUM_SAMPLES | RW | [9:0] beats in batch (1–1000) |
 | +0x10–+0x20 | NUM_SV[0–4] | RW | [7:0] SVs per class (max 100 each) |
-| +0x24 | PARAM_WR | WO | [19]=en [18:16]=addr [15:0]=data (γ, C, bias) |
+| +0x24 | PARAM_WR | WO | [19]=en [18:16]=addr [15:0]=data (gamma, C, bias) |
 | +0x28 | ALPHA_WR | WO | [24:16]=sv_global_idx (9-bit) [15:0]=alpha Q6.10 |
 
 ---
