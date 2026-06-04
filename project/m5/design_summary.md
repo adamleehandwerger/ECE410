@@ -107,6 +107,14 @@ in cosim). Set to 3 for the IS61WV51216 async SRAM (10 ns access at 40 MHz → 3
 pipeline). The core inserts wait states automatically; the host does not need to pad
 responses. Verified by `svm_ram_latency_tb.sv` (10-beat, LAT=3, PASS in ~208 cycles/beat).
 
+**Rationale for LAT=3 over LAT=2:** The IS61WV51216 specifies 10 ns access time, which
+fits within one 25 ns clock cycle in theory. However LAT=3 is used to provide a safety
+margin for: (1) PCB trace propagation delays between the ASIC GPIO pins and the SRAM data
+pins, (2) input flip-flop setup time inside the ASIC, and (3) SRAM slowdown at elevated
+temperature and low voltage. LAT=2 may work on a bench at room temperature but risks
+intermittent failures in field conditions. The throughput penalty (9.7 ms vs 3.23 ms per
+beat) is acceptable given the 750 ms heartbeat window at 80 bpm.
+
 ### What the Host Does
 
 ```
