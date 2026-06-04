@@ -33,6 +33,17 @@ can sleep during ASIC classification. At LAT=3 (IS61WV51216), classifying 1000 b
 deep sleep. For 1000-beat batches at 80 bpm the MCU sleeps 77% of the time during
 classification, which is a meaningful fraction of the 1.04 mW full-system budget.
 
+**ECG beats missed during sleep (accepted trade-off).** The analog ECG frontend runs
+continuously regardless of MCU state, but the MCU cannot sample the ADC or extract features
+while in deep sleep. During the 9.7-second classification window, approximately 13 beats
+(9.7 s × 80 bpm / 60) are not captured. This is an accepted loss: 13 missed beats represent
+1.3% of the 1000-beat window, and the 12.5-minute collection window already provides
+sufficient temporal coverage to detect paroxysmal arrhythmias that last more than a few
+minutes. A more complete solution would use a DMA controller or a dedicated low-power
+co-processor to buffer ECG samples into a ring buffer while the MCU sleeps, eliminating
+dropped beats entirely — but this adds hardware complexity that was out of scope for this
+design.
+
 ---
 
 ## 2. Multi-Scale Feature Vector: 1-Beat, 10-Beat, 100-Beat Morphology
