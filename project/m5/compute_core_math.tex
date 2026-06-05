@@ -158,15 +158,19 @@ flip-flop registers.
 
 \subsubsection*{Polynomial term: \(e^{-F}\)}
 
-For \(F \in [0,\; 1)\), a degree-3 Horner polynomial gives
-10-bit accuracy:
+For \(F \in [0,\; 1)\), numerical analysis shows that degree 6 is the minimum
+Taylor polynomial that keeps the approximation error below the
+\(\mathbb{Q}_{6.10}\) LSB of \(2^{-10} \approx 0.001\) across the full range.
+The RTL defines up to 16 Taylor coefficients (\texttt{COEFF\_00}--\texttt{COEFF\_15})
+and evaluates them via Horner's method:
 \[
-    e^{-F} \;\approx\; c_0 + F\bigl(c_1 + F(c_2 + F \cdot c_3)\bigr),
+    e^{-F} \;\approx\; \sum_{n=0}^{d} \frac{(-F)^n}{n!}
+    \;=\; c_0 + F\bigl(c_1 + F(c_2 + \cdots + F \cdot c_d)\bigr),
 \]
-where the coefficients \(c_0, \ldots, c_3\) are stored in \(\mathbb{Q}_{6.10}\).
-Evaluation proceeds right-to-left (Horner's method), requiring
-3 multiplications and 3 additions, totalling 6 fixed-point operations
-and 18 clock cycles.
+where the coefficients are the Taylor series values \(c_n = 1/n!\) with
+alternating signs applied during evaluation. Evaluation proceeds
+right-to-left (Horner's method), requiring \(d\) multiplications and
+\(d\) additions.
 
 \subsection{Kernel Output}
 
