@@ -369,5 +369,16 @@ without bus errors, GPIO transitions visible on the expected pins) constitutes a
 | 5 — Platform DV | svm\_wb\_test.c | Wishbone + SoC RTL | Caravel DV | 1 | **RTL sim complete** |
 | **Total** | | | | **25** | **25/25 PASS** |
 
+**Note on interface terminology in Levels 1 and 2:** The Level 1 and 2 tests were written
+when the core still used a QSPI/FIFO streaming interface, and their signal names reflect
+that era (e.g., `qspi_valid`, `qspi_ready`, `sv_ram_addr`). These tests drive
+`svm_compute_core` at its direct RTL ports, bypassing the Caravel wrapper entirely, so the
+internal port names have not changed even though the top-level communication strategy moved
+to Wishbone. The Wishbone interface lives in `top.sv` and translates incoming bus
+transactions into the same internal signals the unit tests drive directly. The Level 1 and
+2 tests therefore remain valid for the final RTL. The only test that exercises the complete
+Wishbone path as silicon would see it is Level 4 (`tb_wb_cosim.py`), which passes at
+97.67% accuracy.
+
 ---
 *ECE410 · Portland State University · Adam Handwerger · sky130A · MIT-BIH Arrhythmia Database*
