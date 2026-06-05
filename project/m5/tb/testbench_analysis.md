@@ -220,7 +220,7 @@ than another (PVC). The test verifies that the SV counter loop handles non-unifo
 sizes correctly and does not mis-index into the alpha table when the class boundaries
 are irregular.
 
-## test\_qspi\_fifo\_load
+## test\_qspi\_fifo\_load *(name retained from m4 development; interface replaced by Wishbone + SRAM in m5)*
 
 Streams a full 256-word feature vector through the QSPI interface (`qspi_valid` /
 `qspi_data` / `qspi_ready`) and confirms that the FIFO absorbs all 256 words without
@@ -229,7 +229,7 @@ asserting `qspi_ready = 0` (no backpressure triggered). The simulation wall time
 This test was the initial vehicle for finding FIFO depth misconfigurations that would
 silently drop feature dimensions.
 
-## test\_qspi\_backpressure
+## test\_qspi\_backpressure *(name retained from m4 development; interface replaced by Wishbone + SRAM in m5)*
 
 Deliberately overflows the FIFO by continuing to send `qspi_valid` after it is
 full, then verifies that `qspi_ready` deasserts to signal backpressure. Words presented
