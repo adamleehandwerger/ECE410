@@ -63,7 +63,10 @@
 
 ## Outstanding Items
 
-- [ ] Run mpw-precheck after LFS push completes
+- [ ] **RE-HARDEN (blocking)** — Re-run core harden (job 91966 used RAM_LATENCY=1 default).
+      Fix: `SYNTH_TOP_LEVEL_PARAMETERS: RAM_LATENCY=3` added to `openlane/svm_compute_core/config.json`.
+      Then re-run wrapper harden with new core GDS. ~3–4 hours on Orca.
+- [ ] Run mpw-precheck after re-harden and LFS push
 - [ ] Run Caravel chip-level DV (`dv_run.sh`)
 - [ ] Submit caravel_svm_project repo URL to ECE410
 - [ ] Run SS corner timing signoff (SS/1.62V/125°C) — TT only verified so far

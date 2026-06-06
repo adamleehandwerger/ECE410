@@ -115,7 +115,7 @@ m5/
 | Core hold WNS | +0.30 ns (TT, 0 violations) |
 | Core DRC | 0 violations |
 | Wrapper DRC | 11,923 boundary artifacts (acceptable) |
-| Active power | 66 mW → 0.284 mW avg at 80 bpm (0.431% duty cycle) |
+| Active power | 66 mW → 0.869 mW avg at 80 bpm (1.316% duty cycle, LAT=3) |
 | Core die | 2500 × 2500 µm, ~14% utilization, ~146K cells |
 | Wrapper die | 2920 × 3520 µm (Caravel fixed), 230 MB GDS |
 | ASIC accuracy | 97.67% (293/300) — exact match with sklearn, zero gap |

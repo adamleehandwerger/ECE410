@@ -27,6 +27,7 @@
 - [ ] **Upload to Efabless** — submit GDS + LEF + GL netlist via the Efabless project submission portal at [efabless.com](https://efabless.com)
 - [ ] **Tag the caravel repo** — `git tag submission-v1` and push so the submitted commit is pinned
 - [ ] **Confirm license** — Apache 2.0 in `caravel_svm_project` repo (required for open shuttle acceptance)
+- [ ] **Re-harden with RAM_LATENCY=3 (blocking)** — job 91966 was synthesized with default RAM_LATENCY=1; silicon will fail with IS61WV51216 SRAM. Fix already applied to `caravel/openlane/svm_compute_core/config.json` (`SYNTH_TOP_LEVEL_PARAMETERS: RAM_LATENCY=3`). Re-run core + wrapper harden on Orca (~3–4 hrs). Then re-run mpw-precheck and DV.
 - [ ] **SS corner timing signoff** — re-run OpenSTA at SS/1.62V/125°C; TT corner (+7.83 ns WNS) is the only corner verified so far
 
 ### 1.3 Next Shuttle
