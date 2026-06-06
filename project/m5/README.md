@@ -158,12 +158,22 @@ m4 hardened the svm_compute_core macro only. m5 adds:
 - user_project_wrapper hardening (job 91967) — Caravel fixed die, macro placement
 - RAM_LATENCY parameter — configurable wait-states for IS61WV51216 async SRAM
 - svm_ram_latency_tb.sv — unit test: LAT=3 → PASS, 208 cycles/beat
-- horner_lut_math.tex/pdf — fixed-point RBF kernel derivation document
+- compute_core_math.tex/pdf — LaTeX mathematical description of dist + horner subfunctions
+- design_summary.md/pdf — full design summary with Appendices A/B/C (model reload, hospital design, MCU sequence)
+- design_rationale.md — architectural decision record (8 decisions with alternatives)
+- testbench_analysis.md/pdf — 5-level testbench analysis (25 tests)
+- horner_errorplot.png — degree-6 Taylor error vs Q6.10 LSB threshold
 - Caravel submission artifacts (caravel/ folder)
-- report/ folder (final project report, to be filled)
+
+## Outstanding (pre-submission)
+
+- **Re-harden required** — job 91966 synthesized with RAM_LATENCY=1 (default).
+  Fix applied to `caravel/openlane/svm_compute_core/config.json`.
+  Re-run core + wrapper harden on Orca before submitting GDS.
+- mpw-precheck, Caravel DV, SS corner — see `caravel/checklist.md`
 
 ## Next Step
 
-MCU design — seeking clinical input from Dr. Eric Stecker (OHSU Knight  
-Cardiovascular / Insight Health AI) on arrhythmia patterns and temporal window  
-requirements for the batch classification interface.
+MCU design — nRF52840 recommended for ECG sampling, feature extraction, and
+Wishbone/GPIO control of the ASIC. See `design_summary.md` Appendix C for
+the full MCU task sequence.
