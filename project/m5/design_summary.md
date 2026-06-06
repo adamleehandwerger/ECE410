@@ -497,3 +497,54 @@ the ridge point (~16 ops/byte at 100 GB/s / 1.6 TOPS) and is firmly
 - This is achieved by converting a memory-bound sequential problem into a compute-bound GEMM
 - The SRAM leakage floor (3.5 mW) makes the hospital design unsuitable for wearable use — 12× worse average power than the current design despite being 4,000× faster
 - Both designs achieve 97.67% accuracy — the architecture difference is entirely in throughput and power, not classification quality
+
+---
+
+## Appendix C — MCU Task Sequence
+
+The MCU drives every phase of the system. The ASIC is passive until `start` fires
+and runs autonomously until `done` pulses. The MCU must not assume `start` self-clears —
+if `start` remains asserted when the FSM returns to IDLE, the ASIC immediately begins
+another batch on the same data.
+
+### Per-batch sequence
+
+**Phase 1 — Data loading (MCU active, ASIC idle)**
+
+1. Collect 1000 heartbeats via ECG frontend (250 Hz sampling, feature extraction per beat)
+2. Write SV matrix to off-chip SRAM: 500 rows × 256 Q6.10 features → rows 0–499
+3. Write input matrix to off-chip SRAM: up to 1000 beats × 256 Q6.10 features → rows 500–1499
+4. Write alpha coefficients via `ALPHA_WR` (Wishbone `0x28`): one write per SV (500 total)
+5. Write `NUM_SAMPLES` (Wishbone `0x0C`): number of beats in this batch
+6. Write `NUM_SV[0–4]` (Wishbone `0x10–0x20`): SVs per class (100 each)
+
+**Phase 2 — Fire and sleep (MCU sleeps, ASIC classifies)**
+
+7. Assert `start`: write `0x0B` to CONTROL (`0x04`) — sets `start=1`, `vbatt_ok=1`, `kern_ready=1`
+8. MCU enters deep sleep — ASIC classifies the full batch autonomously (~9.87 ms at LAT=3)
+
+**Phase 3 — Done handling (MCU wakes on IRQ)**
+
+9. IRQ[1] (`done`) fires — MCU wakes from sleep
+10. **Clear `start`**: write `0x0A` to CONTROL (`0x04`) — clears bit 0, leaving `vbatt_ok` and `kern_ready` set.
+    If `start` is not cleared before the FSM reaches IDLE, the ASIC will immediately re-classify the same batch.
+11. Read `STATUS` (`0x08`): bits `[8:6]` = `class_out` for the final beat; bit `[1]` = error flag
+12. Per-beat results were signalled by `sample_rdy` (IRQ[0]) during classification — MCU firmware
+    should have latched `class_out` on each IRQ[0] pulse for the full per-beat result log
+
+**Phase 4 — Next batch**
+
+13. Load new input matrix into SRAM rows 500–1499 (SV matrix in rows 0–499 is unchanged unless model reloaded)
+14. Update `NUM_SAMPLES` if batch size changed
+15. Re-assert `start` → repeat from Phase 2
+
+### Register writes summary
+
+| Step | Register | Offset | Value | Effect |
+|------|----------|--------|-------|--------|
+| Load alpha | ALPHA_WR | `0x28` | `{sv_idx[8:0], alpha[15:0]}` | Write one alpha coefficient |
+| Set batch size | NUM_SAMPLES | `0x0C` | `0x03E8` (1000) | Beats per batch |
+| Set SV counts | NUM_SV[0–4] | `0x10–0x20` | `0x64` (100) each | SVs per class |
+| Fire | CONTROL | `0x04` | `0x0B` | start=1, vbatt_ok=1, kern_ready=1 |
+| Clear | CONTROL | `0x04` | `0x0A` | start=0, vbatt_ok=1, kern_ready=1 |
+| Read result | STATUS | `0x08` | — | `[8:6]`=class, `[1]`=error, `[0]`=done |
