@@ -86,13 +86,43 @@ Key verified behaviors:
 
 ---
 
-## Level 4 — System Test (cocotb, Wishbone, Caravel wrapper)
+## Level 4 — Wishbone Unit Tests (cocotb, Wishbone, Caravel wrapper)
+
+**Location:** `m5/tb/` (this directory)  
+**Simulator:** Icarus Verilog + cocotb 2.0.1  
+**Run:** `make unit`  (~4 s)  
+**Interface:** Wishbone register map through `user_project_wrapper` — synthetic fixed-point stimulus
+
+`tb_wb_unit.py` replaces the legacy m3 QSPI/FIFO tests with 7 targeted Wishbone interface
+tests. All tests use a minimal 5-SV-per-class configuration (25 total) for fast simulation.
+Stimulus is synthetic constant-value fixed-point patterns — these tests verify the interface,
+not classification accuracy.
+
+| Test | Sim Time | Result | What it covers (replaces m3 test) |
+|------|----------|--------|------------------------------------|
+| `test_wb_reset_outputs` | 550 ns | **PASS** | STATUS=0 after reset (`test_reset_outputs`) |
+| `test_wb_gamma_register` | 600 ns | **PASS** | PARAM_WR → gamma_reg=0x0100=0.25 Q6.10 (`test_param_programming`) |
+| `test_wb_num_sv_registers` | 700 ns | **PASS** | NUM_SV[0–4] accept writes, total correct (`test_sv_counts_set`) |
+| `test_wb_alpha_load` | 1425 ns | **PASS** | 25 alpha coefficients load via ALPHA_WR, no error (`test_sv_counts_unequal_stress`) |
+| `test_wb_sram_load` | 185,075 ns | **PASS** | Load→fire→sample_rdy at LAT=1; advisory ERR_WARMING_UP only (`test_qspi_fifo_load`) |
+| `test_wb_ram_latency` | 185,075 ns | **PASS** | 2-cycle SRAM delay still classifies correctly (`test_qspi_backpressure`) |
+| `test_wb_start_clear` | 188,075 ns | **PASS** | FSM halts after start cleared; no spurious re-fire (new, v9 interface) |
+
+Note: `ERR_WARMING_UP` (advisory code 0x8) appears in STATUS during single-beat runs — this
+is expected behavior verified by `svm_ram_latency_tb.sv` (Level 3). Sticky errors (code < 0x8)
+would fail these tests.
+
+**Level 4 total: 7/7 PASS**
+
+---
+
+## Level 5 — System Test (cocotb, Wishbone, Caravel wrapper)
 
 **Location:** `m5/tb/` (this directory)  
 **Simulator:** Icarus Verilog + cocotb  
 **Run:** `PYTHONUNBUFFERED=1 make sim`  (full 300 samples, ~96 min)  
 **Run (quick):** `COSIM_N_EVAL=25 COSIM_GAMMA=0.25 make sim`  
-**Interface:** Wishbone register map through `user_project_wrapper` — full Caravel path
+**Interface:** Wishbone register map through `user_project_wrapper` — real PhysioNet ECG data
 
 `tb_wb_cosim.py` acts as the host MCU. It pre-loads the SV matrix (rows 0–499)
 and input matrix (rows 500–1499) into a Python SRAM model, fires `CONTROL[start=1]`
@@ -106,11 +136,11 @@ per-beat via GPIO `sample_rdy` and `class_out`.
 Wishbone registers exercised: `CONTROL`, `STATUS`, `NUM_SAMPLES`, `NUM_SV[0–4]`, `PARAM_WR`, `ALPHA_WR`  
 SRAM latency modeled: LAT=1 (1-cycle ideal RAM, default for cosim)
 
-**Level 4 total: 1/1 PASS** (293/300 correct, matches sklearn exactly)
+**Level 5 total: 1/1 PASS** (293/300 correct, matches sklearn exactly)
 
 ---
 
-## Level 5 — Platform DV (Caravel DV framework, Wishbone, full management SoC RTL)
+## Level 6 — Platform DV (Caravel DV framework, Wishbone, full management SoC RTL)
 
 **Location:** `m5/tb/` (this directory)  
 **Simulator:** Icarus Verilog + Caravel management SoC RTL  
@@ -119,7 +149,7 @@ SRAM latency modeled: LAT=1 (1-cycle ideal RAM, default for cosim)
 
 `svm_wb_test.c` is compiled to RISC-V firmware and runs inside the Caravel
 management SoC RTL simulation. It exercises the same Wishbone register map as
-Level 4 but through the real SoC fabric — verifying that the GPIO mux, LA bus,
+Level 5 but through the real SoC fabric — verifying that the GPIO mux, LA bus,
 and Wishbone arbitration all function correctly in the full-chip context.
 
 | Testbench | Result | What it covers |
@@ -137,8 +167,9 @@ Note: full functional pass/fail logged in `../sim/cosim_run.log`.
 | 1 — Unit | Direct RTL | iverilog | m4/tb/ | 13 | **13/13 PASS** |
 | 2 — Integration | Direct RTL | cocotb | m4/tb/ | 9 | **9/9 PASS** |
 | 3 — Feature/Parameter | Direct RTL | iverilog | m5/tb/ | 1 | **1/1 PASS** |
-| 4 — System | Wishbone (wrapper) | cocotb | m5/tb/ | 1 | **PASS — 97.67%** |
-| 5 — Platform DV | Wishbone (full SoC) | Caravel DV | m5/tb/ | 1 | **RTL sim complete** |
-| **Total** | | | | **25** | **25/25 PASS** |
+| 4 — Wishbone Unit | Wishbone (wrapper) | cocotb | m5/tb/ | 7 | **7/7 PASS** |
+| 5 — System | Wishbone (wrapper) | cocotb | m5/tb/ | 1 | **PASS — 97.67%** |
+| 6 — Platform DV | Wishbone (full SoC) | Caravel DV | m5/tb/ | 1 | **RTL sim complete** |
+| **Total** | | | | **32** | **32/32 PASS** |
 
 *ECE410 — Portland State University · Adam Handwerger · m5*

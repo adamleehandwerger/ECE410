@@ -298,7 +298,69 @@ overhead ≈ 208 cycles.
 
 ---
 
-# Level 4 — System Test (cocotb, Wishbone, Caravel Wrapper)
+# Level 4 — Wishbone Unit Tests (cocotb, Wishbone, Caravel Wrapper)
+
+**Location:** `m5/tb/` · **Simulator:** Icarus Verilog + cocotb 2.0.1  
+**Run:** `make unit` (~4 s)
+
+## tb\_wb\_unit.py — Wishbone Interface Unit Tests
+
+`tb_wb_unit.py` replaces the legacy QSPI/FIFO tests from m3 with 7 targeted tests that
+exercise the Wishbone register map through the `user_project_wrapper`. All tests use a
+minimal 5-SV-per-class configuration (25 total) so each test completes in under 200,000 ns.
+Stimulus is synthetic constant-value fixed-point patterns — the goal is interface correctness,
+not classification accuracy.
+
+## test\_wb\_reset\_outputs
+
+Reads the STATUS register immediately after reset and confirms that `done`, `error`, and
+`class_out` are all zero. Replaces m3 `test_reset_outputs`, which checked the same condition
+on the direct-port interface; this version drives via Wishbone read at offset 0x08.
+
+## test\_wb\_gamma\_register
+
+Writes `gamma = 0.25` to `PARAM_WR` (offset 0x24) using the `(write_en << 19) | (addr << 16) | data` encoding, then reads back the internal `gamma_reg` signal via hierarchy. Confirms that the Q6.10 encoding 0x0100 round-trips correctly. Replaces m3 `test_param_programming`.
+
+## test\_wb\_num\_sv\_registers
+
+Writes five distinct SV counts — [10, 20, 15, 25, 30] — to `NUM_SV[0..4]` (offsets 0x10–0x20) and attempts to read them back via signal hierarchy. Confirms total = 100 and that no SV count exceeds the valid range. Replaces m3 `test_sv_counts_set`.
+
+## test\_wb\_alpha\_load
+
+Loads 25 alpha coefficients (one per SV, linearly varying from +0.50 to +0.26) through
+`ALPHA_WR` (offset 0x28) using the `(index << 16) | value` encoding. Verifies that the
+STATUS error flag is not asserted after all 25 writes complete. Replaces m3
+`test_sv_counts_unequal_stress`, which tested the same stress-load pattern on the direct
+alpha table port.
+
+## test\_wb\_sram\_load
+
+Configures the full 5-SV-per-class SVM, arms a 1-cycle SRAM model (`ram_model_lat`, LAT=1),
+and fires `CONTROL[start=1, vbatt_ok=1]`. Waits for `sample_rdy` on GPIO[3] and confirms
+that the ASIC classifies the single-sample batch without a sticky error (error\_code < 0x8).
+Advisory `ERR_WARMING_UP` (code 0x8) is expected for a 1-beat batch and is not treated as
+a failure — the same condition is confirmed by the Level 3 RAM\_LATENCY test. Replaces m3
+`test_qspi_fifo_load`.
+
+## test\_wb\_ram\_latency
+
+Same as `test_wb_sram_load` but uses a 2-cycle SRAM model (LAT=2). Confirms that the
+RAM\_LATENCY wait-state logic correctly holds off feature reads until data is valid,
+producing the same classification result as LAT=1. The cycle budget is doubled to
+accommodate the extra latency. Replaces m3 `test_qspi_backpressure`.
+
+## test\_wb\_start\_clear
+
+Fires `start`, waits for `svm_done` (GPIO[4]), immediately writes `CONTROL[start=0]`, and
+then monitors GPIO[3] for 100 cycles to confirm that `sample_rdy` does not fire again. This
+verifies the v9 RTL behavior documented in design\_summary.md Appendix C: the FSM returns
+to IDLE after the batch and immediately re-fires if `start` remains asserted. The MCU must
+clear `CONTROL[0]` within one clock cycle of `done` to prevent re-classification. New test,
+no m3 equivalent.
+
+---
+
+# Level 5 — System Test (cocotb, Wishbone, Caravel Wrapper)
 
 **Location:** `m5/tb/` · **Simulator:** Icarus Verilog + cocotb  
 **Run:** `PYTHONUNBUFFERED=1 make sim` (300 samples, ~96 min) or `COSIM_N_EVAL=25 make sim` (quick subset)
@@ -337,7 +399,7 @@ intrinsic morphological ambiguity of VT and SVT on a single-lead ECG.
 
 ---
 
-# Level 5 — Platform DV (Caravel DV, Wishbone, Full Management SoC RTL)
+# Level 6 — Platform DV (Caravel DV, Wishbone, Full Management SoC RTL)
 
 **Location:** `m5/tb/` · **Simulator:** Icarus Verilog + Caravel management SoC RTL  
 **Run:** `./dv_run.sh` (requires Caravel DV environment on Orca)
@@ -353,7 +415,7 @@ mux routes `io_out` signals to the user project's GPIO ports, and the Logic Anal
 interface drives `la_data_in`. This level verifies that the GPIO mux configuration,
 the `user_project_wrapper` port connectivity, and the Wishbone address decoding all
 function correctly in the full-chip context — not just in the isolated wrapper simulation
-of Level 4. Completion of the RTL simulation (all Wishbone register writes acknowledged
+of Level 5. Completion of the RTL simulation (all Wishbone register writes acknowledged
 without bus errors, GPIO transitions visible on the expected pins) constitutes a pass.
 
 ---
@@ -365,9 +427,10 @@ without bus errors, GPIO transitions visible on the expected pins) constitutes a
 | 1 — Unit | tb\_top, tb\_error\_codes, tb\_backpressure, tb\_consecutive, tb\_dist\_boundary, tb\_dist\_zero, tb\_gamma\_zero, tb\_interface, tb\_min\_sv, tb\_multi\_heartbeat, tb\_param\_write, tb\_power, tb\_warmup | Direct RTL | iverilog | 13 | **13/13 PASS** |
 | 2 — Integration | test\_reset\_outputs, test\_param\_programming, test\_sv\_counts\_set, test\_sv\_counts\_unequal\_stress, test\_qspi\_fifo\_load, test\_qspi\_backpressure, test\_default\_gamma\_fixed\_point, test\_full\_pipeline\_small\_batch, test\_kernel\_output\_range | Direct RTL | cocotb | 9 | **9/9 PASS** |
 | 3 — Feature | svm\_ram\_latency\_tb | Direct RTL | iverilog | 1 | **1/1 PASS** |
-| 4 — System | tb\_wb\_cosim | Wishbone + wrapper | cocotb | 1 | **PASS — 97.67%** |
-| 5 — Platform DV | svm\_wb\_test.c | Wishbone + SoC RTL | Caravel DV | 1 | **RTL sim complete** |
-| **Total** | | | | **25** | **25/25 PASS** |
+| 4 — Wishbone Unit | tb\_wb\_unit (7 tests) | Wishbone + wrapper | cocotb | 7 | **7/7 PASS** |
+| 5 — System | tb\_wb\_cosim | Wishbone + wrapper | cocotb | 1 | **PASS — 97.67%** |
+| 6 — Platform DV | svm\_wb\_test.c | Wishbone + SoC RTL | Caravel DV | 1 | **RTL sim complete** |
+| **Total** | | | | **32** | **32/32 PASS** |
 
 **Note on interface terminology in Levels 1 and 2:** The Level 1 and 2 tests were written
 when the core still used a QSPI/FIFO streaming interface, and their signal names reflect
@@ -376,9 +439,10 @@ that era (e.g., `qspi_valid`, `qspi_ready`, `sv_ram_addr`). These tests drive
 internal port names have not changed even though the top-level communication strategy moved
 to Wishbone. The Wishbone interface lives in `top.sv` and translates incoming bus
 transactions into the same internal signals the unit tests drive directly. The Level 1 and
-2 tests therefore remain valid for the final RTL. The only test that exercises the complete
-Wishbone path as silicon would see it is Level 4 (`tb_wb_cosim.py`), which passes at
-97.67% accuracy.
+2 tests therefore remain valid for the final RTL. Levels 4 and 5 exercise the complete
+Wishbone path as silicon would see it — Level 4 (`tb_wb_unit.py`) verifies the register
+interface, and Level 5 (`tb_wb_cosim.py`) verifies end-to-end classification at 97.67%
+accuracy.
 
 ---
 *ECE410 · Portland State University · Adam Handwerger · sky130A · MIT-BIH Arrhythmia Database*

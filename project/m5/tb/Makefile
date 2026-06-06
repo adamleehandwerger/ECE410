@@ -10,10 +10,10 @@ SIM      = icarus
 TOPLEVEL = user_project_wrapper
 MODULE   = tb_wb_cosim
 
-RTL_DIR  = ../../m5/rt1
+RTL_DIR  = ../rt1
 
-VERILOG_SOURCES  = $(RTL_DIR)/user_project_wrapper.sv
-VERILOG_SOURCES += $(RTL_DIR)/svm_compute_core.sv
+VERILOG_SOURCES  = $(RTL_DIR)/top.sv
+VERILOG_SOURCES += $(RTL_DIR)/compute_core.sv
 VERILOG_SOURCES += sky130_stubs.v
 
 # SystemVerilog + macro definitions
@@ -30,6 +30,10 @@ include $(shell cocotb-config --makefiles)/Makefile.sim
 .PHONY: cosim
 cosim:
 	$(MAKE) sim
+
+.PHONY: unit
+unit:
+	$(MAKE) sim MODULE=tb_wb_unit
 
 .PHONY: plot
 plot: asic_preds.csv
