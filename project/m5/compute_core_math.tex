@@ -99,14 +99,23 @@ Total cycles per SV distance: \(N + 2 = 258\) at \(\text{LAT}=1\);
 
 \subsection{Saturation}
 
-The accumulator is 32-bit. The theoretical worst-case value for \(N=256\)
-and maximum feature magnitude \(|x_i - sv_i| \leq 63.999\) is
+The accumulator is 32-bit, with a hardware maximum of \(2^{32} - 1\).
+The theoretical worst-case accumulated value for \(N=256\) and maximum
+feature magnitude \(|x_i - sv_i| \leq 63.999\) is
 \[
-    D_{\max} = 256 \times (63.999)^2 \approx 1{,}048{,}544 \;<\; 2^{20},
+    D_{\max} = 256 \times (63.999)^2 \approx 1{,}048{,}544 \approx 2^{20},
 \]
-so 20 significant bits are sufficient. If the accumulator reaches
-\(\texttt{0xFFFFF}\) (saturated), the sticky flag
-\texttt{ERR\_DIST\_OVERFLOW} is asserted.
+which is well within the 32-bit range. The fixed-point overflow boundary
+is determined by the gamma multiply: after right-shifting by \(2^{10}\),
+the maximum representable Q6.10 value from a 32-bit accumulator is
+\[
+    \frac{2^{32}}{2^{10}} = 2^{22}.
+\]
+With \(\hat{\gamma} = 2^8\), the accumulator would produce
+\(\hat{p} > 2^{18}\) only if \(D > 2^{20}\), which does not occur on
+real ECG data. The \texttt{ERR\_DIST\_OVERFLOW} flag is therefore a
+defensive sanity check rather than a condition expected in normal
+operation.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Kernel Function (\texttt{horner})}
