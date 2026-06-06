@@ -1,7 +1,9 @@
 # MCU Integration Guide — SVM Cardiac Arrhythmia Classifier
 
-This document describes how the Caravel RISC-V management core (MCU) interacts
-with the `user_project_wrapper` SVM classifier.
+This document describes how a host MCU interacts with the `user_project_wrapper`
+SVM classifier using the **v9 batch architecture**.  The MCU pre-loads both the
+SV matrix and the input matrix into off-chip SRAM, fires a single `start` pulse,
+and the ASIC classifies the entire batch autonomously.
 
 ---
 
@@ -13,27 +15,40 @@ ECG frontend
      │  Feature extraction (three temporal scales)
      │  ├─ 128 single-beat morphology features (current beat)
      │  ├─  64 10-beat context features  (mean of previous 9 beats)
-     │  └─  64 100-beat context features (rhythm statistics, previous 99 beats)
-     │       └── concatenated → 256 × 16-bit feature vector
+     │  └─  64 100-beat context features (RR history, previous 99 beats)
+     │       └── concatenated → 256 × 16-bit Q6.10 feature vector
      ▼
-RISC-V MCU
-     │  256 × 16-bit words via Wishbone FIFO_DATA
+Host MCU
+     │  Pre-load off-chip SRAM via SPI/GPIO:
+     │  ├─ Rows   0–499   SV matrix     (500 SVs × 256 features)
+     │  └─ Rows 500–1499  Input matrix  (up to 1000 beats × 256 features)
+     │
+     │  Write Wishbone config registers, then assert CONTROL[start=1]
      ▼
-[Wishbone FIFO]  ──►  svm_compute_core  ──►  internal argmax  ──►  class (0–4)
-                            │                       │                    │
-                     kernel scores          work_ram[beat_i]       user_irq[0]
-                     cs0–cs3 on LA bus    (after all beats done)
+user_project_wrapper  (Caravel SoC)
+     │
+     svm_compute_core
+     │  Reads off-chip SRAM autonomously via GPIO[29:10] + LA[15:0]
+     │  Classifies all beats in batch without MCU involvement
+     │
+     │  Per-beat output:
+     │  ├─ GPIO[3]   sample_rdy  (one-cycle pulse per classified beat)
+     │  └─ GPIO[2:0] class_out   (3-bit label, stable when sample_rdy high)
+     │
+     │  Batch done:
+     ├─ GPIO[4]     svm_done    (one-cycle pulse after last beat)
+     └─ user_irq[1] svm_done
 ```
 
-The five arrhythmia classes follow the AAMI EC57 standard mapping:
+The five arrhythmia classes:
 
-| Class | Label | Description                        |
-|-------|-------|------------------------------------|
-|   0   |   N   | Normal / non-ectopic               |
-|   1   |   S   | Supraventricular ectopic (SVEB)    |
-|   2   |   V   | Ventricular ectopic (VEB / PVC)    |
-|   3   |   F   | Fusion beat                        |
-|   4   |   Q   | Unclassifiable / unknown           |
+| code | Label  | Description                        |
+|------|--------|------------------------------------|
+|  0   | Normal | Normal sinus rhythm                |
+|  1   | PVC    | Premature Ventricular Contraction  |
+|  2   | AFib   | Atrial Fibrillation                |
+|  3   | VT     | Ventricular Tachycardia            |
+|  4   | SVT    | Supraventricular Tachycardia       |
 
 ---
 
@@ -42,20 +57,16 @@ The five arrhythmia classes follow the AAMI EC57 standard mapping:
 Each beat is classified using a single 256-dimensional feature vector assembled
 by the MCU from three temporal scales:
 
-| Dimensions | Scale   | Content                                          |
-|------------|---------|--------------------------------------------------|
-| [0..127]   | 1-beat  | 128 morphology features of the current beat      |
-| [128..191] | 10-beat | 64 context features summarising previous 9 beats |
-| [192..255] | 100-beat| 64 context features summarising previous 99 beats|
-
-The MCU extracts these features from its local beat buffer, concatenates them,
-and streams the resulting 256-word vector to the SVM core via Wishbone.
+| Dimensions | Scale    | Content                                           |
+|------------|----------|---------------------------------------------------|
+| [0..127]   | 1-beat   | 128 morphology features of the current beat       |
+| [128..191] | 10-beat  | 64 context features summarising previous 9 beats  |
+| [192..255] | 100-beat | 64 RR-history features summarising previous 99 beats |
 
 **Warm-up:** The 10-beat and 100-beat slices are only fully populated after the
 device has processed at least 99 beats. During cold start, `ERR_WARMING_UP` is
-raised (advisory, non-sticky) to signal that results from the first 99 beats may
-be less reliable. The core still classifies normally; the MCU may choose to flag
-or discard those early results.
+raised (advisory, code 0x8, non-sticky) to signal that results from the first 99
+beats may be less reliable. The core still classifies normally.
 
 ---
 
@@ -63,130 +74,160 @@ or discard those early results.
 
 Base address: `0x3000_0000`
 
-| Offset | Access | Name        | Bits      | Description                                   |
-|--------|--------|-------------|-----------|-----------------------------------------------|
-| 0x00   | WO     | FIFO_DATA   | [15:0]    | Write one 16-bit feature word; 256 words = one beat |
-| 0x04   | RW     | CONTROL     | [0]       | `start` — pulse high to begin classification  |
-|        |        |             | [1]       | `vbatt_ok` — battery voltage acceptable       |
-|        |        |             | [2]       | `vbatt_warn` — battery low warning            |
-| 0x08   | RO     | STATUS      | [0]       | `done` — all beats in batch classified        |
-|        |        |             | [1]       | `error` — fault detected                     |
-|        |        |             | [5:2]     | `error_code` — error detail (4 bits)          |
-|        |        |             | [8:6]     | `class` — class label of beat 0 (work_ram[0]) |
-| 0x0C   | RW     | NUM_SAMPLES | [9:0]     | Number of beats in this batch (1–1000)        |
-| 0x10   | RW     | NUM_SV_0   | [7:0]     | Support vectors for class 0                   |
-| 0x14   | RW     | NUM_SV_1   | [7:0]     | Support vectors for class 1                   |
-| 0x18   | RW     | NUM_SV_2   | [7:0]     | Support vectors for class 2                   |
-| 0x1C   | RW     | NUM_SV_3   | [7:0]     | Support vectors for class 3                   |
-| 0x20   | RW     | NUM_SV_4   | [7:0]     | Support vectors for class 4                   |
-| 0x24   | WO     | PARAM_WR   | [19]      | Write enable                                  |
-|        |        |             | [18:16]   | Parameter address (gamma, C, bias[0–4])       |
-|        |        |             | [15:0]    | Parameter value                               |
-| 0x38   | WO     | WORK_RD    | [10:0]    | work_ram address to latch for readback        |
-| 0x3C   | RO     | STATUS2    | [15:0]    | work_ram data at address written to WORK_RD   |
+| Offset | Access | Name         | Bits      | Description                                     |
+|--------|--------|--------------|-----------|-------------------------------------------------|
+| 0x04   | RW     | CONTROL      | [0]       | `start` — write 1 to begin batch classification |
+|        |        |              | [1]       | `vbatt_ok` — battery voltage acceptable         |
+|        |        |              | [2]       | `vbatt_warn` — battery low warning              |
+| 0x08   | RO     | STATUS       | [0]       | `done` — batch complete                         |
+|        |        |              | [1]       | `error` — sticky fault detected                 |
+|        |        |              | [5:2]     | `error_code` — 4-bit fault code                 |
+|        |        |              | [8:6]     | `class_out` — label of most recently classified beat |
+|        |        |              | [9]       | `sample_rdy` — pulsed high when a beat completes |
+| 0x0C   | RW     | NUM_SAMPLES  | [9:0]     | Number of beats in this batch (1–1000)          |
+| 0x10   | RW     | NUM_SV_0     | [7:0]     | Support vectors for class 0 (Normal)            |
+| 0x14   | RW     | NUM_SV_1     | [7:0]     | Support vectors for class 1 (PVC)               |
+| 0x18   | RW     | NUM_SV_2     | [7:0]     | Support vectors for class 2 (AFib)              |
+| 0x1C   | RW     | NUM_SV_3     | [7:0]     | Support vectors for class 3 (VT)                |
+| 0x20   | RW     | NUM_SV_4     | [7:0]     | Support vectors for class 4 (SVT)               |
+| 0x24   | WO     | PARAM_WR     | [19]      | Write enable                                    |
+|        |        |              | [18:16]   | Parameter address (0=gamma, 1=C, 2–6=bias[0–4]) |
+|        |        |              | [15:0]    | Parameter value (Q6.10)                         |
+| 0x28   | WO     | ALPHA_WR     | [24:16]   | Alpha coefficient index (0–499)                 |
+|        |        |              | [15:0]    | Alpha value (Q6.10 signed)                      |
+
+There is no FIFO_DATA register. Feature data lives in off-chip SRAM, pre-loaded
+by the MCU before asserting `start`.
 
 ---
 
 ## 4. Classification Flow
 
-### 4.1 Feature Streaming
+### 4.1 Pre-Load Off-Chip SRAM
 
-The MCU assembles the 256-dim multi-scale feature vector and writes it word by
-word to `FIFO_DATA`. The FIFO signals readiness via `GPIO[9]` (`fifo_ready`).
+Before firing `start`, the MCU writes both matrices into the off-chip IS61WV51216
+SRAM via its own SPI or parallel GPIO interface.
 
-```c
-for (int i = 0; i < 256; i++) {
-    while (!(gpio_read() & (1 << 9)));   // wait fifo_ready
-    wb_write(0x30000000, features[i]);   // [0..127] morph, [128..191] 10-beat, [192..255] 100-beat
-}
+```
+Off-chip SRAM address map (row × FEATURE_DIM, FEATURE_DIM = 256):
+  Rows   0 .. 499   SV matrix     (500 SVs × 256 features × 2 B  = 256 KB)
+  Rows 500 .. 1499  Input matrix  (1000 beats × 256 features × 2 B = 512 KB)
+  Maximum address: 1500 × 256 − 1 = 383 999  →  19-bit address bus
 ```
 
-### 4.2 Triggering a Batch
+The ASIC drives GPIO[28:10] = `ram_addr[18:0]` and GPIO[29] = `ram_ren`.
+The MCU (or SRAM interface hardware) must return the requested word on
+`LA[15:0]` (`ram_rdata`) within `RAM_LATENCY` cycles after `ram_ren` asserts.
+With the IS61WV51216 at 40 MHz, `RAM_LATENCY = 3`.
 
-Pulse `start` in CONTROL. The hardware auto-clears it the next clock cycle.
-`num_samples` sets how many consecutive beats to classify in this run.
+### 4.2 Write Configuration Registers
 
 ```c
-wb_write(0x30000004, 0x0002);  // start=1, vbatt_ok=1
+// SV counts (must match the trained model)
+wb_write(0x30000010, 100);  // NUM_SV_0 (Normal)
+wb_write(0x30000014, 100);  // NUM_SV_1 (PVC)
+wb_write(0x30000018, 100);  // NUM_SV_2 (AFib)
+wb_write(0x3000001C, 100);  // NUM_SV_3 (VT)
+wb_write(0x30000020, 100);  // NUM_SV_4 (SVT)
+
+// Batch size
+wb_write(0x3000000C, 300);  // NUM_SAMPLES = 300 beats
+
+// Gamma = 0.25 = 0x0100 in Q6.10
+wb_write(0x30000024, (1 << 19) | (0 << 16) | 0x0100);  // PARAM_WR, addr=0, gamma
+
+// Alpha coefficients (500 total, one per SV)
+for (int i = 0; i < 500; i++)
+    wb_write(0x30000028, (i << 16) | alpha_q10[i]);     // ALPHA_WR
 ```
 
-### 4.3 Interrupt-Driven Result Readout
-
-`user_irq[0]` fires when the entire batch of `num_samples` beats is classified.
-The class labels are stored in `work_ram[0..num_samples-1]` — one 3-bit label
-per beat, readable via WORK_RD / STATUS2.
+### 4.3 Start Batch
 
 ```c
-void user_irq0_handler(void) {
-    uint32_t num = reg_num_samples;
+wb_write(0x30000004, 0x0003);  // CONTROL: start=1, vbatt_ok=1
+```
 
-    for (uint32_t i = 0; i < num; i++) {
-        wb_write(0x30000038, i);                        // latch work_ram[i]
-        uint8_t class = wb_read(0x3000003C) & 0x7;     // read label
-        history[i].class = class;
+**Important:** `start` is NOT auto-cleared. After `done` asserts, the FSM returns
+to IDLE. If `start` is still high, it immediately re-fires the next batch. The
+MCU must clear `start` (write `CONTROL = 0x0002`) after the done pulse:
+
+```c
+// In the svm_done ISR:
+wb_write(0x30000004, 0x0002);  // clear start, keep vbatt_ok
+```
+
+### 4.4 Collect Per-Beat Results
+
+`sample_rdy` (GPIO[3], `user_irq[0]`) pulses once per classified beat.
+`class_out[2:0]` (GPIO[2:0]) is stable when `sample_rdy` is high.
+
+Collect via polling:
+```c
+uint8_t labels[BATCH_SIZE];
+int n = 0;
+while (n < num_samples) {
+    uint32_t io = gpio_read();
+    if ((io >> 3) & 1) {           // sample_rdy (GPIO[3])
+        labels[n++] = io & 0x7;    // class_out  (GPIO[2:0])
     }
-    analyse_sequence(num);
-    arm_next_batch();
 }
 ```
 
-Alternatively poll `STATUS[0]` (`done` bit) if interrupts are not used.
+Or via `user_irq[0]` (sample_rdy) interrupt handler:
+```c
+static volatile int beat_count = 0;
+static uint8_t labels[BATCH_SIZE];
 
-### 4.4 GPIO Hardware Path
+void user_irq0_handler(void) {    // fires on sample_rdy
+    uint32_t io = gpio_read();
+    labels[beat_count++] = io & 0x7;
+}
+```
 
-Classification results are also available directly on IO pads:
+Or read STATUS[8:6] and STATUS[9] via Wishbone (same information on the bus).
 
-| GPIO   | Signal        | Description                        |
-|--------|---------------|------------------------------------|
-| [2:0]  | class_out     | Class label for beat 0 (work_ram[0])|
-| [3]    | done          | Pulses high when batch is complete |
-| [4]    | error         | Asserted on fault                  |
-| [8:5]  | error_code    | 4-bit fault code                   |
-| [9]    | fifo_ready    | FIFO accepting feature data        |
-| [24:10]| sv_ram_addr   | Support-vector RAM address (output)|
-| [25]   | sv_ram_ren    | Support-vector RAM read enable     |
+### 4.5 Batch Done
+
+`svm_done` (GPIO[4], `user_irq[1]`) pulses once when the last beat completes.
+
+```c
+void user_irq1_handler(void) {    // fires on svm_done
+    wb_write(0x30000004, 0x0002); // clear start
+    analyse_sequence(labels, num_samples);
+    load_next_batch();
+}
+```
+
+### 4.6 GPIO Signal Map
+
+| GPIO   | Direction | Signal           | Description                               |
+|--------|-----------|------------------|-------------------------------------------|
+| [2:0]  | Output    | class_out[2:0]   | Class label of most recently classified beat |
+| [3]    | Output    | sample_rdy       | Pulses high for one cycle per beat        |
+| [4]    | Output    | svm_done         | Pulses high for one cycle at batch end    |
+| [5]    | Output    | svm_error        | Asserted on sticky fault                  |
+| [9:6]  | Output    | svm_error_code   | 4-bit fault code                          |
+| [28:10]| Output    | ram_addr[18:0]   | Off-chip SRAM address driven by ASIC      |
+| [29]   | Output    | ram_ren          | Off-chip SRAM read enable driven by ASIC  |
+
+`LA[15:0]` is the return path: the MCU or SRAM interface drives `la_data_in[15:0]`
+with the requested SRAM word within `RAM_LATENCY` cycles of `ram_ren`.
 
 ---
 
-## 5. Raw Class Scores via Logic Analyzer Bus
+## 5. IRQ Summary
 
-The four lowest-indexed class scores (accumulated kernel sums) are exposed on the
-Logic Analyzer bus directly from the SVM core after each beat is classified:
-
-| LA bits   | Signal | Description                        |
-|-----------|--------|------------------------------------|
-| [31:0]    | cs0    | Accumulated kernel score, class 0  |
-| [63:32]   | cs1    | Accumulated kernel score, class 1  |
-| [95:64]   | cs2    | Accumulated kernel score, class 2  |
-| [127:96]  | cs3    | Accumulated kernel score, class 3  |
-
-Scores are unsigned 32-bit integers (accumulated Q6.10 kernel values plus bias).
-A larger value means stronger membership in that class.
-
-**Why margins matter:**  
-A beat classified Normal with cs0 = 42000 and cs2 = 41800 is far less confident
-than cs0 = 42000 and cs2 = 5000. The MCU can use this spread to flag uncertain
-beats for closer inspection.
-
-Reading scores in C (Caravel firmware):
-
-```c
-uint32_t cs0 = la_read_bits(31,  0);
-uint32_t cs1 = la_read_bits(63, 32);
-uint32_t cs2 = la_read_bits(95, 64);
-uint32_t cs3 = la_read_bits(127, 96);
-```
-
-Note: scores are only valid in the one-cycle window while the core is in
-`WRITE_CLASS` state. Latch them immediately after `user_irq[0]` fires.
+| IRQ        | Signal     | When fires                |
+|------------|------------|---------------------------|
+| user_irq[0]| sample_rdy | Once per classified beat  |
+| user_irq[1]| svm_done   | Once at end of batch      |
 
 ---
 
 ## 6. Beat-Sequence Analysis
 
-After reading the batch's class labels from work_ram the MCU runs sequence
-analysis on the classification vector. Caravel's RISC-V core has 256 KB of
-SRAM — enough to hold 1000 beats of history with scores.
+After collecting `labels[]`, the MCU runs sequence analysis on the classification
+vector. Caravel's RISC-V core has 256 KB of SRAM — enough to hold 1000 beats.
 
 ### 6.1 Suggested Data Structure
 
@@ -204,7 +245,7 @@ uint16_t head = 0;        // circular buffer index
 
 ### 6.2 Heart Rate and RR Interval
 
-The MCU knows the time between `start` pulses and can record the RR interval
+The MCU knows the time between SRAM pre-load cycles and can record the RR interval
 alongside each class label to separate rate-dependent from rate-independent
 arrhythmias.
 
@@ -215,7 +256,7 @@ arrhythmias.
 ```c
 uint16_t pvc_count = 0;
 for (int i = 0; i < 100; i++)
-    if (history[i].class == CLASS_V) pvc_count++;
+    if (history[i].class == CLASS_PVC) pvc_count++;
 if (pvc_count > 10)
     raise_alert(ALERT_HIGH_PVC_BURDEN);
 ```
@@ -226,7 +267,7 @@ if (pvc_count > 10)
 uint8_t run = 1, max_run = 1;
 for (int i = 1; i < 100; i++) {
     if (history[i].class == history[i-1].class &&
-        history[i].class != CLASS_N)
+        history[i].class != CLASS_NORMAL)
         run++;
     else run = 1;
     if (run > max_run) max_run = run;
@@ -235,12 +276,12 @@ if (max_run >= 3)
     raise_alert(ALERT_SUSTAINED_ARRHYTHMIA);
 ```
 
-**Bigeminy** — alternating N-V-N-V pattern:
+**Bigeminy** — alternating N-PVC-N-PVC pattern:
 
 ```c
 bool bigeminy = true;
 for (int i = 0; i < 8; i++) {
-    uint8_t expected = (i % 2 == 0) ? CLASS_N : CLASS_V;
+    uint8_t expected = (i % 2 == 0) ? CLASS_NORMAL : CLASS_PVC;
     if (history[i].class != expected) { bigeminy = false; break; }
 }
 if (bigeminy) raise_alert(ALERT_BIGEMINY);
@@ -299,21 +340,19 @@ skip non-critical processing.
 
 ## 9. Startup and Parameter Loading
 
-Before the first beat, the MCU must:
+Before the first batch, the MCU must:
 
-1. Write `NUM_SV_0`–`NUM_SV_4` with per-class SV counts from the trained model.
-2. Write `NUM_SAMPLES` with the number of beats per batch.
-3. Write `PARAM_WR` entries to load gamma, C, and the five bias values.
-4. Set `vbatt_ok` in CONTROL.
-5. Pre-load the off-chip SRAM before asserting `start`:
+1. Pre-load the off-chip SRAM:
    - Rows 0–499: SV matrix (500 SVs × 256 features, Q6.10)
-   - Rows 500–1499: input matrix (up to 1000 beats × 256 features, Q6.10)
+   - Rows 500+: Input matrix (up to 1000 beats × 256 features, Q6.10)
+2. Write `NUM_SV_0`–`NUM_SV_4` with per-class SV counts.
+3. Write `NUM_SAMPLES` with the number of beats per batch.
+4. Write `PARAM_WR` entries for gamma, C, and the five bias values.
+5. Write 500 `ALPHA_WR` entries with trained alpha coefficients.
+6. Set `CONTROL = 0x0003` (start=1, vbatt_ok=1).
 
-The ASIC reads both matrices autonomously via `GPIO[28:10]` (`ram_addr[18:0]`),
-`GPIO[29]` (`ram_ren`), and `LA[15:0]` (`ram_rdata[15:0]`). The `RAM_LATENCY`
-RTL parameter configures how many cycles after `ram_ren` the data must be valid.
-With the IS61WV51216 async SRAM (10 ns access) at 40 MHz, set `RAM_LATENCY=3`.
-The core inserts wait states automatically — no MCU involvement during classification.
+The ASIC reads both matrices autonomously via GPIO[28:10] and GPIO[29].
+`RAM_LATENCY` (synthesised as 3 for IS61WV51216 at 40 MHz) configures wait states.
 
 ---
 
@@ -324,50 +363,65 @@ The core inserts wait states automatically — no MCU involvement during classif
 #include <stdbool.h>
 
 #define WB_BASE        0x30000000
-#define REG_FIFO_DATA  (WB_BASE + 0x00)
 #define REG_CONTROL    (WB_BASE + 0x04)
 #define REG_STATUS     (WB_BASE + 0x08)
 #define REG_NUM_SAMPLES (WB_BASE + 0x0C)
-#define REG_WORK_RD    (WB_BASE + 0x38)
-#define REG_STATUS2    (WB_BASE + 0x3C)
-#define CLASS_N 0
-#define CLASS_S 1
-#define CLASS_V 2
-#define CLASS_F 3
-#define CLASS_Q 4
-#define BATCH_SIZE 100
+#define REG_NUM_SV0    (WB_BASE + 0x10)
+#define REG_PARAM_WR   (WB_BASE + 0x24)
+#define REG_ALPHA_WR   (WB_BASE + 0x28)
 
-static uint8_t labels[BATCH_SIZE];
+#define CLASS_NORMAL 0
+#define CLASS_PVC    1
+#define CLASS_AFIB   2
+#define CLASS_VT     3
+#define CLASS_SVT    4
+#define BATCH_SIZE   300
 
-// Called by the host to stream one beat's feature vector to the core.
-// features[0..127]   = single-beat morphology
-// features[128..191] = 10-beat context
-// features[192..255] = 100-beat context
-void stream_beat(uint16_t features[256]) {
-    for (int i = 0; i < 256; i++) {
-        while (!(gpio_read() & (1 << 9)));  // wait fifo_ready
-        wb_write(REG_FIFO_DATA, features[i]);
-    }
-}
+static volatile uint8_t  labels[BATCH_SIZE];
+static volatile uint16_t beat_count = 0;
 
-void start_batch(uint16_t num_beats) {
-    wb_write(REG_NUM_SAMPLES, num_beats);
-    wb_write(REG_CONTROL, 0x0002);  // start=1, vbatt_ok=1
-}
-
+// Called by user_irq[0] ISR (sample_rdy, fires once per classified beat)
 void user_irq0_handler(void) {
-    uint32_t n = wb_read(REG_NUM_SAMPLES) & 0x3FF;
+    uint32_t io = gpio_read();
+    if (beat_count < BATCH_SIZE)
+        labels[beat_count++] = io & 0x7;   // class_out = GPIO[2:0]
+}
 
-    for (uint32_t i = 0; i < n; i++) {
-        wb_write(REG_WORK_RD, i);
-        labels[i] = wb_read(REG_STATUS2) & 0x7;
+// Called by user_irq[1] ISR (svm_done, fires once at batch end)
+void user_irq1_handler(void) {
+    wb_write(REG_CONTROL, 0x0002);          // clear start, keep vbatt_ok
+    analyse_sequence((uint8_t*)labels, beat_count);
+    beat_count = 0;
+    // Pre-load next batch into SRAM then restart:
+    // load_next_sram_batch();
+    // wb_write(REG_CONTROL, 0x0003);
+}
+
+void init_svm(uint8_t num_sv[5], float gamma, float *alphas) {
+    // SV counts
+    for (int c = 0; c < 5; c++)
+        wb_write(REG_NUM_SV0 + c * 4, num_sv[c]);
+    // Batch size
+    wb_write(REG_NUM_SAMPLES, BATCH_SIZE);
+    // Gamma = 0.25 → 0x0100 in Q6.10
+    uint16_t gamma_q = (uint16_t)(gamma * 1024 + 0.5f);
+    wb_write(REG_PARAM_WR, (1 << 19) | (0 << 16) | gamma_q);
+    // Alpha coefficients
+    int total_sv = 0;
+    for (int c = 0; c < 5; c++) total_sv += num_sv[c];
+    for (int i = 0; i < total_sv; i++) {
+        int16_t a_q = (int16_t)(alphas[i] * 1024);
+        wb_write(REG_ALPHA_WR, (i << 16) | (uint16_t)a_q);
     }
+}
 
-    analyse_sequence(labels, n);
+void start_batch(void) {
+    beat_count = 0;
+    wb_write(REG_CONTROL, 0x0003);          // start=1, vbatt_ok=1
 }
 ```
 
 ---
 
-*Part of ECE410 — Portland State University, 2024.  
+*Part of ECE410 — Portland State University, 2026.
 Design: Adam Handwerger.*

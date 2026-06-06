@@ -124,7 +124,7 @@ tx(ax, QX+QW/2, QY+QH-0.32, "Wishbone Interface",
 tx(ax, QX+QW/2, QY+QH/2+0.05,
    "32-bit Wishbone  ·  base 0x3000_0000", sz=11, color="#444")
 tx(ax, QX+QW/2, QY+QH/2-0.38,
-   "FIFO_DATA 0x00: write 16-bit feature word per cycle", sz=11, color="#444")
+   "CONTROL 0x04 | STATUS 0x08 | NUM_SAMPLES 0x0C | NUM_SV[0-4] 0x10-0x20 | PARAM_WR 0x24 | ALPHA_WR 0x28", sz=9, color="#444")
 
 tip(ax, HX+HW/2, HY, HX+HW/2, QY+QH, C["feat_edge"])
 
@@ -249,8 +249,8 @@ bx(ax, FCX, FCY, FCW, FCH, C["compute_face"], C["compute_edge"],
 tx(ax, FCX+FCW/2, FCY+FCH-0.30,
    "FSM Controller", sz=12, color=C["to"], weight="bold")
 tx(ax, FCX+FCW/2, FCY+FCH-0.68,
-   "IDLE (start && vbatt_ok_s) → LOAD_FIFO → LOAD_FEATURES → "
-   "COMPUTE_DIST (258 cyc) → COMPUTE_KERNEL (18 cyc) → OUTPUT_RESULT",
+   "IDLE (start && vbatt_ok_s) → LOAD_INPUT → "
+   "COMPUTE_DIST (256+2 cyc) → COMPUTE_KERNEL (18 cyc) → WRITE_CLASS",
    sz=10, color="#333")
 tx(ax, FCX+FCW/2, FCY+0.35,
    "Counters: sample / sv / class / feat_wr / feat_rd  "
@@ -358,7 +358,7 @@ legend_items = [
     (C["host_face"],    C["host_edge"],    "-",  "Host MCU"),
     (C["feat_face"],    C["feat_edge"],    "-",  "Feature extract/bank"),
     (C["qspi_face"],    C["qspi_edge"],    "-",  "Wishbone interface"),
-    (C["mem_face"],     C["mem_edge"],     "-",  "On-chip FIFO"),
+    (C["mem_face"],     C["mem_edge"],     "-",  "Workspace Regs"),
     (C["compute_face"], C["compute_edge"], "--", "Compute engine (RTL)"),
     (C["config_face"],  C["config_edge"],  "-",  "Config registers"),
     (C["offchip_face"], C["offchip_edge"], "-",  "Off-chip RAM"),
@@ -389,7 +389,7 @@ all_codes = [
     ("0x2", "ERR_SV_OVERFLOW",      "Σsv_count > NUM_SV",     "sticky", True),
     ("0x3", "ERR_ILLEGAL_STATE",    "FSM default branch",     "sticky", False),
     ("0x4", "ERR_GAMMA_SAT",        "gamma_int > 8192",       "sticky", True),
-    ("0x5", "ERR_FIFO_OVERFLOW",    "QSPI word dropped",      "sticky", False),
+    ("0x5", "reserved",              "(was ERR_FIFO_OVERFLOW)", "sticky", False),
     ("0x6", "ERR_GAMMA_ZERO",       "gamma_int = 0",          "sticky", True),
     ("0x7", "ERR_NUM_SAMPLES_ZERO", "num_samples = 0",        "sticky", False),
     None,
