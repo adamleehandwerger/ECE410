@@ -66,3 +66,4 @@
 - [ ] Run mpw-precheck after LFS push completes
 - [ ] Run Caravel chip-level DV (`dv_run.sh`)
 - [ ] Submit caravel_svm_project repo URL to ECE410
+- [ ] Run SS corner timing signoff (SS/1.62V/125°C) — TT only verified so far

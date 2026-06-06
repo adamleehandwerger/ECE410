@@ -27,6 +27,7 @@
 - [ ] **Upload to Efabless** — submit GDS + LEF + GL netlist via the Efabless project submission portal at [efabless.com](https://efabless.com)
 - [ ] **Tag the caravel repo** — `git tag submission-v1` and push so the submitted commit is pinned
 - [ ] **Confirm license** — Apache 2.0 in `caravel_svm_project` repo (required for open shuttle acceptance)
+- [ ] **SS corner timing signoff** — re-run OpenSTA at SS/1.62V/125°C; TT corner (+7.83 ns WNS) is the only corner verified so far
 
 ### 1.3 Next Shuttle
 
