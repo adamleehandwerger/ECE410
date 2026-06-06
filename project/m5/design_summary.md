@@ -500,39 +500,24 @@ the ridge point (~16 ops/byte at 100 GB/s / 1.6 TOPS) and is firmly
 
 ---
 
-### B.9 Other Design Changes (using Q6.10)
+### B.9 SRAM Latency in the Hospital Design
 
-These are optimizations applicable to any future iteration that retains Q6.10 arithmetic.
+The wearable ASIC uses `RAM_LATENCY=3` to interface the IS61WV51216 async SRAM
+(10 ns access time) at 40 MHz. The 3-cycle wait accounts for PCB trace delay,
+ASIC input flip-flop setup time, and SRAM derating at elevated temperature.
 
-**1. Shorten the RBF LUT from 256 entries to 8**
+The hospital design (28nm, 800 MHz, 0.9 V, on-chip SRAM) has no off-chip SRAM
+interface at all — the SV and input matrices fit in 610 KB of on-chip memory.
+If the hospital design were instead deployed with an external SRAM (e.g., for a
+larger model exceeding on-chip capacity), a faster async part such as the
+**IS61WV102416** (5 ns access) would allow `RAM_LATENCY=2` at 800 MHz
+(5 ns < 1.25 ns × 2 cycles — marginal; in practice `RAM_LATENCY=3` would still
+be prudent at 800 MHz). At a more conservative 400 MHz clock (2.5 ns period),
+a 5 ns SRAM fits cleanly in `RAM_LATENCY=2` with margin for PCB and setup.
 
-The current implementation stores a 256-entry read-only table of e^(-I) values
-for integer indices I = 0, 1, ..., 255. However, for I >= 7 the stored value is
-zero in Q6.10:
-
-    lut[I] = floor(e^(-I) * 2^10)
-
-    I=0:  1024    I=4:  18
-    I=1:  376     I=5:   6
-    I=2:  138     I=6:   2
-    I=3:   50     I=7:   0  <- floor(0.934) = 0
-
-For I >= 7, e^(-I) < 2^(-10) (the Q6.10 LSB of ~0.001), so the value truncates
-to zero. Any kernel evaluation with I >= 7 produces K = 0, meaning the support
-vector contributes nothing to the class scores regardless of the fractional term.
-
-The 256-entry LUT occupies 256 x 16 bits = 4 KB of on-chip flip-flop registers.
-Shortening to 8 entries reduces this to 8 x 16 bits = 128 bits (16 bytes) — a
-32x area saving — with no change in arithmetic output. The address logic
-simplifies from an 8-bit index to a 3-bit index plus a single comparator:
-if I >= 7, output 0 directly without a LUT lookup.
-
-The cutoff at I = 7 is a fixed consequence of Q6.10 precision. The general rule
-is: the last non-zero entry is at I = floor(frac_bits x ln(2)), where frac_bits
-is the number of fractional bits. For Q6.10 (frac_bits = 10):
-floor(10 x 0.693) = floor(6.93) = 6, so entries 0-6 are non-zero and entry 7
-onward are zero. If precision were increased to Q10.22, the cutoff would shift
-to I = floor(22 x 0.693) = 15, requiring a 16-entry LUT.
+The general rule: `RAM_LATENCY = ceil((t_access + t_PCB + t_setup) / t_clk)`.
+For the wearable at 40 MHz: ceil((10 + 2 + 1) / 25) = ceil(0.52) = 1 —
+theoretically LAT=1 works on a benchtop, but LAT=3 is used for field margin.
 
 ---
 
