@@ -19,8 +19,8 @@
 | Hold WNS (TT) | +0.30 ns — 0 violations ✅ |
 | DRC | 0 violations ✅ |
 | Active power | ~66 mW |
-| Inference time | 3.23 ms / beat (500 SVs × 256 dim at 40 MHz) |
-| Avg power (80 bpm) | **0.284 mW** (0.431% duty cycle) |
+| Inference time | **9.87 ms / beat** (LAT=3, IS61WV51216 SRAM); 3.23 ms (LAT=1 cosim) |
+| Avg power (80 bpm) | **0.869 mW** (1.316% duty cycle, LAT=3) |
 | Die area | 2500 × 2500 µm (~14% utilization) |
 | GDS | 226 MB |
 | LEF | 94 KB |
@@ -158,14 +158,14 @@ Inference time scales linearly with `RAM_LATENCY`. At 40 MHz:
 
 | Subsystem | Active Power | Duty Cycle | Avg Power |
 |-----------|-------------|-----------|-----------|
-| svm_compute_core (batch) | 66 mW | 0.431% (3.23 ms / 750 ms) | **0.284 mW** |
+| svm_compute_core (batch) | 66 mW | 1.316% (9.87 ms / 750 ms, LAT=3) | **0.869 mW** |
 | Caravel management SoC | ~5 mW | ~5% | ~0.25 mW |
 | ECG frontend (analog) | ~0.5 mW | 100% | 0.5 mW |
 | BLE (optional, logging) | ~10 mW | ~0.1% | ~0.01 mW |
-| **Total estimated** | — | — | **~1.04 mW** |
+| **Total estimated** | — | — | **~1.63 mW** |
 
-Battery budget: 200 mAh @ 3.7V = 740 mWh → **740 mWh / 1.04 mW ≈ 711 hours (~29.6 days)**.
-14-day target met with 2.1× margin. SVM core alone: ~2606 hours (~108 days).
+Battery budget: 200 mAh @ 3.7V = 740 mWh → **740 mWh / 1.63 mW ≈ 454 hours (~18.9 days)**.
+14-day target met with 1.35× margin. SVM core alone: ~851 hours (~35.4 days).
 
 ---
 
@@ -476,9 +476,9 @@ the ridge point (~16 ops/byte at 100 GB/s / 1.6 TOPS) and is firmly
 
 | Metric | Wearable ASIC | Hospital ASIC | sklearn | Numba (8-core) |
 |--------|--------------|---------------|---------|----------------|
-| Throughput | 309 inf/s | **1,280,000 inf/s** | 4,200 inf/s | 95,000 inf/s |
-| Latency / 100 beats | 323 ms | **0.078 ms** | 23.8 ms | 1.05 ms |
-| Speedup vs sklearn | 0.07× | **305×** | 1× | 22.6× |
+| Throughput | 101 inf/s (LAT=3) | **1,280,000 inf/s** | 4,200 inf/s | 95,000 inf/s |
+| Latency / 100 beats | 987 ms (LAT=3) | **0.078 ms** | 23.8 ms | 1.05 ms |
+| Speedup vs sklearn | 0.024× | **305×** | 1× | 22.6× |
 
 **Power, area and roofline:**
 
