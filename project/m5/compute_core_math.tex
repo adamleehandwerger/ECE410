@@ -265,6 +265,33 @@ the compute ceiling of the 40\;MHz fixed-point datapath.
 % ─────────────────────────────────────────────────────────────────────────────
 \section{FSM Cycle Budget (LAT = 3)}
 
+\subsection*{Kernel FSM cycle count (\(T_{\text{kernel}} = 18\))}
+
+The \texttt{horner} FSM contains the following states, each consuming one
+clock cycle:
+
+\begin{center}
+\begin{tabular}{lrl}
+\toprule
+\textbf{States} & \textbf{Cycles} & \textbf{Operation} \\
+\midrule
+\texttt{SCALE}, \texttt{SCALE2} & 2 & compute \(\hat{p} = \hat{\gamma}\cdot\hat{d}^2 / 2^{10}\); split \(I\) and \(F\) \\
+\texttt{HORNER\_14}\,--\,\texttt{HORNER\_0} & 15 & Horner recurrence steps (degree-14 RTL polynomial) \\
+\texttt{OUTPUT} & 1 & multiply \(\texttt{lut}[I] \cdot \hat{e}^{-F}\) and register \(\hat{K}\) \\
+\midrule
+\textbf{Total} & \textbf{18} & \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The RTL defines 15 \texttt{HORNER} states (\texttt{HORNER\_14} down to
+\texttt{HORNER\_0}), corresponding to a degree-14 polynomial evaluation.
+Coefficients \(a_{7}\) through \(a_{14}\) truncate to zero in
+\(\mathbb{Q}_{6.10}\) (values \(< 2^{-10}\)), so the effective
+approximation is degree 6, but the FSM executes all 15 steps regardless.
+
+\subsection*{Total cycle budget}
+
 \[
     T_{\text{beat}}
     = T_{\text{load}} + M \cdot \left( T_{\text{dist}} + T_{\text{kernel}} \right)
