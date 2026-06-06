@@ -171,15 +171,27 @@ For \(F \in [0,\; 1)\), numerical analysis shows that degree 6 is the minimum
 Taylor polynomial that keeps the approximation error below the
 \(\mathbb{Q}_{6.10}\) LSB of \(2^{-10} \approx 0.001\) across the full range.
 The RTL defines up to 16 Taylor coefficients (\texttt{COEFF\_00}--\texttt{COEFF\_15})
-and evaluates them via Horner's method:
+and evaluates them via Horner's method. The polynomial in standard form is:
 \[
-    e^{-F} \;\approx\; \sum_{n=0}^{d} \frac{(-F)^n}{n!}
-    \;=\; c_0 + F\bigl(c_1 + F(c_2 + \cdots + F \cdot c_d)\bigr),
+    e^{-F} \;\approx\; c_0 - c_1 F + c_2 F^2 - \cdots + (-1)^d\, c_d F^d,
 \]
-where the coefficients are the Taylor series values \(c_n = 1/n!\) with
-alternating signs applied during evaluation. Evaluation proceeds
-right-to-left (Horner's method), requiring \(d\) multiplications and
-\(d\) additions.
+where \(c_n = 1/n!\):
+\[
+    c_0 = 1,\quad
+    c_1 = 1,\quad
+    c_2 = 0.5,\quad
+    c_3 = 0.1\overline{6},\quad
+    c_4 = 0.041\overline{6},\quad
+    c_5 = 0.008\overline{3},\quad
+    c_6 = 0.001\overline{388}.
+\] Rather than evaluating each power of \(F\) separately,
+Horner's method computes this as a recurrence starting from the innermost term:
+\[
+    h_d = c_d, \qquad h_k = c_k + F \cdot h_{k+1}, \qquad k = d-1,\; d-2,\; \ldots,\; 0.
+\]
+The result is \(h_0 = e^{-F}\). Each step is one multiply and one add,
+requiring \(d\) multiplications and \(d\) additions total — no powers of \(F\)
+are computed explicitly.
 
 \subsection{Kernel Output}
 
