@@ -18,7 +18,8 @@ m5/
 ├── block_diagram.png            ← hardware block diagram (v10, batch architecture)
 ├── generate_block_diagram.py    ← renders block_diagram.png (matplotlib)
 ├── design_summary.md            ← full design: area, power, timing, RAM_LATENCY,
-│                                    Appendix A (model reload), Appendix B (hospital design)
+│                                    Appendix A (model reload), Appendix B (hospital design),
+│                                    Appendix C (MCU task sequence)
 ├── design_summary.pdf           ← compiled PDF of design_summary.md
 ├── horner_lut_math.tex          ← LaTeX: fixed-point RBF kernel derivation
 │                                    (range-reduction LUT + Horner, γ=0.25, Q6.10)
