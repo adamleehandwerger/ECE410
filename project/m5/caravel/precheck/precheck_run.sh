@@ -21,31 +21,24 @@ PRECHECK_SIF=$SCRATCH/mpw-precheck.sif
 echo "=== mpw_precheck on $(hostname) at $(date) ==="
 
 # --- Pull latest repo state (reset to origin/main; skip LFS smudge) ---
-# Preserve real GDS files — git reset --hard replaces them with LFS pointer stubs
+# GDS files tracked by git-lfs — skip smudge to avoid downloading stale pointers.
+# Always restore from canonical OL2 run-directory outputs after the reset.
 GDS_CORE=$CARAVEL/gds/svm_compute_core.gds
 GDS_WRAP=$CARAVEL/gds/user_project_wrapper.gds
-GDS_BACKUP=/tmp/svm_gds_backup
-OL_GDS=$CARAVEL/openlane/svm_compute_core/runs/core_harden/51-magic-streamout/svm_compute_core.gds
 
-mkdir -p $GDS_BACKUP
-[ -f $GDS_CORE ] && cp $GDS_CORE $GDS_BACKUP/
-[ -f $GDS_WRAP ] && cp $GDS_WRAP $GDS_BACKUP/
+# Canonical GDS sources in the OL2 run dirs (authoritative, always full-size)
+OL_GDS_CORE=$(find $CARAVEL/openlane/svm_compute_core/runs/core_harden -name 'svm_compute_core.gds' 2>/dev/null | xargs ls -S 2>/dev/null | head -1)
+OL_GDS_WRAP=$(find $CARAVEL/openlane/user_project_wrapper/runs/wrapper_harden -name 'user_project_wrapper.gds' 2>/dev/null | xargs ls -S 2>/dev/null | head -1)
+
+echo "GDS sources: core=$OL_GDS_CORE wrap=$OL_GDS_WRAP"
 
 rm -f $CARAVEL/.git/refs/remotes/origin/main.lock $CARAVEL/.git/index.lock
 GIT_LFS_SKIP_SMUDGE=1 git -C $CARAVEL fetch origin
 GIT_LFS_SKIP_SMUDGE=1 git -C $CARAVEL reset --hard origin/main
 
-# Restore real GDS if reset left LFS pointer stubs (< 1 MB)
-if [ $(stat -c%s $GDS_CORE 2>/dev/null || echo 0) -lt 1048576 ]; then
-    if [ -f $GDS_BACKUP/svm_compute_core.gds ]; then
-        cp $GDS_BACKUP/svm_compute_core.gds $GDS_CORE
-    elif [ -f $OL_GDS ]; then
-        cp $OL_GDS $GDS_CORE
-    fi
-fi
-if [ $(stat -c%s $GDS_WRAP 2>/dev/null || echo 0) -lt 1048576 ]; then
-    [ -f $GDS_BACKUP/user_project_wrapper.gds ] && cp $GDS_BACKUP/user_project_wrapper.gds $GDS_WRAP
-fi
+# Restore real GDS from OL2 run dirs unconditionally (avoids stale/partial backup)
+[ -n "$OL_GDS_CORE" ] && [ -f "$OL_GDS_CORE" ] && cp "$OL_GDS_CORE" "$GDS_CORE" && echo "Restored core GDS ($(du -sh $GDS_CORE | cut -f1))"
+[ -n "$OL_GDS_WRAP" ] && [ -f "$OL_GDS_WRAP" ] && cp "$OL_GDS_WRAP" "$GDS_WRAP" && echo "Restored wrapper GDS ($(du -sh $GDS_WRAP | cut -f1))"
 
 # --- Verify required artifacts exist ---
 echo "--- Checking required files ---"
