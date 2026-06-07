@@ -3,7 +3,7 @@
 **Design:** 5-class Cardiac Arrhythmia Classifier (RBF-SVM accelerator)  
 **Technology:** sky130A (SkyWater 130 nm open-PDK), sky130_fd_sc_hd  
 **Flow:** OpenLane 2 v2.3.10 Classic (Yosys + OpenROAD + TritonRoute)  
-**Architecture:** Batch v9 — host pre-loads SV + input matrix; ASIC classifies autonomously  
+**Architecture:** Batch v10 — host pre-loads SV + input matrix; ASIC classifies autonomously  
 **Status:** Core + wrapper hardened ✅ (jobs 92840/92861, v10, 0 DRC core, KLayout DRC 0 wrapper)
 
 ---
@@ -15,7 +15,7 @@ m5/
 ├── README.md                    ← this file — full m5 catalog
 ├── README_errorcodes.md         ← 13 error codes, sticky latch, reset-clear reference
 ├── README_mcu.md                ← MCU integration guide (batch pre-load protocol)
-├── block_diagram.png            ← hardware block diagram (v9, batch architecture)
+├── block_diagram.png            ← hardware block diagram (v10, batch architecture)
 ├── generate_block_diagram.py    ← renders block_diagram.png (matplotlib)
 ├── design_summary.md            ← full design: area, power, timing, RAM_LATENCY,
 │                                    Appendix A (model reload), Appendix B (hospital design)
@@ -24,7 +24,7 @@ m5/
 │                                    (range-reduction LUT + Horner, γ=0.25, Q6.10)
 ├── horner_lut_math.pdf          ← compiled PDF of horner_lut_math.tex
 │
-├── rt1/                         ← RTL source (v9, final)
+├── rt1/                         ← RTL source (v10, final)
 │   ├── compute_core.sv          ← SVM core: NUM_SV=500, RAM_LATENCY param, batch FSM
 │   ├── top.sv                   ← Caravel wrapper: Wishbone decode, clock gate,
 │   │                                reg_alpha_wr[24:0], GPIO/LA pin assignments
