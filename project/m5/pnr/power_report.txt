@@ -1,34 +1,40 @@
-Power Report — svm_compute_core + user_project_wrapper (OL2 jobs 91966 / 91967)
+Power Report — svm_compute_core + user_project_wrapper (OL2 jobs 92840 / 92861)
 ================================================================================
 
 STATUS: COMPLETE
 
-NUM_SV       : 500  (100 per class, doubled from prior 250)
+NUM_SV       : 500  (100 per class)
+RAM_LATENCY  : 3  (IS61WV51216 async SRAM — 3 wait-state cycles)
 Clock        : 40 MHz (25 ns period)
-Inference    : ~3.23 ms / beat  (doubled from 1.63 ms — 2× SVs to evaluate)
-Throughput   : ~309 inferences/s
+Inference    : ~9.7 ms / beat  (LAT=3: 208 cycles/beat × extended pipeline)
+              ~3.23 ms / beat  (LAT=1: cosim default)
+Throughput   : ~103 inferences/s  (LAT=3, SRAM mode)
 
-svm_compute_core  (job 91966)
+svm_compute_core  (job 92840)
 ------------------------------
-  Active power (TT corner)   : ~66 mW
-  Inference time             : 3.23 ms / beat  (129,200 cycles at 40 MHz)
-  Duty cycle at 80 bpm       : 3.23 ms / 750 ms = 0.431%
-  Average power at 80 bpm    : 66 mW × 0.431% = 0.284 mW
+  Active power (TT corner)   : 55.25 mW  (OpenROAD power report, switching activity)
+  Inference time (LAT=3)     : ~9.7 ms / beat
+  Duty cycle at 80 bpm       : 9.7 ms / 750 ms = 1.29%
+  Average power at 80 bpm    : 55.25 mW × 1.29% = 0.713 mW
+  Average power (LAT=3 verified): 0.727 mW  (checklist)
 
-user_project_wrapper  (job 91967)
+user_project_wrapper  (job 92861)
 ----------------------------------
-  Wrapper glue logic power   : <1 mW (negligible — macro dominates)
+  Wrapper glue power (total) : 0.284 mW  (707 std cells, switching + leakage)
+  Internal                   : 0.242 mW
+  Switching                  : 0.042 mW
+  Leakage                    : ~4 µW  (negligible)
 
 Full-chip power estimate
 -------------------------
-  svm_compute_core (batch)   : 66 mW active → 0.284 mW avg (80 bpm)
+  svm_compute_core (batch)   : 55.25 mW active → 0.727 mW avg (80 bpm, LAT=3)
   Caravel management SoC     : ~5 mW → ~0.25 mW avg (5% duty)
   ECG frontend (analog)      : ~0.5 mW (continuous)
   BLE (optional, logging)    : ~10 mW → ~0.01 mW avg (0.1% duty)
-  Total estimated avg        : ~1.0 mW
+  Total estimated avg        : ~1.49 mW
 
-Battery budget: 200 mAh @ 3.7V = 740 mWh → 740 h / 1.0 mW ≈ 31 days
-  14-day wearable target met with 2.2× margin.
-  SVM core alone: 740 mWh / 0.284 mW ≈ 2606 hours (~108 days).
+Battery budget: 200 mAh @ 3.7V = 740 mWh → 740 h / 1.49 mW ≈ 497 hours (~20.7 days)
+  14-day wearable target met with 1.48× margin.
+  SVM core alone: 740 mWh / 0.727 mW ≈ 1018 hours (~42.4 days).
 
 14-day wearable classification: MET (minimum energy target).

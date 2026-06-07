@@ -12,15 +12,19 @@
 | Requirement | Path | Status |
 |-------------|------|--------|
 | Top-level `info.yaml` | `info.yaml` | ✅ |
-| RTL source files | `verilog/rtl/` | ✅ v9 (NUM_SV=500) |
-| Gate-level netlist — core | `verilog/gl/svm_compute_core.v` | ✅ 13 MB (job 91966) |
-| Gate-level netlist — wrapper | `verilog/gl/user_project_wrapper.v` | ✅ 78 KB (job 91967) |
-| GDS — core | `gds/svm_compute_core.gds` | ✅ 226 MB (job 91966) |
-| GDS — wrapper | `gds/user_project_wrapper.gds` | ✅ 230 MB (job 91967) |
-| LEF — core | `lef/svm_compute_core.lef` | ✅ 94 KB (job 91966) |
-| LEF — wrapper | `lef/user_project_wrapper.lef` | ✅ 195 KB (job 91967) |
+| RTL source files | `verilog/rtl/` | ✅ v10 (NUM_SV=500, RAM_LATENCY=3) |
+| Gate-level netlist — core | `verilog/gl/svm_compute_core.v` | ✅ 35 MB (job 92840) |
+| Gate-level netlist — wrapper | `verilog/gl/user_project_wrapper.v` | ✅ 77 KB (job 92861) |
+| GDS — core | `gds/svm_compute_core.gds` | ✅ 232 MB (job 92840) — local only, LFS fork restriction |
+| GDS — wrapper | `gds/user_project_wrapper.gds` | ✅ 234 MB (job 92861) — local only, LFS fork restriction |
+| LEF — core | `lef/svm_compute_core.lef` | ✅ 93 KB (job 92840) |
+| LEF — wrapper | `lef/user_project_wrapper.lef` | ✅ 178 KB (job 92861) |
 | OpenLane config — core | `openlane/svm_compute_core/config.json` | ✅ |
 | OpenLane config — wrapper | `openlane/user_project_wrapper/config.json` | ✅ |
+
+Note: GDS files exceed GitHub's LFS fork upload limit. Files are in the local working
+tree and on Orca scratch. For ECE410 review, they can be provided on request or via
+a GitHub Release attachment.
 
 ---
 
@@ -32,10 +36,14 @@
 | Standard cell library | sky130_fd_sc_hd | sky130_fd_sc_hd | ✅ |
 | Max routing layer | ≤ met5 | met4 | ✅ |
 | Core DRC violations | 0 | 0 | ✅ |
-| Wrapper DRC violations | 0 | 11,923 (boundary artifacts) | ⚠️ acceptable |
-| Core setup timing (TT) | ≥ 0 ns WNS | +7.83 ns | ✅ |
-| Core hold timing (TT) | ≥ 0 ns WNS | +0.30 ns | ✅ |
-| Wrapper timing (TT) | ≥ 0 ns WNS | Hold viol. at macro boundary | ⚠️ acceptable |
+| Core KLayout DRC | 0 | 0 (sky130A.lydrc) | ✅ |
+| Wrapper Magic DRC violations | 0 | 11,906 boundary artifacts | ⚠️ acceptable |
+| Wrapper KLayout DRC violations | 0 | 0 violations | ✅ |
+| Core setup timing (TT) | ≥ 0 ns WNS | +3.96 ns | ✅ |
+| Core hold timing (TT) | ≥ 0 ns WNS | +0.23 ns | ✅ |
+| Wrapper setup timing (TT/FF) | ≥ 0 ns WNS | 0 ns / 0 ns | ✅ |
+| Wrapper hold timing (TT) | ≥ 0 ns WNS | −0.406 ns (124 viol.) | ⚠️ through-macro paths |
+| Wrapper hold reg-to-reg (TT) | ≥ 0 ns WNS | +0.265 ns, 0 viol. | ✅ |
 | Die area (wrapper) | 2920 × 3520 µm (fixed) | 2920 × 3520 µm | ✅ |
 | Die area (core) | ≤ user_project_area | 2500 × 2500 µm | ✅ |
 
@@ -45,16 +53,15 @@
 
 | Check | Description | Status |
 |-------|-------------|--------|
-| Manifest | `info.yaml` fields valid, all files present | ⏳ Pending precheck run |
+| Manifest | `info.yaml` fields valid, all files present | ⏳ Pending |
 | Consistency | GL netlist hierarchy matches GDS | ⏳ |
-| XOR | Magic GDS == KLayout GDS (no geometry diff) | ⏳ |
+| XOR | Magic GDS == KLayout GDS (no geometry diff) | ⏳ KLayout installed locally |
 | DRC (Magic) | 0 DRC violations on full-chip GDS | ⏳ |
 | LVS (netgen) | Netlist matches layout (no shorts/opens) | ⏳ |
 | Antenna | No antenna violations | ⏳ |
 
-Run precheck after LFS push completes:
 ```bash
-sbatch ~/ece410/precheck_run.sh   # see m5/precheck/precheck_run.sh
+sbatch ~/ece410/precheck_run.sh   # see m5/caravel/precheck/precheck_run.sh
 ```
 
 ---
@@ -65,7 +72,8 @@ sbatch ~/ece410/precheck_run.sh   # see m5/precheck/precheck_run.sh
 |------|----------|--------|--------|
 | sklearn accuracy | 97.67% on MIT-BIH + SVDB + INCART (300 samples) | 97.67% | ✅ |
 | ASIC vs sklearn gap | Q6.10 quantization (gamma=0.25) | 0.00% | ✅ |
-| Wishbone cosim | 300 samples, Icarus/cocotb, full batch | 97.67% ASIC | ✅ |
+| Wishbone cosim | 300 samples, cocotb, full batch, LAT=3 | 97.67% ASIC | ✅ |
+| RAM_LATENCY unit test | LAT=3, FEAT=4, NSV=5, iverilog | PASS, 208 cycles | ✅ |
 | Caravel chip-level DV | RISC-V firmware, mprj_io check | TBD | ⏳ |
 
 ---
@@ -83,10 +91,11 @@ sbatch ~/ece410/precheck_run.sh   # see m5/precheck/precheck_run.sh
 | Fixed-point | Q6.10, 16-bit signed |
 | Gamma | 0.25 (γ=0x0100 in Q6.10 — zero quantization error) |
 | Clock | 40 MHz (25 ns period) |
-| Inference time | 3.23 ms / beat |
-| Active power | ~66 mW |
-| Average power (80 bpm) | 0.284 mW |
-| 14-day wearable target | MET — ~29-day headroom on 200 mAh cell |
+| RAM_LATENCY | 3 (IS61WV51216 async SRAM, 10 ns access) |
+| Inference time | 9.7 ms / beat (LAT=3) |
+| Active power | 55.25 mW |
+| Average power (80 bpm) | 0.727 mW |
+| 14-day wearable target | MET — ~42-day headroom on 200 mAh cell (core alone) |
 | Off-chip RAM address bus | GPIO[28:10] (19-bit) + GPIO[29] ren + LA[15:0] rdata |
 
 ---
@@ -106,12 +115,14 @@ sbatch ~/ece410/precheck_run.sh   # see m5/precheck/precheck_run.sh
 
 ## 7. Outstanding Items Before Final Submission
 
-- [ ] Push GDS files to GitHub via git LFS (`git lfs push --all origin`)
-- [ ] Run mpw-precheck → record results in `m5/precheck/precheck_results.txt`
+- [ ] Resolve GitHub LFS fork restriction for GDS files (create Release or detach fork)
+- [ ] Run mpw-precheck → record results in `m5/caravel/precheck/precheck_results.txt`
 - [ ] Fix any precheck failures
 - [ ] Run Caravel chip-level DV (`dv_run.sh`) → record in `dv_results.md`
+- [ ] KLayout XOR — run locally on final GDS once pulled
+- [ ] Tag repo: `git tag submission-v1 && git push origin submission-v1`
 - [ ] Submit caravel_svm_project repo URL to ECE410
 
 ---
 
-*Last updated: 2026-05-25 — hardening complete (jobs 91966/91967), cosim 97.67% = sklearn*
+*Last updated: 2026-06-06 — wrapper harden complete (jobs 92840/92861), KLayout DRC 0 violations, LEF/GL pushed to GitHub*

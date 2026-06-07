@@ -1,23 +1,30 @@
-Area Report — svm_compute_core + user_project_wrapper (OL2 jobs 91966 / 91967)
+Area Report — svm_compute_core + user_project_wrapper (OL2 jobs 92840 / 92861)
 ===============================================================================
 
 STATUS: COMPLETE
 
 PDK          : sky130A (sky130_fd_sc_hd)
 Tool         : OpenLane 2 v2.3.10 Classic
-NUM_SV       : 500  (100 per class, doubled from prior 250)
+NUM_SV       : 500  (100 per class)
+RAM_LATENCY  : 3
 
-svm_compute_core  (job 91966)
+svm_compute_core  (job 92840)
 ------------------------------
-  Die area     : 2500 × 2500 µm
-  GDS size     : 226 MB
-  Utilization  : ~14% (register-heavy design — alpha_table[500] in registers)
-  Cells        : ~146K std cells (alpha_table doubled from 250→500 entries)
+  Die area     : 2500 × 2500 µm  (6,250,000 µm²)
+  Core area    : 6,166,550 µm²
+  Cell area    : 927,920 µm²  (std cells only — SRAM is off-chip)
+  Std cells    : 157,991
+  Utilization  : 15.05%
+  GDS size     : 232 MB
 
-user_project_wrapper  (job 91967)
+user_project_wrapper  (job 92861)
 ----------------------------------
-  Die area     : 2920 × 3520 µm (Caravel fixed, FP_DEF_TEMPLATE)
-  GDS size     : 230 MB
+  Die area        : 2920 × 3520 µm  (10,278,400 µm²)  (Caravel fixed)
+  Core area       : 10,174,000 µm²
+  Macro area      : 6,250,000 µm²   (u_svm, 2500×2500 µm)
+  Std cell area   : 7,275.73 µm²    (707 cells — Wishbone glue logic only)
+  Utilization     : 61.5% (including macro) / 0.19% std cell only
+  GDS size        : 234 MB
 
   Macro Instance
   --------------
@@ -25,6 +32,6 @@ user_project_wrapper  (job 91967)
     Right margin : 167 µm
     Top margin   : 466 µm
 
-  Wrapper contains minimal glue logic (Wishbone decode, clock gate, alpha_wr
-  register) around the pre-hardened svm_compute_core macro.
-  Estimated: ~500–2000 wrapper std cells + 1 macro instance.
+  Wrapper contains 707 std cells (Wishbone decode, clock gate, alpha_wr register)
+  around the pre-hardened svm_compute_core macro. Full synthesis via 3-phase
+  ODB flow (SYNTH_ELABORATE_ONLY=0).

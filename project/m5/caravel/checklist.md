@@ -1,24 +1,24 @@
-# Caravel chipIgnite Submission Checklist
+# Caravel Submission Checklist
 
 **Project:** SVM Cardiac Arrhythmia Classifier (ECE410, Portland State University)
 **Repo:** https://github.com/adamleehandwerger/caravel_svm_project
 **Student:** Adam Handwerger (handwerg@pdx.edu)
-**Architecture:** Batch v8/v9 — host pre-loads SV + input matrix; ASIC classifies autonomously
+**Architecture:** Batch v9 — host pre-loads SV + input matrix; ASIC classifies autonomously
 
 ---
 
 ## Required Artifacts
 
-| Item | File | Status |
-|------|------|--------|
-| Core GDS | `gds/svm_compute_core.gds` | ✅ job 91966 — 226 MB |
-| Core LEF | `lef/svm_compute_core.lef` | ✅ job 91966 — 94 KB |
-| Core GL netlist | `verilog/gl/svm_compute_core.v` | ✅ job 91966 — 13 MB |
-| Wrapper GDS | `gds/user_project_wrapper.gds` | ✅ job 91967 — 230 MB |
-| Wrapper LEF | `lef/user_project_wrapper.lef` | ✅ job 91967 — 195 KB |
-| Wrapper GL netlist | `verilog/gl/user_project_wrapper.v` | ✅ job 91967 — 78 KB |
-| Core RTL | `verilog/rtl/svm_compute_core.sv` | ✅ v9 (NUM_SV=500, alpha_addr[8:0]) |
-| Wrapper RTL | `verilog/rtl/user_project_wrapper.sv` | ✅ v9 (reg_alpha_wr[24:0]) |
+| Item | File | Size | Job | Status |
+|------|------|------|-----|--------|
+| Core GDS | `gds/svm_compute_core.gds` | 226 MB | 92840 | ✅ |
+| Core LEF | `lef/svm_compute_core.lef` | 94 KB | 92840 | ✅ |
+| Core GL netlist | `verilog/gl/svm_compute_core.v` | 13 MB | 92840 | ✅ |
+| Wrapper GDS | `gds/user_project_wrapper.gds` | 235 MB | 92861 | ✅ |
+| Wrapper LEF | `lef/user_project_wrapper.lef` | 178 KB | 92861 | ✅ |
+| Wrapper GL netlist | `verilog/gl/user_project_wrapper.v` | 78 KB | 92861 | ✅ |
+| Core RTL | `verilog/rtl/svm_compute_core.sv` | — | v10 | ✅ |
+| Wrapper RTL | `verilog/rtl/user_project_wrapper.sv` | — | v10 | ✅ |
 
 ---
 
@@ -26,14 +26,20 @@
 
 | Check | Target | Result | Status |
 |-------|--------|--------|--------|
-| Core setup WNS (TT) | ≥ 0 ns | +7.83 ns | ✅ |
-| Core hold WNS (TT) | ≥ 0 ns | +0.30 ns | ✅ |
+| Core setup WNS (TT) | ≥ 0 ns | +3.96 ns | ✅ |
+| Core setup WNS (FF) | ≥ 0 ns | +11.24 ns | ✅ |
+| Core setup WNS (SS) | ≥ 0 ns | −14.56 ns | ⚠️ 100°C/1.60V — see tapeout items |
+| Core hold WNS (TT) | ≥ 0 ns | +0.23 ns | ✅ |
 | Core DRC violations | 0 | 0 | ✅ |
-| Core power (avg, 80 bpm) | < 1 mW | 0.284 mW | ✅ |
-| Wrapper DRC violations | 0 | 11,923 (boundary artifacts) | ⚠️ acceptable |
-| Wrapper LVS errors | 0 | 1,683 (boundary artifacts) | ⚠️ acceptable |
-| Wrapper setup WNS (TT) | ≥ 0 ns | Hold violations (boundary) | ⚠️ acceptable |
-| mpw-precheck PASS | All gates | Not run | ⏳ |
+| Core LVS | PASS | PASS | ✅ |
+| Core antenna violations | 0 | 554 net / 808 pin | ⚠️ advisory (class); blocking (tapeout) |
+| Core power (avg, 80 bpm) | < 1 mW | 0.727 mW (LAT=3) | ✅ |
+| Wrapper setup WNS (TT) | ≥ 0 ns | PASS (checker clean) | ✅ |
+| Wrapper hold WNS (TT) | ≥ 0 ns | Violations found | ⚠️ see tapeout items |
+| Wrapper DRC violations | 0 | 11,906 boundary artifacts (Magic) | ⚠️ acceptable for class |
+| Wrapper KLayout DRC | 0 | 0 violations (job 91967 GDS) | ✅ re-run on 92861 GDS |
+| Wrapper LVS errors | 0 | 1,698 boundary artifacts | ⚠️ acceptable for class |
+| mpw-precheck | PASS | Job 92866 submitted | ⏳ |
 
 ---
 
@@ -41,32 +47,59 @@
 
 | Test | Description | Status |
 |------|-------------|--------|
-| sklearn accuracy | 97.67% on MIT-BIH + SVDB + INCART (300 test beats) | ✅ (Python) |
-| batch cosim (v9) | 300 samples, Icarus/cocotb, Wishbone interface | ✅ 97.67% — zero gap |
+| sklearn accuracy | 97.67% on MIT-BIH + SVDB + INCART (300 test beats) | ✅ |
+| Batch cosim (v9) | 300 samples, cocotb Wishbone, RAM_LATENCY=3 | ✅ 97.67% — zero gap |
 | ASIC vs sklearn | 293/300 correct, zero accuracy gap | ✅ |
-| Caravel chip-level DV | RISC-V firmware pass | ⏳ Pending |
+| Caravel chip-level DV | RISC-V firmware pass | Job 92867 submitted | ⏳ |
 
 ---
 
-## Design Highlights (v9 Batch)
+## ECE410 Submission Checklist
 
-- **Architecture:** Batch — host pre-loads 1000 beats into off-chip SRAM, ASIC classifies in burst
-- **Feature vector:** 256-dim (128 single-beat + 64 10-beat + 64 RR history)
-- **Fixed-point:** Q6.10, matched to sklearn gamma=0.25
-- **Support vectors:** 500 total (100/class), off-chip RAM rows 0–499
-- **Input matrix:** off-chip RAM rows 500–1499 (up to 1000 × 256 beats)
-- **Per-sample IRQ:** `sample_rdy` (IRQ[0]) fires per beat; `done` (IRQ[1]) at end
-- **Power:** 0.284 mW average at 80 bpm (0.431% duty cycle)
-- **Clock:** 40 MHz (25 ns), TT corner clean +7.83 ns setup margin
-
----
-
-## Outstanding Items
-
-- [ ] **RE-HARDEN (blocking)** — Re-run core harden (job 91966 used RAM_LATENCY=1 default).
-      Fix: `SYNTH_TOP_LEVEL_PARAMETERS: RAM_LATENCY=3` added to `openlane/svm_compute_core/config.json`.
-      Then re-run wrapper harden with new core GDS. ~3–4 hours on Orca.
-- [ ] Run mpw-precheck after re-harden and LFS push
-- [ ] Run Caravel chip-level DV (`dv_run.sh`)
+- [x] Core harden complete (job 92840, v10, RAM_LATENCY=3, 0 DRC)
+- [x] Wrapper harden complete (job 92861, v10, GDS/LEF/GL in caravel repo)
+- [ ] Run mpw-precheck (`precheck/precheck_run.sh` on Orca) ⏳ job 92866 PENDING
+- [ ] Run Caravel chip-level DV (`dv_run.sh`) ⏳ job 92867 PENDING
+- [ ] Push final GDS/LEF/GL to GitHub (`git add gds/ lef/ verilog/gl/ && git push`)
+- [ ] Tag repo: `git tag submission-v1 && git push origin submission-v1`
 - [ ] Submit caravel_svm_project repo URL to ECE410
-- [ ] Run SS corner timing signoff (SS/1.62V/125°C) — TT only verified so far
+
+---
+
+## Tapeout Requirements (prototype)
+
+Required before submitting to an Efabless Caravel shuttle:
+
+- [ ] **Wrapper hold violations** — `Checker.HoldViolations` reports hold violations at
+      nom_tt_025C_1v80. The svm_compute_core hold is clean (+0.23 ns); wrapper
+      violations likely originate in Wishbone controller registers synthesized without
+      clock tree (`RUN_CTS=0`). Fix: enable `RUN_CTS=1`, re-run wrapper harden, verify
+      hold WNS ≥ 0 in all corners. **Hold failures cause functional errors on silicon.**
+
+- [ ] **IR drop analysis** — `OpenROAD.IRDropReport` is skipped (PSM-0069). Add
+      `VSRC_LOC_FILES` pointing to vccd1/vssd1 supply entry points on the Caravel die
+      boundary. Re-enable IRDropReport and verify < 5% voltage droop under worst-case
+      switching activity. Caravel reference repo provides example VSRC files.
+
+- [ ] **Antenna violations** — svm_compute_core has 554 net / 808 pin antenna
+      violations. Re-harden core with `GRT_REPAIR_ANTENNAS=1` and
+      `RUN_FILL_INSERTION=1` to insert diodes and tie-offs. Verify Magic antenna
+      DRC = 0 before submitting.
+
+- [x] **KLayout DRC** — 0 violations on job 91967 wrapper GDS (run 2026-06-06,
+      KLayout 0.30.9, sky130A.lydrc, 24 min, report at `~/Desktop/wrapper_drc.xml`).
+      Re-run on final job 92861 GDS once pulled from Orca to confirm clean.
+      **KLayout XOR** still pending (requires two GDS inputs; run after final GDS pulled).
+
+- [ ] **Wrapper DRC/LVS boundary artifacts** — 11,906 Magic DRC and 1,698 LVS errors
+      at macro/wrapper boundary. Confirm with Efabless that these are expected for a
+      hardened macro in the fixed DEF template, or adjust macro placement and power
+      ring overlap rules to resolve.
+
+- [ ] **Power BTERM workaround** — vccd2/vdda1/vdda2/vssa1/vssa2/vssd2 BTERMs are
+      deleted from the routing database (DRT-0302 workaround). Verify with Efabless
+      that this is acceptable for the Caravel SoC power delivery network.
+
+- [ ] **SS corner timing** — WNS = −14.56 ns at nom_ss_100C_1v60 (163 violations).
+      Document operating envelope. If prototype must operate at elevated temperature
+      or low voltage, re-harden with tighter constraints or target a faster SCL.

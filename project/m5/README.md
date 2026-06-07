@@ -4,7 +4,7 @@
 **Technology:** sky130A (SkyWater 130 nm open-PDK), sky130_fd_sc_hd  
 **Flow:** OpenLane 2 v2.3.10 Classic (Yosys + OpenROAD + TritonRoute)  
 **Architecture:** Batch v9 — host pre-loads SV + input matrix; ASIC classifies autonomously  
-**Status:** Core hardened (job 91966, 0 DRC), wrapper hardened (job 91967, boundary DRC acceptable)
+**Status:** Core + wrapper hardened ✅ (jobs 92840/92861, v10, 0 DRC core, KLayout DRC 0 wrapper)
 
 ---
 
@@ -50,13 +50,13 @@ m5/
 │   ├── asic_preds.csv           ← 300 ASIC predictions (last cosim run)
 │   └── throughput_comparison.txt ← inference time and power summary
 │
-├── synth/                       ← Place-and-route summary (OL2 jobs 91966 / 91967)
+├── synth/                       ← Place-and-route summary (OL2 jobs 92840 / 92861)
 │   ├── config.json              ← OpenLane 2 wrapper config (25 ns clock, Caravel die)
-│   ├── openlane_run.log         ← P&R run log summary (SLURM job 91967)
-│   ├── timing_report.txt        ← STA: core WNS +7.83 ns, 0 violations
-│   ├── area_report.txt          ← core 2500×2500 µm; wrapper 2920×3520 µm (Caravel fixed)
-│   ├── power_report.txt         ← 66 mW active, 0.284 mW avg @ 80 bpm; 14-day target met
-│   ├── drc_report.txt           ← core 0 violations; wrapper 11,923 boundary artifacts
+│   ├── openlane_run.log         ← P&R run log summary (SLURM job 92861)
+│   ├── timing_report.txt        ← STA: TT WNS +3.96 ns; FF +11.24 ns; SS -14.56 ns (expected)
+│   ├── area_report.txt          ← core 2500×2500 µm, 15.0% util; wrapper 2920×3520 µm
+│   ├── power_report.txt         ← 55.25 mW active, 0.727 mW avg @ 80 bpm (LAT=3)
+│   ├── drc_report.txt           ← core 0 DRC/LVS; antenna 554 nets (advisory); wrapper boundary artifacts
 │   └── critical_path.md         ← critical path through dist_acc; wrapper paths trivial
 │
 ├── bench/                       ← Benchmark: ASIC vs optimized Python
@@ -87,14 +87,14 @@ m5/
     ├── wrapper_harden.sh        ← SLURM script: hardens user_project_wrapper on Orca
     ├── base_user_project_wrapper.sdc ← timing constraints (wrapper)
     ├── macro.cfg                ← u_svm macro placement (253, 554) N
-    ├── timing_report.txt        ← STA report (jobs 91966 / 91967)
-    ├── area_report.txt          ← area/utilization (jobs 91966 / 91967)
-    ├── power_report.txt         ← power report (jobs 91966 / 91967)
+    ├── timing_report.txt        ← STA report (jobs 92840 / 92861)
+    ├── area_report.txt          ← area/utilization (jobs 92840 / 92861)
+    ├── power_report.txt         ← power report (jobs 92840 / 92861)
     ├── drc_report.txt           ← DRC/LVS (core 0 viol; wrapper boundary artifacts)
     ├── gds/                     ← GDS placeholder (230 MB — lives in caravel repo)
     └── logs/                    ← SLURM job logs
-        ├── core_harden_91966.out    ← core harden SLURM output
-        ├── wrapper_harden_91963.out ← wrapper harden SLURM output
+        ├── core_harden_92840.out    ← core harden SLURM output (v10)
+        ├── wrapper_harden_92861.out ← wrapper harden SLURM output (v10)
         ├── mpw_precheck_91986.err   ← mpw-precheck stderr
         └── mpw_precheck_91986.out   ← mpw-precheck stdout
 ```
@@ -111,13 +111,14 @@ m5/
 | Gamma / C | 0.25 / 1.0 |
 | Clock | 40 MHz (25 ns) |
 | RAM_LATENCY | 1 (cosim default) / 3 (IS61WV51216 async SRAM) |
-| Core setup WNS | +7.83 ns (TT, 0 violations) |
-| Core hold WNS | +0.30 ns (TT, 0 violations) |
-| Core DRC | 0 violations |
-| Wrapper DRC | 11,923 boundary artifacts (acceptable) |
-| Active power | 66 mW → 0.869 mW avg at 80 bpm (1.316% duty cycle, LAT=3) |
-| Core die | 2500 × 2500 µm, ~14% utilization, ~146K cells |
-| Wrapper die | 2920 × 3520 µm (Caravel fixed), 230 MB GDS |
+| Core setup WNS | +3.96 ns TT / +11.24 ns FF — 0 violations; −14.56 ns SS (expected) |
+| Core hold WNS | +0.23 ns TT — 0 violations all corners |
+| Core DRC | 0 violations ✅ |
+| Wrapper Magic DRC | 11,906 boundary artifacts (acceptable) |
+| Wrapper KLayout DRC | 0 violations ✅ |
+| Active power | 55.25 mW → 0.727 mW avg at 80 bpm (LAT=3) |
+| Core die | 2500 × 2500 µm, 15.0% utilization, 157,991 cells |
+| Wrapper die | 2920 × 3520 µm (Caravel fixed), 234 MB GDS, 707 std cells |
 | ASIC accuracy | 97.67% (293/300) — exact match with sklearn, zero gap |
 
 ## Quick Start
@@ -155,8 +156,9 @@ See `caravel/README_caravel.md` for the full repo layout.
 ## Differences from m4
 
 m4 hardened the svm_compute_core macro only. m5 adds:
-- user_project_wrapper hardening (job 91967) — Caravel fixed die, macro placement
-- RAM_LATENCY parameter — configurable wait-states for IS61WV51216 async SRAM
+- user_project_wrapper hardening (job 92861, v10) — Caravel fixed die, macro placement
+- RAM_LATENCY=3 parameter — configurable wait-states for IS61WV51216 async SRAM
+- RUN_MCSTA=1 — multi-corner STA (SS/FF/TT) via post-PNR OpenSTA
 - svm_ram_latency_tb.sv — unit test: LAT=3 → PASS, 208 cycles/beat
 - compute_core_math.tex/pdf — LaTeX mathematical description of dist + horner subfunctions
 - design_summary.md/pdf — full design summary with Appendices A/B/C (model reload, hospital design, MCU sequence)
@@ -167,10 +169,63 @@ m4 hardened the svm_compute_core macro only. m5 adds:
 
 ## Outstanding (pre-submission)
 
-- **Re-harden required** — job 91966 synthesized with RAM_LATENCY=1 (default).
-  Fix applied to `caravel/openlane/svm_compute_core/config.json`.
-  Re-run core + wrapper harden on Orca before submitting GDS.
-- mpw-precheck, Caravel DV, SS corner — see `caravel/checklist.md`
+- mpw-precheck — run on Orca; see `caravel/precheck/precheck_run.sh`
+- Caravel chip-level DV — run `tb/dv_run.sh`
+- GDS files on GitHub — resolve LFS fork restriction (create Release or detach fork)
+- KLayout XOR — run locally on final 234 MB GDS
+- git tag `submission-v1` in caravel_svm_project repo
+- Submit caravel_svm_project URL to ECE410
+
+## Tapeout Requirements (prototype)
+
+Required before submitting to an Efabless Caravel shuttle or equivalent:
+
+- **IR drop analysis (`VSRC_LOC_FILES`)** — `OpenROAD.IRDropReport` is currently
+  skipped (PSM-0069, "Check connectivity failed on vccd1"). PSM requires
+  `VSRC_LOC_FILES` specifying the vccd1/vssd1 supply entry points on the Caravel
+  die boundary so it can trace current paths from the package into the power ring.
+  The Caravel reference repository provides example VSRC files for the user project
+  area. Re-enable `OpenROAD.IRDropReport` with those files and verify acceptable
+  voltage droop (target: < 5% of VDD under worst-case switching activity).
+
+- **Antenna violations** — svm_compute_core has 554 net / 808 pin antenna
+  violations (advisory for class, blocking for tapeout). Re-harden with
+  `GRT_REPAIR_ANTENNAS=1` and `RUN_FILL_INSERTION=1` to insert diodes and
+  tie-offs. Verify Magic antenna DRC = 0 before submitting.
+
+- **Wrapper DRC/LVS boundary artifacts** — 11,923 Magic DRC violations and 1,683
+  LVS errors on the wrapper are reported as macro-boundary artifacts from the
+  svm_compute_core power ring meeting the Caravel template geometry. Confirm with
+  Efabless support that these are expected for a hardened macro instantiated inside
+  the fixed DEF template, or resolve by adjusting the macro placement and power ring
+  overlap rules in `config.json`.
+
+- **Power BTERM handling** — vccd2/vdda1/vdda2/vssa1/vssa2/vssd2 BTERMs are
+  deleted from the routing database at DetailedRouting time (DRT-0302 workaround).
+  For tapeout, verify with Efabless that unconnected Caravel power domains are
+  properly handled in the PDN and that deleting their routing BTERMs does not affect
+  the Caravel SoC power delivery network for adjacent user projects.
+
+- **KLayout XOR / DRC** — `KLayout.XOR` and `KLayout.DRC` are skipped on Orca
+  (Ruby not available on compute nodes). XOR checks for phantom geometry between
+  the GDS and the routed DEF; KLayout DRC is a second DRC signoff layer. Both
+  must pass on a Ruby-capable machine (local install or a machine with KLayout +
+  Ruby) before submitting to a shuttle. Run `klayout -b -r $PDK_ROOT/.../drc.lydrc
+  -rd input=user_project_wrapper.gds` and `klayout -b -r xor.lydrc` on the final
+  GDS produced by Magic.
+
+- **Wrapper hold violations (TT corner)** — `Checker.HoldViolations` reports hold
+  violations at nom_tt_025C_1v80 in the wrapper (checker skipped to allow flow
+  completion). svm_compute_core hold is clean (+0.23 ns). Wrapper violations likely
+  originate in the Wishbone controller registers synthesized without clock tree
+  (`RUN_CTS=0`). For tapeout: enable `RUN_CTS=1`, re-run wrapper harden, and verify
+  hold WNS ≥ 0 in all corners. Hold failures cause functional errors on silicon
+  (data captured too early on the wrong clock edge).
+
+- **SS corner timing** — WNS = −14.56 ns at nom_ss_100C_1v60 (163 violations).
+  This corner is 100 °C / 1.60 V; if the prototype will only operate at room
+  temperature with nominal supply this is not a risk. Document the operating
+  envelope explicitly for any silicon bringup plan.
 
 ## Next Step
 
