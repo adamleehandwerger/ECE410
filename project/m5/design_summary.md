@@ -3,8 +3,8 @@
 **Project:** Multi-Class Cardiac Arrhythmia Detection — Caravel chipIgnite Tape-Out
 **Technology:** sky130A / sky130_fd_sc_hd
 **Flow:** OpenLane 2 v2.3.10 Classic
-**Architecture:** Batch v8/v9 — host pre-loads SV + input matrix; ASIC classifies autonomously
-**RTL freeze:** m5/rt1 v9 — NUM_SV=500, alpha_addr[8:0], reg_alpha_wr[24:0]
+**Architecture:** Batch v10 — host pre-loads SV + input matrix; ASIC classifies autonomously
+**RTL freeze:** m5/rt1 v10 — NUM_SV=500, alpha_addr[8:0], reg_alpha_wr[24:0]
 **Harden version:** v10 — RAM_LATENCY=3 (IS61WV51216 SRAM), RUN_MCSTA=1 (SS/FF/TT corner signoff)
 
 ---
@@ -95,7 +95,7 @@ Per-class test results:
 
 ---
 
-## Batch Architecture (v8/v9)
+## Batch Architecture (v10)
 
 ### Off-chip RAM Bus
 
@@ -195,8 +195,8 @@ Battery budget: 200 mAh @ 3.7V = 740 mWh → **740 mWh / 1.63 mW ≈ 454 hours (
 |------|------|-----|--------|
 | `verilog/gl/svm_compute_core.v` | 13 MB | 92840 | ✅ |
 | `verilog/gl/user_project_wrapper.v` | 78 KB | 92861 | pending |
-| `verilog/rtl/svm_compute_core.sv` | — | v9 | ✅ |
-| `verilog/rtl/user_project_wrapper.sv` | — | v9 | ✅ |
+| `verilog/rtl/svm_compute_core.sv` | — | v10 | ✅ |
+| `verilog/rtl/user_project_wrapper.sv` | — | v10 | ✅ |
 
 ---
 
