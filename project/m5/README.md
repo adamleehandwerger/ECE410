@@ -170,12 +170,12 @@ m4 hardened the svm_compute_core macro only. m5 adds:
 
 ## Outstanding (pre-submission)
 
-- mpw-precheck — run on Orca; see `caravel/precheck/precheck_run.sh`
-- Caravel chip-level DV — run `tb/dv_run.sh`
-- GDS files on GitHub — resolve LFS fork restriction (create Release or detach fork)
-- KLayout XOR — run locally on final 234 MB GDS
-- git tag `submission-v1` in caravel_svm_project repo
-- Submit caravel_svm_project URL to ECE410
+- ✅ mpw-precheck — PASSED (job 92871, 0 DRC, SPDX OK, all artifacts present)
+- ✅ Caravel chip-level DV — PASSED (job 92867, "SVM WB Test (RTL) Passed")
+- ✅ GDS files on GitHub — Release v3.0-hardened (core 232 MB, wrapper 234 MB)
+- ✅ Repo tagged — `v3.0-hardened` in caravel_svm_project
+- [ ] KLayout XOR — run locally on final 234 MB GDS (tapeout; not required for class)
+- [ ] Submit caravel_svm_project URL to ECE410
 
 ## Tapeout Requirements (prototype)
 
