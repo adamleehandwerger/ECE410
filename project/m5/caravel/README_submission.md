@@ -74,7 +74,7 @@ sbatch ~/ece410/precheck_run.sh   # see m5/caravel/precheck/precheck_run.sh
 | ASIC vs sklearn gap | Q6.10 quantization (gamma=0.25) | 0.00% | ✅ |
 | Wishbone cosim | 300 samples, cocotb, full batch, LAT=3 | 97.67% ASIC | ✅ |
 | RAM_LATENCY unit test | LAT=3, FEAT=4, NSV=5, iverilog | PASS, 208 cycles | ✅ |
-| Caravel chip-level DV | RISC-V firmware, mprj_io check | TBD | ⏳ |
+| Caravel chip-level DV | RISC-V firmware, mprj_io check | PASSED (job 92867) | ✅ |
 
 ---
 

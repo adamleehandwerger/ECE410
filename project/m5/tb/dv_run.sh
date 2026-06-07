@@ -66,8 +66,8 @@ apptainer exec \
 echo "=== dv_run complete at $(date) ==="
 
 # --- Print any simulation log output ---
-SIMOUT=\$(find $CARAVEL/verilog/dv/$TEST -name "*.log" 2>/dev/null | head -5)
-if [ -n "\$SIMOUT" ]; then
+SIMOUT=$(find $CARAVEL/verilog/dv/$TEST -name "*.log" 2>/dev/null | head -5)
+if [ -n "$SIMOUT" ]; then
     echo "=== Simulation logs ==="
-    for f in \$SIMOUT; do echo "--- \$f ---"; cat "\$f"; done
+    for f in $SIMOUT; do echo "--- $f ---"; cat "$f"; done
 fi

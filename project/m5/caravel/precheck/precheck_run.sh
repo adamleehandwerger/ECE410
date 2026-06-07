@@ -79,8 +79,9 @@ RESULTS=$CARAVEL/precheck_results/precheck.log
 > $RESULTS
 
 # --- Magic DRC on svm_compute_core ---
+# Write TCL into a location that is bind-mounted into the container (/project)
 echo "--- Running Magic DRC on svm_compute_core ---" | tee -a $RESULTS
-cat > /tmp/drc_core.tcl << 'MAGICEOF'
+cat > $CARAVEL/drc_core.tcl << 'MAGICEOF'
 drc off
 gds read /project/gds/svm_compute_core.gds
 load svm_compute_core
@@ -97,8 +98,9 @@ apptainer exec \
     --bind $CARAVEL:/project \
     --bind $PDK_ROOT:/pdk \
     $PRECHECK_SIF \
-    bash -c "cd /project && magic -dnull -noconsole -rcfile /pdk/sky130A/libs.tech/magic/sky130A.magicrc /tmp/drc_core.tcl" \
+    bash -c "cd /project && magic -dnull -noconsole -rcfile /pdk/sky130A/libs.tech/magic/sky130A.magicrc /project/drc_core.tcl" \
     2>&1 | grep -E "DRC|PASS|FAIL|error count" | tee -a $RESULTS
+rm -f $CARAVEL/drc_core.tcl
 
 # --- SPDX license check ---
 echo "--- Checking SPDX headers ---" | tee -a $RESULTS
