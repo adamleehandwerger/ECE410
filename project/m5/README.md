@@ -168,15 +168,6 @@ m4 hardened the svm_compute_core macro only. m5 adds:
 - horner_errorplot.png — degree-6 Taylor error vs Q6.10 LSB threshold
 - Caravel submission artifacts (caravel/ folder)
 
-## Outstanding (pre-submission)
-
-- ✅ mpw-precheck — PASSED (job 92871, 0 DRC, SPDX OK, all artifacts present)
-- ✅ Caravel chip-level DV — PASSED (job 92867, "SVM WB Test (RTL) Passed")
-- ✅ GDS files on GitHub — Release v3.0-hardened (core 232 MB, wrapper 234 MB)
-- ✅ Repo tagged — `v3.0-hardened` in caravel_svm_project
-- ✅ KLayout XOR — 0 violations on final 234 MB wrapper GDS
-- ✅ Submit caravel_svm_project URL to ECE410
-
 ## Tapeout Requirements (prototype)
 
 Required before submitting to an Efabless Caravel shuttle or equivalent:
