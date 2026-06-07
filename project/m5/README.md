@@ -168,7 +168,7 @@ m4 hardened the svm_compute_core macro only. m5 adds:
 - horner_errorplot.png — degree-6 Taylor error vs Q6.10 LSB threshold
 - Caravel submission artifacts (caravel/ folder)
 
-## Tapeout Requirements (prototype)
+## Next Steps
 
 Required before submitting to an Efabless Caravel shuttle or equivalent:
 
@@ -219,7 +219,7 @@ Required before submitting to an Efabless Caravel shuttle or equivalent:
   temperature with nominal supply this is not a risk. Document the operating
   envelope explicitly for any silicon bringup plan.
 
-## Next Step
+## Beyond Tapeout
 
 MCU design — nRF52840 recommended for ECG sampling, feature extraction, and
 Wishbone/GPIO control of the ASIC. See `design_summary.md` Appendix C for
