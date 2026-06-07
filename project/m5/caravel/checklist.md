@@ -60,8 +60,8 @@
 - [x] Wrapper harden complete (job 92861, v10, GDS/LEF/GL in caravel repo)
 - [x] Run precheck (`precheck/precheck_run.sh` on Orca) ✅ job 92871 — 0 DRC, SPDX OK, all files present
 - [x] Run Caravel chip-level DV (`dv_run.sh`) ✅ job 92867 — "Monitor: SVM WB Test (RTL) Passed"
-- [ ] Push final GDS/LEF/GL to GitHub (`git add gds/ lef/ verilog/gl/ && git push`)
-- [ ] Tag repo: `git tag submission-v1 && git push origin submission-v1`
+- [x] Push final LEF/GL to GitHub (commit 8008ee5); GDS attached as Release assets (v3.10-hardened)
+- [x] Tag repo: `v3.10-hardened` — GitHub Release with GDS/LEF/GL artifacts
 - [ ] Submit caravel_svm_project repo URL to ECE410
 
 ---
