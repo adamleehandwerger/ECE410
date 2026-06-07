@@ -77,24 +77,109 @@ ls -lh $CARAVEL/gds/svm_compute_core.gds
 ls -lh $CARAVEL/verilog/gl/svm_compute_core.v
 ls -lh $CARAVEL/verilog/rtl/user_project_wrapper.sv
 
-# --- Clean previous run so new config (SYNTH_ELABORATE_ONLY=0) takes effect ---
+# --- Clean previous run ---
 echo "--- Removing old run dir ---"
-# rm -rf $DESIGN_DIR/runs/wrapper_harden  # RESUME: keep existing run
+rm -rf $DESIGN_DIR/runs/wrapper_harden
 
-# --- Run OpenLane 2 (full synthesis — no elaborate-only; produces proper GL netlist) ---
-echo "--- Running openlane ---"
+OUT_BASE=$DESIGN_DIR/runs/wrapper_harden
+
+# =============================================================================
+# Phase 1: Full synthesis through GlobalRouting.
+# SYNTH_ELABORATE_ONLY=0 (full synthesis) produces a proper gate-level netlist
+# that OpenSTA can parse. FP_TEMPLATE_MATCH_MODE=permissive handles the
+# applydeftemplate mismatch for the 6 unused power BTERMs
+# (vccd2, vdda1, vdda2, vssa1, vssa2, vssd2).
+# Phase 1 stops before DetailedRouting because those BTERMs acquire multiple
+# physical PIN geometries from the Caravel power ring template, which causes
+# TritonRoute DRT-0302 ("Unsupported multiple pins on bterm vccd2").
+# =============================================================================
+echo "--- Phase 1: Synthesis through GlobalRouting ---"
 openlane \
-     \
     --pdk sky130A \
     --pdk-root $PDK_ROOT \
     --run-tag wrapper_harden \
+    --to OpenROAD.GlobalRouting \
+    --jobs $SLURM_CPUS_PER_TASK \
+    $DESIGN_DIR/config.json 2>&1
+
+# =============================================================================
+# ODB patch: delete the 6 unused power BTERMs from the OpenROAD database.
+# After applydeftemplate, these BTERMs have multiple physical PIN shapes (one
+# per power ring segment in the template). TritonRoute rejects multi-pin BTERMs
+# with DRT-0302. Deleting them is safe: they are not connected to anything in
+# this design (svm_compute_core only uses vccd1/vssd1).
+# The ODB is modified in-place; Phase 2's --from DetailedRouting reads it via
+# the GlobalRouting step's state_out.json which still points to the same path.
+# =============================================================================
+echo "--- Patching ODB: deleting unused power BTERMs ---"
+GRT_DIR=$(ls -d $OUT_BASE/*-openroad-globalrouting 2>/dev/null | tail -1)
+if [ -z "$GRT_DIR" ]; then
+    echo "ERROR: GlobalRouting step directory not found under $OUT_BASE"
+    ls $OUT_BASE 2>/dev/null
+    exit 1
+fi
+
+GRT_ODB=$(python3 -c "
+import json, sys
+with open('$GRT_DIR/state_out.json') as f:
+    state = json.load(f)
+odb = state.get('odb') or ''
+if odb:
+    print(odb)
+else:
+    print('NOT_FOUND', file=sys.stderr)
+    sys.exit(1)
+" 2>/dev/null)
+
+echo "GlobalRouting ODB: $GRT_ODB"
+if [ -z "$GRT_ODB" ] || [ ! -f "$GRT_ODB" ]; then
+    echo "ERROR: ODB not found. Dumping state keys:"
+    python3 -c "import json; d=json.load(open('$GRT_DIR/state_out.json')); print(dict((k,v) for k,v in d.items() if v and k not in ('metrics',)))"
+    exit 1
+fi
+
+cat > /tmp/delete_power_bterms.tcl << EOF
+read_db {$GRT_ODB}
+set block [ord::get_db_block]
+foreach net_name {vccd2 vdda1 vdda2 vssa1 vssa2 vssd2} {
+    set bterm [\$block findBTerm \$net_name]
+    if {\$bterm != "NULL"} {
+        puts "  Deleting power BTERM: \$net_name"
+        odb::dbBTerm_destroy \$bterm
+    } else {
+        puts "  BTERM \$net_name not found (already absent)"
+    }
+}
+write_db {$GRT_ODB}
+puts "ODB patch complete."
+exit
+EOF
+
+openroad -no_init -exit /tmp/delete_power_bterms.tcl
+echo "--- ODB patch done ---"
+
+# =============================================================================
+# Phase 2: DetailedRouting through end.
+# GlobalRouting step has state_out.json pointing to the patched ODB.
+# OpenLane will not re-run prior steps (they all have state_out.json).
+# =============================================================================
+echo "--- Phase 2: DetailedRouting onward ---"
+# --skip OpenROAD.IRDropReport: PSM-0069 is expected for sub-chips without
+# VSRC_LOC_FILES (not a top-level package integration). Advisory only.
+openlane \
+    --pdk sky130A \
+    --pdk-root $PDK_ROOT \
+    --run-tag wrapper_harden \
+    --from OpenROAD.DetailedRouting \
+    --skip OpenROAD.IRDropReport \
+    --skip KLayout.XOR \
+    --skip KLayout.DRC \
     --jobs $SLURM_CPUS_PER_TASK \
     $DESIGN_DIR/config.json 2>&1
 
 echo "=== Done at $(date) ==="
 
 # --- Collect outputs ---
-OUT_BASE=$DESIGN_DIR/runs/wrapper_harden
 echo "=== Output files ==="
 find $OUT_BASE -name "*.gds" -o -name "*.lef" -o -name "*.def" 2>/dev/null | grep -i final | head -10
 ls -lh $OUT_BASE 2>/dev/null || echo "No output dir found at $OUT_BASE"

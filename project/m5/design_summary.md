@@ -1,32 +1,38 @@
-# SVM Compute Core — Full-Chip Design Summary (m5/v9: Final Harden)
+# SVM Compute Core — Full-Chip Design Summary (m5/v10: Final Harden)
 
 **Project:** Multi-Class Cardiac Arrhythmia Detection — Caravel chipIgnite Tape-Out
 **Technology:** sky130A / sky130_fd_sc_hd
 **Flow:** OpenLane 2 v2.3.10 Classic
 **Architecture:** Batch v8/v9 — host pre-loads SV + input matrix; ASIC classifies autonomously
 **RTL freeze:** m5/rt1 v9 — NUM_SV=500, alpha_addr[8:0], reg_alpha_wr[24:0]
+**Harden version:** v10 — RAM_LATENCY=3 (IS61WV51216 SRAM), RUN_MCSTA=1 (SS/FF/TT corner signoff)
 
 ---
 
 ## Component Summary
 
-### svm_compute_core (job 91966, v9)
+### svm_compute_core (job 92840, v10)
 
 | Metric | Value |
 |--------|-------|
-| Clock | 40 MHz (25 ns), TT corner clean |
-| Setup WNS (TT) | +7.83 ns — 0 violations ✅ |
-| Hold WNS (TT) | +0.30 ns — 0 violations ✅ |
+| Clock | 40 MHz (25 ns) |
+| Setup WNS — TT (nom_tt_025C_1v80) | **+3.96 ns** — 0 violations ✅ |
+| Setup WNS — FF (nom_ff_n40C_1v95) | **+11.24 ns** — 0 violations ✅ |
+| Setup WNS — SS (nom_ss_100C_1v60) | **−14.56 ns** — 163 violations ⚠️ (100°C/1.60V, expected for sky130) |
+| Hold WNS — TT | **+0.23 ns** — 0 violations ✅ |
+| Hold WNS — SS / FF | +0.70 ns / +0.06 ns — 0 violations ✅ |
 | DRC | 0 violations ✅ |
-| Active power | ~66 mW |
+| LVS | PASSED ✅ |
+| Antenna | 554 net / 808 pin violations ⚠️ (advisory; DRC clean) |
+| Active power (TT) | **55.25 mW** (37.2% clock, 46.4% seq, 16.4% comb) |
 | Inference time | **9.87 ms / beat** (LAT=3, IS61WV51216 SRAM); 3.23 ms (LAT=1 cosim) |
 | Avg power (80 bpm) | **0.869 mW** (1.316% duty cycle, LAT=3) |
-| Die area | 2500 × 2500 µm (~14% utilization) |
+| Die area | 2500 × 2500 µm (15.0% utilization, 157,991 std cells) |
 | GDS | 226 MB |
 | LEF | 94 KB |
 | GL netlist | 13 MB |
 
-### user_project_wrapper (job 91967)
+### user_project_wrapper (job 92861, v10)
 
 | Metric | Value |
 |--------|-------|
@@ -178,17 +184,17 @@ Battery budget: 200 mAh @ 3.7V = 740 mWh → **740 mWh / 1.63 mW ≈ 454 hours (
 
 | File | Size | Job | Status |
 |------|------|-----|--------|
-| `gds/svm_compute_core.gds` | 226 MB | 91966 | ✅ |
-| `gds/user_project_wrapper.gds` | 230 MB | 91967 | ✅ |
-| `lef/svm_compute_core.lef` | 94 KB | 91966 | ✅ |
-| `lef/user_project_wrapper.lef` | 195 KB | 91967 | ✅ |
+| `gds/svm_compute_core.gds` | 226 MB | 92840 | ✅ |
+| `gds/user_project_wrapper.gds` | 230 MB | 92861 | pending |
+| `lef/svm_compute_core.lef` | 94 KB | 92840 | ✅ |
+| `lef/user_project_wrapper.lef` | 195 KB | 92861 | pending |
 
 **Verilog artifacts:**
 
 | File | Size | Job | Status |
 |------|------|-----|--------|
-| `verilog/gl/svm_compute_core.v` | 13 MB | 91966 | ✅ |
-| `verilog/gl/user_project_wrapper.v` | 78 KB | 91967 | ✅ |
+| `verilog/gl/svm_compute_core.v` | 13 MB | 92840 | ✅ |
+| `verilog/gl/user_project_wrapper.v` | 78 KB | 92861 | pending |
 | `verilog/rtl/svm_compute_core.sv` | — | v9 | ✅ |
 | `verilog/rtl/user_project_wrapper.sv` | — | v9 | ✅ |
 
@@ -222,7 +228,7 @@ DOI: [10.13026/C2F305](https://doi.org/10.13026/C2F305)
 
 ---
 
-*Document version: m5/v9 · 2026-05-28 — RAM_LATENCY parameter added; cosim 97.67% = sklearn; Appendix A added; Appendix B added*
+*Document version: m5/v10 · 2026-06-06 — RAM_LATENCY=3 (IS61WV51216 SRAM); RUN_MCSTA=1 (SS/FF/TT corner signoff); harden jobs 92840/92861*
 
 ---
 
