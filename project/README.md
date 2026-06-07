@@ -60,10 +60,11 @@ project/
 ### m5 — Caravel Wrapper & Submission
 [`project/m5/`](project/m5/)
 
-- `rt1/compute_core.sv` — v9 RTL with `RAM_LATENCY` parameter
+- `rt1/compute_core.sv` — v10 RTL (NUM_SV=500, RAM_LATENCY=3)
 - `rt1/top.sv` — `user_project_wrapper` with Wishbone register map
 - Wishbone cosim: 97.67% accuracy, 300 MIT-BIH samples — `sim/`
 - RAM_LATENCY unit test (LAT=3, 208 cycles/beat) — `tb/`
+- Caravel chip-level DV: PASSED (job 92867) — `sim/final_run.log`
 - Caravel submission artifacts (GDS, LEF, GL netlist) — `caravel/`
 - **Design justification report** — `report/design_justification.pdf`
 - **Figures** — `report/figures/`
@@ -87,10 +88,10 @@ Hardened GDS and all submission artifacts are in
 
 | Artifact | Job | Size |
 |----------|-----|------|
-| `svm_compute_core.gds` | 91966 | 226 MB |
-| `user_project_wrapper.gds` | 91967 | 230 MB |
-| `svm_compute_core.lef` | 91966 | 94 KB |
-| `user_project_wrapper.lef` | 91967 | 195 KB |
+| `svm_compute_core.gds` | 92840 | 232 MB |
+| `user_project_wrapper.gds` | 92861 | 234 MB |
+| `svm_compute_core.lef` | 92840 | 93 KB |
+| `user_project_wrapper.lef` | 92861 | 178 KB |
 
 ---
 
@@ -100,4 +101,4 @@ Apache 2.0 — see [LICENSE](LICENSE). Attribution required for reuse.
 
 ---
 
-*ECE410 · Portland State University · Adam Handwerger · 2026-05-27*
+*ECE410 · Portland State University · Adam Handwerger · 2026-06-06 — v10 final (jobs 92840/92861)*
