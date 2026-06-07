@@ -174,8 +174,8 @@ m4 hardened the svm_compute_core macro only. m5 adds:
 - ✅ Caravel chip-level DV — PASSED (job 92867, "SVM WB Test (RTL) Passed")
 - ✅ GDS files on GitHub — Release v3.0-hardened (core 232 MB, wrapper 234 MB)
 - ✅ Repo tagged — `v3.0-hardened` in caravel_svm_project
-- [ ] KLayout XOR — run locally on final 234 MB GDS (tapeout; not required for class)
-- [ ] Submit caravel_svm_project URL to ECE410
+- ✅ KLayout XOR — 0 violations on final 234 MB wrapper GDS
+- ✅ Submit caravel_svm_project URL to ECE410
 
 ## Tapeout Requirements (prototype)
 
