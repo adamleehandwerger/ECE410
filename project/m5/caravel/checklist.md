@@ -61,7 +61,7 @@
 - [x] Run precheck (`precheck/precheck_run.sh` on Orca) ✅ job 92871 — 0 DRC, SPDX OK, all files present
 - [x] Run Caravel chip-level DV (`dv_run.sh`) ✅ job 92867 — "Monitor: SVM WB Test (RTL) Passed"
 - [x] Push final LEF/GL to GitHub (commit 8008ee5); GDS attached as Release assets (v3.10-hardened)
-- [x] Tag repo: `v3.10-hardened` — GitHub Release with GDS/LEF/GL artifacts
+- [x] Tag repo: `v3.0-hardened` — GitHub Release with GDS/LEF/GL artifacts
 - [ ] Submit caravel_svm_project repo URL to ECE410
 
 ---
