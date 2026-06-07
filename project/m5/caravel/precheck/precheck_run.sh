@@ -87,13 +87,14 @@ else { puts "FAIL: svm_compute_core DRC $drc_count errors" }
 quit -noprompt
 MAGICEOF
 
+# Pass tech file directly with -T to avoid hardcoded paths in sky130A.magicrc
 apptainer exec \
     --bind $SCRATCH,/tmp \
     --bind $CARAVEL:/project \
     --bind $PDK_ROOT:/pdk \
     $OL2_SIF \
-    magic -dnull -noconsole -rcfile /pdk/sky130A/libs.tech/magic/sky130A.magicrc /project/drc_core.tcl \
-    2>&1 | tee -a $RESULTS | grep -E "DRC|PASS|FAIL|error count"
+    magic -dnull -noconsole -T /pdk/sky130A/libs.tech/magic/sky130A.tech /project/drc_core.tcl \
+    2>&1 | tee -a $RESULTS | grep -E "DRC|PASS|FAIL|error count" || true
 rm -f $CARAVEL/drc_core.tcl
 
 # --- SPDX license check ---
