@@ -53,12 +53,12 @@ a GitHub Release attachment.
 
 | Check | Description | Status |
 |-------|-------------|--------|
-| Manifest | `info.yaml` fields valid, all files present | ⏳ Pending |
-| Consistency | GL netlist hierarchy matches GDS | ⏳ |
-| XOR | Magic GDS == KLayout GDS (no geometry diff) | ⏳ KLayout installed locally |
-| DRC (Magic) | 0 DRC violations on full-chip GDS | ⏳ |
-| LVS (netgen) | Netlist matches layout (no shorts/opens) | ⏳ |
-| Antenna | No antenna violations | ⏳ |
+| All artifacts present | GDS/LEF/GL/RTL/info.yaml | PASSED (job 92871) | ✅ |
+| Magic DRC — core | 0 violations on svm_compute_core GDS | 0 violations (job 92871) | ✅ |
+| SPDX headers | Both RTL files | OK (job 92871) | ✅ |
+| XOR | Magic GDS == KLayout GDS | ⏳ KLayout installed locally, pending run |
+| Magic DRC — wrapper | Full Efabless precheck | ⏳ ECE410 class scope |
+| LVS (netgen) | Netlist matches layout | ⏳ ECE410 class scope |
 
 ```bash
 sbatch ~/ece410/precheck_run.sh   # see m5/caravel/precheck/precheck_run.sh

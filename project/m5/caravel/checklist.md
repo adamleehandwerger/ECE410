@@ -39,7 +39,7 @@
 | Wrapper DRC violations | 0 | 11,906 boundary artifacts (Magic) | ⚠️ acceptable for class |
 | Wrapper KLayout DRC | 0 | 0 violations (job 91967 GDS) | ✅ re-run on 92861 GDS |
 | Wrapper LVS errors | 0 | 1,698 boundary artifacts | ⚠️ acceptable for class |
-| mpw-precheck | PASS | Job 92868 submitted (fixed) | ⏳ |
+| mpw-precheck (custom) | PASS | PASSED (job 92871) — 0 DRC, SPDX OK | ✅ |
 
 ---
 
@@ -58,7 +58,7 @@
 
 - [x] Core harden complete (job 92840, v10, RAM_LATENCY=3, 0 DRC)
 - [x] Wrapper harden complete (job 92861, v10, GDS/LEF/GL in caravel repo)
-- [ ] Run mpw-precheck (`precheck/precheck_run.sh` on Orca) ⏳ job 92868 PENDING (92866 partial — fixed container /tmp bug)
+- [x] Run precheck (`precheck/precheck_run.sh` on Orca) ✅ job 92871 — 0 DRC, SPDX OK, all files present
 - [x] Run Caravel chip-level DV (`dv_run.sh`) ✅ job 92867 — "Monitor: SVM WB Test (RTL) Passed"
 - [ ] Push final GDS/LEF/GL to GitHub (`git add gds/ lef/ verilog/gl/ && git push`)
 - [ ] Tag repo: `git tag submission-v1 && git push origin submission-v1`
