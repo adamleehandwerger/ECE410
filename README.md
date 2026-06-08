@@ -6,9 +6,9 @@
 
 ---
 
-## Latest Milestone → [project/m5/](project/m5/)
+## Latest Milestone → [project/m4/](project/m4/)
 
-**m5** is the final submission milestone: Caravel wrapper hardening, full DV, and submission artifacts.
+**m4** is the final submission milestone: Caravel wrapper hardening, full DV, and submission artifacts.
 
 | Metric | Value |
 |--------|-------|
@@ -19,7 +19,7 @@
 | DRC | 0 violations (KLayout) |
 | Caravel DV | PASSED (job 92867) |
 
-See [project/m5/README.md](project/m5/README.md) for the full milestone catalog, RTL source, testbenches, P&R reports, and Caravel submission artifacts.
+See [project/m4/README.md](project/m4/README.md) for the full milestone catalog, RTL source, testbenches, P&R reports, and Caravel submission artifacts.
 
 ---
 
@@ -27,9 +27,11 @@ See [project/m5/README.md](project/m5/README.md) for the full milestone catalog,
 
 | Milestone | Directory | Description |
 |-----------|-----------|-------------|
-| m3 | [project/m3/](project/m3/) | RTL verification & synthesis — 19/19 tests PASS |
-| m4 | [project/m4/](project/m4/) | Place-and-route — core GDS, 0 DRC, +7.83 ns WNS |
-| **m5** | [**project/m5/**](project/m5/) | **Caravel wrapper, DV, submission ← latest** |
+| m0 | [project/m0/](project/m0/) | Project proposal — algorithm design, SVM baseline |
+| m1 | [project/m1/](project/m1/) | Architecture exploration — interface selection |
+| m2 | [project/m2/](project/m2/) | RTL verification & synthesis — 19/19 tests PASS |
+| m3 | [project/m3/](project/m3/) | Place-and-route — core GDS, 0 DRC, +7.83 ns WNS |
+| **m4** | [**project/m4/**](project/m4/) | **Caravel wrapper, DV, submission ← latest** |
 
 ---
 

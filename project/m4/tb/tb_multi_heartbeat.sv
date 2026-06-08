@@ -1,5 +1,5 @@
 // ============================================================================
-// tb_multi_heartbeat.sv  —  ECE410_project_tb_netlist  pre-netlist suite
+// tb_multi_heartbeat.sv  —  ECE410_project_LUT  pre-netlist suite
 // ============================================================================
 // Verifies the num_samples > 1 loop-back path:
 //   FSM must return to LOAD_FIFO after each non-final heartbeat and accept

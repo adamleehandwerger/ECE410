@@ -1,5 +1,5 @@
 // ============================================================================
-// tb_power.sv  —  ECE410_project_tb_netlist  pre-netlist suite
+// tb_power.sv  —  ECE410_project_LUT  pre-netlist suite
 // ============================================================================
 // Verifies ERR_LOW_BATTERY (0xA) and ERR_POWER_FAIL (0xB) advisory behavior.
 //

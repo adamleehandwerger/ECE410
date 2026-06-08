@@ -1,6 +1,6 @@
 """
 generate_block_diagram.py  v9
-Saves block_diagram.png to project/m5/.
+Saves block_diagram.png to project/m4/.
 
 Changes from v8:
   - NUM_SV 250→500 (100 SVs/class), SV RAM 128 KB→256 KB
@@ -84,6 +84,12 @@ tx(ax, HX+0.2+1.4, HY+5.0+0.38,
 tx(ax, HX+0.2+1.4, HY+5.0+0.75+0.28,
    "Raw ECG  (Lead II, 360 Hz)", sz=13, color="#555")
 
+bx(ax, HX+3.1, HY+5.0, HW-3.35, 0.75, C["offchip_face"], C["offchip_edge"], lw=1.2)
+tx(ax, HX+3.1+(HW-3.35)/2, HY+5.0+0.50,
+   "Off-chip SRAM", sz=10, color=C["tg"], weight="bold")
+tx(ax, HX+3.1+(HW-3.35)/2, HY+5.0+0.22,
+   "IS61WV51216  ·  512K×16", sz=9, color="#555")
+
 seg(ax, [HX+1.6, HX+1.6], [HY+5.0, HY+0.2+4.5], C["feat_edge"])
 tip(ax, HX+1.6, HY+0.2+4.5+0.05, HX+1.6, HY+0.2+4.45, C["feat_edge"])
 
@@ -118,20 +124,20 @@ tx(ax, QX+QW/2, QY+QH-0.32, "Wishbone Interface",
 tx(ax, QX+QW/2, QY+QH/2+0.05,
    "32-bit Wishbone  ·  base 0x3000_0000", sz=11, color="#444")
 tx(ax, QX+QW/2, QY+QH/2-0.38,
-   "FIFO_DATA 0x00: write 16-bit feature word per cycle", sz=11, color="#444")
+   "CONTROL 0x04 | STATUS 0x08 | NUM_SAMPLES 0x0C | NUM_SV[0-4] 0x10-0x20 | PARAM_WR 0x24 | ALPHA_WR 0x28", sz=9, color="#444")
 
 tip(ax, HX+HW/2, HY, HX+HW/2, QY+QH, C["feat_edge"])
 
 # ── CARAVEL user_project_wrapper BOUNDARY ─────────────────────────
 # Outer boundary encompassing chip + wishbone interface
-WPX, WPY, WPW, WPH = 6.4, 3.6, 11.4, 17.6
+WPX, WPY, WPW, WPH = 6.4, 5.2, 11.4, 16.0
 bx(ax, WPX, WPY, WPW, WPH, C["wrap_face"], C["wrap_edge"], lw=1.5, ls="--")
 tx(ax, WPX+WPW/2, WPY+WPH-0.26,
    "user_project_wrapper  (Caravel SoC)",
    sz=11, color="#3050a0", weight="bold")
 
 # ── CHIP BOUNDARY (svm_compute_core + glue) ───────────────────────
-CBX, CBY, CBW, CBH = 6.7, 3.8, 11.0, 17.2
+CBX, CBY, CBW, CBH = 6.7, 5.3, 11.0, 15.7
 bx(ax, CBX, CBY, CBW, CBH, C["chip_face"], C["chip_edge"], lw=2.0, ls="--")
 tx(ax, CBX+CBW/2, CBY+0.25, "svm_compute_core  +  glue logic",
    sz=10, color="#888", weight="bold")
@@ -152,29 +158,22 @@ tx(ax, PRX+PRW/2, PRY+0.30,
 PR_CY = PRY + PRH / 2
 seg(ax, [HX+HW, CBX, CBX+0.02], [PR_CY, PR_CY, PR_CY], C["config_edge"], lw=1.2)
 tip(ax, CBX, PR_CY, PRX, PR_CY, C["config_edge"], lw=1.3)
-tx(ax, (HX+HW + CBX)/2, PR_CY+0.28,
+tx(ax, (HX+HW + CBX)/2, PR_CY+0.52,
    "param_write_en / param_addr[2:0] / param_data[15:0]",
    sz=10, color=C["tp"])
 
-# ── INPUT FIFO ────────────────────────────────────────────────────
-FIX, FIY, FIW, FIH = 7.2, 16.8, 5.7, 2.2
-bx(ax, FIX, FIY, FIW, FIH, C["mem_face"], C["mem_edge"], lw=1.5)
+# ── INPUT MATRIX  (off-chip SRAM, right of SV RAM) ───────────────
+FIX, FIY, FIW, FIH = 11.8, 2.2, 5.5, 2.35
+bx(ax, FIX, FIY, FIW, FIH, C["offchip_face"], C["offchip_edge"], lw=1.5)
 tx(ax, FIX+FIW/2, FIY+FIH-0.30,
-   "Input FIFO  (ON-CHIP REGs)", sz=12, color=C["tr"], weight="bold")
+   "Input Matrix  (OFF-CHIP SRAM)", sz=12, color=C["tg"], weight="bold")
 tx(ax, FIX+FIW/2, FIY+FIH/2-0.05,
-   "512 × 16-bit  =  1 KB  (2 heartbeats deep)", sz=11, color="#333")
+   "1000 × 256 × 16-bit  =  512 KB", sz=11, color="#333")
 tx(ax, FIX+FIW/2, FIY+0.35,
-   "full / empty / count[9:0]", sz=10, color="#555")
-
-QR_Y = QY + QH / 2
-FI_Y = FIY + FIH / 2
-seg(ax, [QX+QW, 6.85, 6.85], [QR_Y, QR_Y, FI_Y], C["qspi_edge"], lw=1.4)
-tip(ax, 6.85, FI_Y, FIX, FI_Y, C["qspi_edge"], lw=1.4)
-tx(ax, 6.6, (QR_Y+FI_Y)/2, "qspi_valid\ndata / ready",
-   sz=10, color=C["qspi_edge"], ha="right")
+   "GPIO[28:10]=addr[18:0]  GPIO[29]=ren  LA[15:0]=rdata", sz=10, color="#555")
 
 # ── FEATURE BANK ──────────────────────────────────────────────────
-FBX, FBY, FBW, FBH = 7.2, 14.3, 5.7, 2.2
+FBX, FBY, FBW, FBH = 7.2, 15.8, 5.7, 2.2
 bx(ax, FBX, FBY, FBW, FBH, C["feat_face"], C["feat_edge"], lw=1.5)
 tx(ax, FBX+FBW/2, FBY+FBH-0.30,
    "Feature Bank  (ON-CHIP REGs)", sz=12, color=C["tgr"], weight="bold")
@@ -183,13 +182,9 @@ tx(ax, FBX+FBW/2, FBY+FBH/2-0.05,
 tx(ax, FBX+FBW/2, FBY+0.35,
    "Written once per heartbeat; re-read × N_SV", sz=10, color="#555")
 
-FI_CX = FIX + FIW/2
-tip(ax, FI_CX, FIY, FI_CX, FBY+FBH, C["feat_edge"], lw=1.4)
-tx(ax, FI_CX+0.12, (FIY+FBY+FBH)/2,
-   "LOAD_FEATURES", sz=11, color=C["tgr"], ha="left")
 
 # ── DISTANCE MATRIX ENGINE ────────────────────────────────────────
-DMX, DMY, DMW, DMH = 7.2, 11.8, 7.0, 2.2
+DMX, DMY, DMW, DMH = 7.2, 13.3, 7.0, 2.2
 bx(ax, DMX, DMY, DMW, DMH, C["compute_face"], C["compute_edge"],
    lw=2.0, ls="--")
 tx(ax, DMX+DMW/2, DMY+DMH-0.30,
@@ -209,7 +204,7 @@ tx(ax, FB_CX+0.12, (FBY+DMY+DMH)/2,
    "feature_in", sz=11, color=C["to"], ha="left")
 
 # ── LUT RANGE-REDUCTION HORNER ENGINE ────────────────────────────
-HEX, HEY, HEW, HEH = 7.2, 7.9, 7.0, 3.6
+HEX, HEY, HEW, HEH = 7.2, 9.4, 7.0, 3.6
 bx(ax, HEX, HEY, HEW, HEH, C["compute_face"], C["compute_edge"],
    lw=2.0, ls="--")
 tx(ax, HEX+HEW/2, HEY+HEH-0.30,
@@ -248,14 +243,14 @@ tx(ax, 17.0, (PRY+HE_CY)/2, "γ  (Q6.10)",
    sz=11, color=C["tp"], ha="left")
 
 # ── FSM CONTROLLER ────────────────────────────────────────────────
-FCX, FCY, FCW, FCH = 7.2, 5.6, 10.0, 2.0
+FCX, FCY, FCW, FCH = 7.2, 7.1, 10.0, 2.0
 bx(ax, FCX, FCY, FCW, FCH, C["compute_face"], C["compute_edge"],
    lw=2.0, ls="--")
 tx(ax, FCX+FCW/2, FCY+FCH-0.30,
    "FSM Controller", sz=12, color=C["to"], weight="bold")
 tx(ax, FCX+FCW/2, FCY+FCH-0.68,
-   "IDLE (start && vbatt_ok_s) → LOAD_FIFO → LOAD_FEATURES → "
-   "COMPUTE_DIST (258 cyc) → COMPUTE_KERNEL (18 cyc) → OUTPUT_RESULT",
+   "IDLE (start && vbatt_ok_s) → LOAD_INPUT → "
+   "COMPUTE_DIST (256+2 cyc) → COMPUTE_KERNEL (18 cyc) → WRITE_CLASS",
    sz=10, color="#333")
 tx(ax, FCX+FCW/2, FCY+0.35,
    "Counters: sample / sv / class / feat_wr / feat_rd  "
@@ -268,8 +263,8 @@ tx(ax, HE_CX+0.12, (HEY+FCY+FCH)/2,
    "kernel_out / kernel_valid (Q6.10)", sz=11, color=C["tb"], ha="left")
 
 _de_y, _de_cx = FCY+1.5, 6.56
-seg(ax, [FCX, CBX, _de_cx, _de_cx], [_de_y, _de_y, _de_y, 17.5], "#444", lw=1.3)
-tip(ax, _de_cx, 17.5, HX+HW, 17.5, "#444", lw=1.3)
+seg(ax, [FCX, CBX, _de_cx, _de_cx], [_de_y, _de_y, _de_y, 19.0], "#444", lw=1.3)
+tip(ax, _de_cx, 19.0, HX+HW, 19.0, "#444", lw=1.3)
 tx(ax, CBX-0.10, _de_y+0.25, "done / error", sz=10, color="#444", ha="right")
 
 # ── vbatt_warn / vbatt_ok input pins ─────────────────────────────
@@ -280,7 +275,7 @@ tx(ax, CBX-0.12, _vb_y+0.22,
    "vbatt_warn / vbatt_ok\n(async → 2-FF sync_ff)", sz=9, color="#2a7a3a", ha="right")
 
 # ── SV RAM ────────────────────────────────────────────────────────
-SVX, SVY, SVW, SVH = 7.2, 1.2, 4.3, 2.35
+SVX, SVY, SVW, SVH = 7.2, 2.2, 4.3, 2.35
 bx(ax, SVX, SVY, SVW, SVH, C["offchip_face"], C["offchip_edge"], lw=1.5)
 tx(ax, SVX+SVW/2, SVY+SVH-0.30,
    "SV RAM  (OFF-CHIP, host flash)", sz=12, color=C["tg"], weight="bold")
@@ -290,7 +285,7 @@ tx(ax, SVX+SVW/2, SVY+SVH/2-0.05,
    sz=10, color="#333")
 
 # ── WORKSPACE RAM  (on-chip, routing-congestion fix) ──────────────
-WRX, WRY, WRW, WRH = 8.8, 4.05, 5.0, 1.35
+WRX, WRY, WRW, WRH = 8.8, 5.55, 5.0, 1.35
 bx(ax, WRX, WRY, WRW, WRH, C["feat_face"], C["feat_edge"], lw=1.5)
 tx(ax, WRX+WRW/2, WRY+WRH-0.28,
    "Workspace RAM  (ON-CHIP, regs)", sz=11, color=C["tgr"], weight="bold")
@@ -303,6 +298,11 @@ SV_ARR_X = SVX + 0.5
 tip(ax, SV_ARR_X, FCY, SV_ARR_X, SVY+SVH, C["offchip_edge"], lw=1.3)
 tx(ax, SV_ARR_X+0.12, (FCY + SVY+SVH)/2,
    "sv_ram_addr[15:0]\nsv_ram_ren", sz=10, color=C["tg"], ha="left")
+
+IM_ARR_X = WRX + WRW + 0.4   # right of Workspace RAM (WRX+WRW=13.8)
+tip(ax, IM_ARR_X, FCY, IM_ARR_X, FIY+FIH, C["offchip_edge"], lw=1.3)
+tx(ax, IM_ARR_X+0.12, (FCY + FIY+FIH)/2,
+   "LOAD_FEATURES\nram_addr[18:0]", sz=10, color=C["offchip_edge"], ha="left")
 
 WR_CX = WRX + WRW/2
 tip(ax, WR_CX, FCY, WR_CX, WRY+WRH, C["feat_edge"], lw=1.3, shrink=0)
@@ -358,7 +358,7 @@ legend_items = [
     (C["host_face"],    C["host_edge"],    "-",  "Host MCU"),
     (C["feat_face"],    C["feat_edge"],    "-",  "Feature extract/bank"),
     (C["qspi_face"],    C["qspi_edge"],    "-",  "Wishbone interface"),
-    (C["mem_face"],     C["mem_edge"],     "-",  "On-chip FIFO"),
+    (C["mem_face"],     C["mem_edge"],     "-",  "Workspace Regs"),
     (C["compute_face"], C["compute_edge"], "--", "Compute engine (RTL)"),
     (C["config_face"],  C["config_edge"],  "-",  "Config registers"),
     (C["offchip_face"], C["offchip_edge"], "-",  "Off-chip RAM"),
@@ -389,7 +389,7 @@ all_codes = [
     ("0x2", "ERR_SV_OVERFLOW",      "Σsv_count > NUM_SV",     "sticky", True),
     ("0x3", "ERR_ILLEGAL_STATE",    "FSM default branch",     "sticky", False),
     ("0x4", "ERR_GAMMA_SAT",        "gamma_int > 8192",       "sticky", True),
-    ("0x5", "ERR_FIFO_OVERFLOW",    "QSPI word dropped",      "sticky", False),
+    ("0x5", "reserved",              "(was ERR_FIFO_OVERFLOW)", "sticky", False),
     ("0x6", "ERR_GAMMA_ZERO",       "gamma_int = 0",          "sticky", True),
     ("0x7", "ERR_NUM_SAMPLES_ZERO", "num_samples = 0",        "sticky", False),
     None,

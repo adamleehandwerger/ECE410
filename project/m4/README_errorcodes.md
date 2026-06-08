@@ -1,7 +1,7 @@
 # SVM Compute Core — Error Code Reference (v8 Batch Architecture)
 
 **RTL:** `user_project_wrapper.sv` → `svm_compute_core.sv`
-**Milestone:** m4/m5 (batch architecture, Caravel chipIgnite, sky130A)
+**Milestone:** m3/m4 (batch architecture, Caravel chipIgnite, sky130A)
 
 Error codes are exposed exclusively via Wishbone STATUS register and GPIO pins —
 no raw RTL ports are visible outside `user_project_wrapper`.

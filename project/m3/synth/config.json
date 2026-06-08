@@ -1,29 +1,32 @@
 {
     "DESIGN_NAME": "svm_compute_core",
-    "VERILOG_FILES": ["src/svm_compute_core.sv"],
+    "VERILOG_FILES": [
+        "dir::../../verilog/rtl/svm_compute_core.sv"
+    ],
     "CLOCK_PORT": "clk",
-    "CLOCK_PERIOD": 10.0,
-
+    "CLOCK_NET": "clk",
+    "CLOCK_PERIOD": 25,
     "PDK": "sky130A",
     "STD_CELL_LIBRARY": "sky130_fd_sc_hd",
 
-    "SYNTH_DEFINES": ["SYNTHESIS"],
+    "FP_SIZING": "absolute",
+    "DIE_AREA": "0 0 2500 2500",
+    "PL_TARGET_DENSITY_PCT": 45,
 
-    "FP_CORE_UTIL": 45,
-    "FP_ASPECT_RATIO": 1,
-    "FP_PDN_VPITCH": 153.6,
-    "FP_PDN_HPITCH": 153.6,
-
-    "PL_TARGET_DENSITY": 0.5,
-
-    "DIODE_INSERTION_STRATEGY": 3,
-
-    "RUN_KLAYOUT_DRC": false,
-
-    "MAX_FANOUT_CONSTRAINT": 10,
-    "SYNTH_SIZING": 1,
     "SYNTH_STRATEGY": "AREA 0",
+    "MAX_FANOUT_CONSTRAINT": 8,
+    "MAX_TRANSITION_CONSTRAINT": 1.5,
 
-    "QUIT_ON_TIMING_VIOLATIONS": false,
-    "QUIT_ON_HOLD_VIOLATIONS": false
+    "ERROR_ON_SYNTH_CHECKS": false,
+    "RUN_KLAYOUT_DRC": false,
+    "RUN_MCSTA": 0,
+
+    "RT_MAX_LAYER": "met4",
+
+    "PNR_SDC_FILE": "dir::svm_compute_core.sdc",
+    "SIGNOFF_SDC_FILE": "dir::svm_compute_core.sdc",
+
+    "EXTRA_VERILOG_MODELS": [
+        "dir::../../verilog/rtl/sim_sram_models.sv"
+    ]
 }

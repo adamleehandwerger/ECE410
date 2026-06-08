@@ -1,5 +1,5 @@
 // ============================================================================
-// tb_gamma_zero.sv  —  ECE410_project_tb_netlist  pre-netlist suite
+// tb_gamma_zero.sv  —  ECE410_project_LUT  pre-netlist suite
 // ============================================================================
 // Verifies ERR_GAMMA_ZERO (code 0x6) fires when gamma_int = 0.
 //

@@ -1,5 +1,5 @@
 // ============================================================================
-// tb_error_codes.sv  —  ECE410_project_tb_netlist  pre-netlist suite
+// tb_error_codes.sv  —  ECE410_project_LUT  pre-netlist suite
 // ============================================================================
 // Tests all five diagnostic error codes, sticky-latch behavior, and
 // reset-clears guarantee.

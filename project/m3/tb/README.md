@@ -1,8 +1,16 @@
-# ECE410 Project — LUT Kernel SVM Compute Core (Pre-Netlist Verified)
+# ECE410 Project — LUT Kernel SVM Compute Core (m4: 128-Feature Hardened)
 
 5-class cardiac arrhythmia detection (Normal / PVC / AFib / VT / SVT) using a
 fixed-point RBF-SVM accelerator with a range-reduction LUT kernel (γ = 0.25,
-256-dim multi-scale features, Q6.10 arithmetic).
+128-dim single-beat features, Q6.10 arithmetic).
+
+> **m4 parameters:** `FEATURE_DIM=128  NUM_SV=256  FIFO_DEPTH=4096  ADDR_WIDTH=12`
+> Instantiated at synthesis via `chparam -set FEATURE_DIM 128 -set NUM_SV 256`.
+> Structural testbenches (error codes, backpressure, distance, etc.) are
+> parameter-agnostic and pass with any `FEATURE_DIM`. The full-pipeline
+> classifier test (`tb_svm_classifier.sv`) uses hex data generated for the
+> 256-dim model; regenerate `tb_svm_params.svh` with `gen_tb_data.py
+> --feature_dim 128 --num_sv 256` for an exact m4 reference run.
 
 ---
 
@@ -405,8 +413,8 @@ make
 | Model | sklearn | HW Q6.10 | Notes |
 |-------|---------|----------|-------|
 | γ=0.01 (baseline) | 96.33% | 96.33% | Centred RR; single-beat only |
-| γ=0.25, LUT | 98.00% | 98.00% | Centred RR; multi-scale |
-| γ=0.25, LUT, causal RR | 98.67% | 98.33% | **Current target** |
+| γ=0.25, LUT, 256-dim | 98.67% | 98.33% | Multi-scale (m3 target) |
+| γ=0.25, LUT, **128-dim** | **96.39%** | **96.39%** | Single-beat only; **m3 target** (0.00% HW gap) |
 | Kernel max \|err\| | — | 0.00055 | vs. float64 over d²∈[0, 60] |
 
 ---
@@ -418,7 +426,9 @@ make
 | Clock | 50 MHz (20 ns) | `always #10 clk = ~clk` |
 | Data format | Q6.10 | Scale = 1024 |
 | γ | 0.25 → `0x0100` | Programmed via `param_write_en` |
-| Feature dim | 256 | 128 beat + 64 mean + 64 RR |
+| Feature dim | **128** (m3) | 128 single-beat samples (m2 used 256-dim multi-scale) |
+| NUM_SV | **256** (m3) | DUT parameter; m2 used 250 |
+| FIFO_DEPTH | **4096** (m3) | m2 used 8192 |
 | Test beats | 5 | One per class |
 | Pass threshold | 4/5 (80%) | AND `error` flag never set |
 | Kernel tolerance | ±2 LSB | For MAE reporting only |

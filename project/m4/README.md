@@ -1,10 +1,10 @@
-# ECE410 — Milestone 4: Place-and-Route
+# ECE410 — Milestone 4: Caravel Wrapper Hardening & Submission
 
 **Design:** 5-class Cardiac Arrhythmia Classifier (RBF-SVM accelerator)  
 **Technology:** sky130A (SkyWater 130 nm open-PDK), sky130_fd_sc_hd  
 **Flow:** OpenLane 2 v2.3.10 Classic (Yosys + OpenROAD + TritonRoute)  
-**Architecture:** Batch v9 — host pre-loads SV + input matrix; ASIC classifies autonomously  
-**Status:** `svm_compute_core` hardened (job 91966, 0 DRC, +7.83 ns WNS). `user_project_wrapper` hardening and Caravel submission → m5.
+**Architecture:** Batch v10 — host pre-loads SV + input matrix; ASIC classifies autonomously  
+**Status:** Core + wrapper hardened ✅ (jobs 92840/92861, v10, 0 DRC core, KLayout DRC 0 wrapper)
 
 ---
 
@@ -13,63 +13,52 @@
 ```
 m4/
 ├── README.md                    ← this file — full m4 catalog
-├── README_caravel.md            ← Caravel chipIgnite overview (reference; submission in m5)
 ├── README_errorcodes.md         ← 13 error codes, sticky latch, reset-clear reference
 ├── README_mcu.md                ← MCU integration guide (batch pre-load protocol)
-├── design_summary.md            ← P&R results: area, power, timing, architecture
-├── block_diagram.png            ← hardware block diagram (v9, batch architecture)
+├── block_diagram.png            ← hardware block diagram (v10, batch architecture)
 ├── generate_block_diagram.py    ← renders block_diagram.png (matplotlib)
-├── confusion_comparison_m4.py   ← Numba Q6.10 vs ASIC confusion matrix script
-├── confusion_comparison_m4.png  ← sklearn vs ASIC confusion matrix plot
-├── throughput_comparison.txt    ← inference time and power comparison summary (ASIC vs CPU)
+├── design_summary.md            ← full design: area, power, timing, RAM_LATENCY,
+│                                    Appendix A (model reload), Appendix B (hospital design),
+│                                    Appendix C (MCU task sequence)
+├── design_summary.pdf           ← compiled PDF of design_summary.md
+├── horner_lut_math.tex          ← LaTeX: fixed-point RBF kernel derivation
+│                                    (range-reduction LUT + Horner, γ=0.25, Q6.10)
+├── horner_lut_math.pdf          ← compiled PDF of horner_lut_math.tex
 │
-├── rt1/                         ← RTL source (v9, final)
-│   ├── top.sv                   ← top-level Caravel wrapper (user_project_wrapper)
-│   ├── compute_core.sv          ← SVM core: NUM_SV=500, alpha_addr[8:0], batch FSM
+├── rt1/                         ← RTL source (v10, final)
+│   ├── compute_core.sv          ← SVM core: NUM_SV=500, RAM_LATENCY param, batch FSM
+│   ├── top.sv                   ← Caravel wrapper: Wishbone decode, clock gate,
+│   │                                reg_alpha_wr[24:0], GPIO/LA pin assignments
 │   └── interface.sv             ← SystemVerilog interface definitions (svm_data_if,
 │                                    svm_ctrl_if) used by the compute core
 │
-├── tb/                          ← Unit testbenches (13 tests, all PASS)
+├── tb/                          ← Testbenches and verification
 │   ├── README.md                ← testbench overview and how to run
-│   ├── Makefile                 ← iverilog/cocotb build rules; `make all` runs all tests
-│   ├── dv_Makefile              ← Caravel DV framework Makefile (Wishbone C test)
-│   ├── tb_top.sv                ← full-pipeline 5-heartbeat classification testbench
-│   ├── tb_svm_params.svh        ← auto-generated SV include: dual coefficients,
-│   │                                intercepts, SV counts for all 5 classes
-│   ├── tb_error_codes.sv        ← unit test: all 13 error codes, sticky latch, reset-clear
-│   ├── tb_backpressure.sv       ← unit test: kernel_valid hold; late kernel_ready release
-│   ├── tb_consecutive.sv        ← unit test: back-to-back heartbeat processing
-│   ├── tb_dist_boundary.sv      ← unit test: accumulator saturation boundary
-│   ├── tb_dist_zero.sv          ← unit test: D=0 → kernel_out=1024 (exp(0)=1 in Q6.10)
-│   ├── tb_gamma_zero.sv         ← unit test: γ=0 edge case
-│   ├── tb_interface.sv          ← unit test: port signal protocol compliance
-│   ├── tb_min_sv.sv             ← unit test: minimum SV count (1 SV per class)
-│   ├── tb_multi_heartbeat.sv    ← unit test: num_samples=3 loop-back
-│   ├── tb_param_write.sv        ← unit test: runtime parameter write via param_write_en
-│   ├── tb_power.sv              ← unit test: clock-gate idle power behavior
-│   ├── tb_warmup.sv             ← unit test: warmup-state exit and start-pulse timing
-│   ├── tb_results.md            ← recorded pass/fail results for all testbenches
-│   ├── test_svm_compute_core.py ← cocotb Python testbench (9 tests via simulation API)
-│   ├── svm_wb_test.c            ← Wishbone C test (Caravel DV framework)
-│   ├── svm_wb_test_tb.v         ← Verilog wrapper for Caravel DV test
-│   ├── sv_ram.hex               ← 256-SV × 256-feature support vector memory image
-│   ├── test_features.hex        ← 5-heartbeat feature vectors (one per class)
-│   ├── test_labels.hex          ← ground-truth class labels for test_features.hex
-│   ├── expected_kernels.hex     ← pre-computed expected RBF kernel outputs
-│   └── expected_preds.hex       ← pre-computed expected class predictions
+│   ├── Makefile                 ← `make sim` runs Wishbone cocotb cosim
+│   ├── tb_wb_cosim.py           ← cocotb testbench: full 300-sample Wishbone cosim
+│   ├── svm_ram_latency_tb.sv    ← unit test: RAM_LATENCY parameter (LAT=3 → PASS,
+│   │                                208 cycles/beat; FEAT=4, NSV=5, iverilog)
+│   ├── sky130_stubs.v           ← sky130 cell stubs for Icarus simulation
+│   ├── confusion_comparison_m4.py ← generates confusion matrix comparison plot
+│   ├── testbench_summary.md     ← summary of all m4 testbenches and pass/fail results
+│   └── dv_run.sh                ← Caravel DV RTL simulation run script
 │
-├── sim/                         ← Simulation outputs (Wishbone cocotb cosim)
-│   ├── cosim_run.log            ← full cosim log: 300 samples, 97.67% accuracy
-│   ├── cosim_waveform.png       ← VCD-derived waveform screenshot (classification run)
-│   └── asic_preds.csv           ← 300 ASIC predictions (last cosim run)
+├── sim/                         ← Simulation outputs
+│   ├── final_run.log            ← Wishbone cosim log (300 samples, 97.67% accuracy)
+│   ├── final_waveform.png       ← timing diagram: wb_stb, ram_ren, sample_rdy,
+│   │                                STATUS.done, class bus — 5 representative beats
+│   ├── confusion_comparison_m4.png ← sklearn vs ASIC confusion matrix comparison
+│   ├── asic_preds.csv           ← 300 ASIC predictions (last cosim run)
+│   └── throughput_comparison.txt ← inference time and power summary
 │
-├── synth/                       ← Place-and-route summary (OL2 job 91966, sky130A)
-│   ├── config.json              ← OpenLane 2 config: CLOCK_PERIOD=25 ns, sky130_fd_sc_hd
-│   ├── openlane_run.log         ← full P&R run log (synthesis → DRC, SLURM job 91966)
-│   ├── timing_report.txt        ← STA: setup WNS +7.83 ns, hold WNS +0.30 ns, 0 violations
-│   ├── area_report.txt          ← 2500×2500 µm, ~146K cells, ~14% utilization
-│   ├── power_report.txt         ← 66 mW active; internal/switching/leakage breakdown
-│   └── critical_path.md         ← annotated critical path through distance accumulator
+├── synth/                       ← Place-and-route summary (OL2 jobs 92840 / 92861)
+│   ├── config.json              ← OpenLane 2 wrapper config (25 ns clock, Caravel die)
+│   ├── openlane_run.log         ← P&R run log summary (SLURM job 92861)
+│   ├── timing_report.txt        ← STA: TT WNS +3.96 ns; FF +11.24 ns; SS -14.56 ns (expected)
+│   ├── area_report.txt          ← core 2500×2500 µm, 15.0% util; wrapper 2920×3520 µm
+│   ├── power_report.txt         ← 55.25 mW active, 0.727 mW avg @ 80 bpm (LAT=3)
+│   ├── drc_report.txt           ← core 0 DRC/LVS; antenna 554 nets (advisory); wrapper boundary artifacts
+│   └── critical_path.md         ← critical path through dist_acc; wrapper paths trivial
 │
 ├── bench/                       ← Benchmark: ASIC vs optimized Python
 │   ├── benchmark.md             ← accuracy, throughput, power, energy efficiency tables
@@ -77,25 +66,38 @@ m4/
 │   ├── roofline_final.png       ← dual-panel roofline + power-efficiency chart
 │   └── roofline_final.py        ← script that generates roofline_final.png (matplotlib)
 │
-└── pnr/                         ← Full P&R artifacts (scripts, GDS, SDC)
-    ├── config.json              ← OL2 wrapper config
-    ├── core_config.json         ← OL2 core config (svm_compute_core)
-    ├── core_harden.sh           ← SLURM: hardens svm_compute_core on Orca
-    ├── wrapper_harden.sh        ← SLURM: hardens user_project_wrapper (→ m5)
-    ├── svm_compute_core.sdc     ← timing constraints (core)
-    ├── base_user_project_wrapper.sdc ← timing constraints (wrapper)
-    ├── macro.cfg                ← macro placement config
+├── caravel/                     ← Caravel chipIgnite submission artifacts
+│   ├── README_caravel.md        ← Caravel submission overview and repo layout
+│   ├── README_submission.md     ← submission requirements and status checklist
+│   ├── checklist.md             ← item-by-item submission checklist (all tracked)
+│   └── precheck/                ← Efabless mpw-precheck
+│       ├── precheck_run.sh      ← SLURM script to run precheck on Orca
+│       └── precheck_results.txt ← results (pending wrapper GDS precheck run)
+│
+├── report/                      ← Final project report
+│   ├── final_report.md          ← 10-section design justification report (markdown)
+│   ├── final_report.pdf         ← compiled PDF (pandoc + xelatex)
+│   ├── design_justification.pdf ← copy of final_report.pdf for Caravel submission
+│   └── figures/                 ← embedded report figures
+│       ├── fig_A1_block_diagram.png  ← hardware block diagram (referenced §4.1)
+│       ├── fig_A2_confusion_matrix.png ← confusion matrix (referenced §8.1)
+│       └── fig_A3_roofline.png       ← roofline chart (referenced §5.2, §8.2)
+│
+└── pnr/                         ← Full P&R artifacts (scripts, configs, GDS, logs)
     ├── wrapper_config.json      ← OL2 config for user_project_wrapper
-    ├── timing_report.txt        ← STA setup report (job 91966)
-    ├── hold_timing_report.txt   ← STA hold report (job 91966)
-    ├── power_report.txt         ← power report (job 91966)
-    ├── area_report.txt          ← area/utilization report (job 91966)
-    ├── drc_report.txt           ← DRC: 0 violations
-    ├── critical_path.md         ← critical path analysis
-    ├── dv_run.sh                ← Caravel DV run script
-    ├── dv_setup.sh              ← Caravel DV environment setup
-    └── gds/
-        └── svm_compute_core.gds ← 226 MB hardened GDS (job 91966)
+    ├── wrapper_harden.sh        ← SLURM script: hardens user_project_wrapper on Orca
+    ├── base_user_project_wrapper.sdc ← timing constraints (wrapper)
+    ├── macro.cfg                ← u_svm macro placement (253, 554) N
+    ├── timing_report.txt        ← STA report (jobs 92840 / 92861)
+    ├── area_report.txt          ← area/utilization (jobs 92840 / 92861)
+    ├── power_report.txt         ← power report (jobs 92840 / 92861)
+    ├── drc_report.txt           ← DRC/LVS (core 0 viol; wrapper boundary artifacts)
+    ├── gds/                     ← GDS placeholder (230 MB — lives in caravel repo)
+    └── logs/                    ← SLURM job logs
+        ├── core_harden_92840.out    ← core harden SLURM output (v10)
+        ├── wrapper_harden_92861.out ← wrapper harden SLURM output (v10)
+        ├── mpw_precheck_91986.err   ← mpw-precheck stderr
+        └── mpw_precheck_91986.out   ← mpw-precheck stdout
 ```
 
 ---
@@ -109,39 +111,112 @@ m4/
 | Fixed-point | Q6.10, 16-bit signed |
 | Gamma / C | 0.25 / 1.0 |
 | Clock | 40 MHz (25 ns) |
-| Setup WNS | +7.83 ns (TT, 0 violations) |
-| Hold WNS | +0.30 ns (TT, 0 violations) |
-| Active power | 66 mW → 0.284 mW avg at 80 bpm (0.431% duty cycle) |
-| Die | 2500 × 2500 µm, ~14% utilization, ~146K cells |
-| DRC | 0 violations |
+| RAM_LATENCY | 1 (cosim default) / 3 (IS61WV51216 async SRAM) |
+| Core setup WNS | +3.96 ns TT / +11.24 ns FF — 0 violations; −14.56 ns SS (expected) |
+| Core hold WNS | +0.23 ns TT — 0 violations all corners |
+| Core DRC | 0 violations ✅ |
+| Wrapper Magic DRC | 11,906 boundary artifacts (acceptable) |
+| Wrapper KLayout DRC | 0 violations ✅ |
+| Active power | 55.25 mW → 0.727 mW avg at 80 bpm (LAT=3) |
+| Core die | 2500 × 2500 µm, 15.0% utilization, 157,991 cells |
+| Wrapper die | 2920 × 3520 µm (Caravel fixed), 234 MB GDS, 707 std cells |
 | ASIC accuracy | 97.67% (293/300) — exact match with sklearn, zero gap |
 
 ## Quick Start
 
 ```bash
-# Run all iverilog unit tests
-cd tb && make all
+# Full 300-sample Wishbone cosim (~96 min)
+cd tb && PYTHONUNBUFFERED=1 make sim
 
-# Run cocotb co-simulation (300 samples, ~96 min)
-cd tb && make cocotb
+# Quick subset (25 samples)
+cd tb && COSIM_N_EVAL=25 COSIM_GAMMA=0.25 PYTHONUNBUFFERED=1 make sim
+
+# RAM_LATENCY unit test (iverilog standalone, <1 s)
+cd tb
+iverilog -g2012 -DSIMULATION -o /tmp/svm_lat_tb.out \
+    ../rt1/compute_core.sv svm_ram_latency_tb.sv
+/tmp/svm_lat_tb.out
 
 # Regenerate block diagram
 python3 generate_block_diagram.py
 
-# Regenerate roofline plot
-cd bench && python3 roofline_final.py   # or rerun benchmark script
+# Regenerate confusion matrix
+cd tb && python3 confusion_comparison_m4.py
 ```
+
+Requires: `pip install cocotb scikit-learn wfdb matplotlib numpy`  
+PhysioNet cache: `~/.physionet_cache/`  
+NumPy cache: `/tmp/cosim_cache_ecg_n300_d256.npz`
+
+## Caravel Repo (`caravel_svm_project`)
+
+Physical artifacts (GDS, LEF, GL netlist) live in the separate Caravel repo at  
+`https://github.com/adamleehandwerger/caravel_svm_project`.  
+See `caravel/README_caravel.md` for the full repo layout.
 
 ## Differences from m3
 
-m3 targeted synthesis only (no physical layout). m4 adds:
-- Full place-and-route to GDS (OL2 job 91966, sky130A)
-- Batch architecture v9 — off-chip SRAM pre-load via 19-bit GPIO bus
-- NUM_SV increased to 500 (100/class), alpha_addr widened to 9-bit
-- Caravel Wishbone register map (CONTROL, STATUS, NUM_SAMPLES, ALPHA_WR)
-- Benchmark suite (bench/) comparing ASIC vs sklearn and Numba on Orca
+m3 hardened the svm_compute_core macro only. m4 adds:
+- user_project_wrapper hardening (job 92861, v10) — Caravel fixed die, macro placement
+- RAM_LATENCY=3 parameter — configurable wait-states for IS61WV51216 async SRAM
+- RUN_MCSTA=1 — multi-corner STA (SS/FF/TT) via post-PNR OpenSTA
+- svm_ram_latency_tb.sv — unit test: LAT=3 → PASS, 208 cycles/beat
+- compute_core_math.tex/pdf — LaTeX mathematical description of dist + horner subfunctions
+- design_summary.md/pdf — full design summary with Appendices A/B/C (model reload, hospital design, MCU sequence)
+- design_rationale.md — architectural decision record (8 decisions with alternatives)
+- testbench_analysis.md/pdf — 5-level testbench analysis (25 tests)
+- horner_errorplot.png — degree-6 Taylor error vs Q6.10 LSB threshold
+- Caravel submission artifacts (caravel/ folder)
 
-## Next Step → m5
+## Next Steps
 
-Wrapper hardening (`user_project_wrapper`) and Caravel submission in `project/m5/`.  
-See `m5/README.md` for wrapper harden results, RAM_LATENCY feature, and precheck.
+Required before submitting to an Efabless Caravel shuttle or equivalent:
+
+- **IR drop analysis (`VSRC_LOC_FILES`)** — `OpenROAD.IRDropReport` is currently
+  skipped (PSM-0069, "Check connectivity failed on vccd1"). PSM requires
+  `VSRC_LOC_FILES` specifying the vccd1/vssd1 supply entry points on the Caravel
+  die boundary so it can trace current paths from the package into the power ring.
+  The Caravel reference repository provides example VSRC files for the user project
+  area. Re-enable `OpenROAD.IRDropReport` with those files and verify acceptable
+  voltage droop (target: < 5% of VDD under worst-case switching activity).
+
+- **Antenna violations** — svm_compute_core has 554 net / 808 pin antenna
+  violations (advisory for class, blocking for tapeout). Re-harden with
+  `GRT_REPAIR_ANTENNAS=1` and `RUN_FILL_INSERTION=1` to insert diodes and
+  tie-offs. Verify Magic antenna DRC = 0 before submitting.
+
+- **Wrapper DRC/LVS boundary artifacts** — 11,923 Magic DRC violations and 1,683
+  LVS errors on the wrapper are reported as macro-boundary artifacts from the
+  svm_compute_core power ring meeting the Caravel template geometry. Confirm with
+  Efabless support that these are expected for a hardened macro instantiated inside
+  the fixed DEF template, or resolve by adjusting the macro placement and power ring
+  overlap rules in `config.json`.
+
+- **Power BTERM handling** — vccd2/vdda1/vdda2/vssa1/vssa2/vssd2 BTERMs are
+  deleted from the routing database at DetailedRouting time (DRT-0302 workaround).
+  For tapeout, verify with Efabless that unconnected Caravel power domains are
+  properly handled in the PDN and that deleting their routing BTERMs does not affect
+  the Caravel SoC power delivery network for adjacent user projects.
+
+- **KLayout DRC + XOR** — both complete locally (2026-06-07). KLayout DRC: 0 violations.
+  KLayout XOR: 0 physical differences (33 `areaid.sc` layer 81/14 annotation artifacts —
+  expected Magic vs KLayout stream-out discrepancy, not a physical layer).
+
+- **Wrapper hold violations (TT corner)** — `Checker.HoldViolations` reports hold
+  violations at nom_tt_025C_1v80 in the wrapper (checker skipped to allow flow
+  completion). svm_compute_core hold is clean (+0.23 ns). Wrapper violations likely
+  originate in the Wishbone controller registers synthesized without clock tree
+  (`RUN_CTS=0`). For tapeout: enable `RUN_CTS=1`, re-run wrapper harden, and verify
+  hold WNS ≥ 0 in all corners. Hold failures cause functional errors on silicon
+  (data captured too early on the wrong clock edge).
+
+- **SS corner timing** — WNS = −14.56 ns at nom_ss_100C_1v60 (163 violations).
+  This corner is 100 °C / 1.60 V; if the prototype will only operate at room
+  temperature with nominal supply this is not a risk. Document the operating
+  envelope explicitly for any silicon bringup plan.
+
+## Beyond Tapeout
+
+MCU design — nRF52840 recommended for ECG sampling, feature extraction, and
+Wishbone/GPIO control of the ASIC. See `design_summary.md` Appendix C for
+the full MCU task sequence.

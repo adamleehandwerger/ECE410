@@ -1,5 +1,5 @@
 """
-roofline_final.py — ECE410 SVM ASIC
+roofline_final.py — ECE410 SVM ASIC (m4)
 Dual-panel figure:
   Left:  Traditional roofline (Orca Xeon DRAM/L3/compute ceilings)
   Right: Throughput vs active power with iso-efficiency lines
@@ -28,8 +28,8 @@ WEARABLE_INF_S = 1.34  # inf/s at 80 bpm
 
 # ── Figure ──────────────────────────────────────────────────────────────────
 fig, axes = plt.subplots(1, 2, figsize=(13, 5.5))
-fig.suptitle("ECE410 SVM ASIC — Roofline & Power Efficiency\n"
-             "MIT-BIH 5-class Arrhythmia (256-dim, 500 SVs, Q6.10)",
+fig.suptitle("ECE410 SVM ASIC — Roofline & Power Efficiency (m4)\n"
+             "MIT-BIH 5-class Arrhythmia (256-dim, 500 SVs, Q6.10, RAM_LATENCY)",
              fontsize=12, fontweight="bold", y=1.01)
 
 # ╔══════════════════════════════════╗

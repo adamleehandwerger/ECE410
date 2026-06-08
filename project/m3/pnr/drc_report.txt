@@ -1,0 +1,26 @@
+DRC Report — svm_compute_core (OpenLane 2 Classic, job 91966)
+=============================================================
+
+Design Name  : svm_compute_core
+Tool         : OpenLane 2 v2.3.10 (OpenROAD / TritonRoute integrated)
+Run          : job 91966, tag core_harden, sky130A / sky130_fd_sc_hd
+NUM_SV       : 500 (100 per class)
+Routing layers: li1 – met4 (signal + clock), RT_MAX_LAYER=met4
+
+Result
+------
+  DRC violations : 0  ✅
+  Power grid violations (VPWR) : 0
+  Power grid violations (VGND) : 0
+  Disconnected pins : 0
+  Floating nets    : 0
+
+Artifacts
+---------
+  GDS : 226 MB (Magic stream-out)
+  LEF :  94 KB
+
+KLayout DRC
+-----------
+  RUN_KLAYOUT_DRC : false  (disabled; ruby not available on Orca compute nodes)
+  RUN_KLAYOUT_XOR : false  (disabled; same reason)

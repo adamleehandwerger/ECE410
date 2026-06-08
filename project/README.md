@@ -31,30 +31,30 @@ Arrhythmia Database.
 
 ```
 project/
-├── m1/   ← Project proposal: algorithm design, scope, SVM baseline
-├── m2/   ← Architecture exploration and interface selection
-├── m3/   ← RTL verification & synthesis (19/19 tests PASS)
-├── m4/   ← Place-and-route: core GDS, 0 DRC, +7.83 ns WNS
-└── m5/   ← Wrapper hardening, RAM_LATENCY, Caravel submission
+├── m0/   ← Project proposal: algorithm design, scope, SVM baseline
+├── m1/   ← Architecture exploration and interface selection
+├── m2/   ← RTL verification & synthesis (19/19 tests PASS)
+├── m3/   ← Place-and-route: core GDS, 0 DRC, +7.83 ns WNS
+└── m4/   ← Wrapper hardening, RAM_LATENCY, Caravel submission
 ```
 
 ---
 
 ## Milestone Deliverables
 
-### m1 — Project Proposal
-[`project/m1/`](project/m1/)
+### m0 — Project Proposal
+[`project/m0/`](project/m0/)
 
 - Algorithm design: `Batch SVM Algorithm.pdf`
 - System diagram, interface and storage trade studies
 
-### m2 — Architecture Exploration
-[`project/m2/`](project/m2/)
+### m1 — Architecture Exploration
+[`project/m1/`](project/m1/)
 
 - Interface selection, data storage and transmission analysis
 
-### m3 — RTL Verification & Synthesis
-[`project/m3/`](project/m3/)
+### m2 — RTL Verification & Synthesis
+[`project/m2/`](project/m2/)
 
 - Scope assessment: `scope_assessment.md`
 - RTL source: `rt1/compute_core.sv`, `rt1/top.sv`, `rt1/interface.sv`
@@ -62,17 +62,17 @@ project/
 - OpenLane synthesis: area, timing, power reports in `synth/`
 - Confusion matrix and benchmark in `sim/` and `bench/`
 
-### m4 — Place and Route
-[`project/m4/`](project/m4/)
+### m3 — Place and Route
+[`project/m3/`](project/m3/)
 
-- Post-route GDS: `svm_compute_core.gds` (226 MB, job 91966)
-- Setup WNS: +7.83 ns @ TT 25°C 1.8V — 0 violations
-- Active power: 66 mW (post-route STA)
+- Post-route GDS: `svm_compute_core.gds` (232 MB, job 92840)
+- Setup WNS: +3.96 ns @ TT 25°C 1.8V — 0 violations
+- Active power: 55.25 mW (post-route STA)
 - Full unit + integration testbench suite: `tb/` (22 tests, 22 PASS)
 - Roofline analysis: `bench/roofline_final.png`
 
-### m5 — Caravel Wrapper & Submission
-[`project/m5/`](project/m5/)
+### m4 — Caravel Wrapper & Submission
+[`project/m4/`](project/m4/)
 
 - `rt1/compute_core.sv` — v10 RTL (NUM_SV=500, RAM_LATENCY=3)
 - `rt1/top.sv` — `user_project_wrapper` with Wishbone register map

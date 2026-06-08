@@ -1,15 +1,8 @@
-# Testbench Results — ECE410 SVM Compute Core (LUT Kernel, m4)
+# Testbench Results — ECE410 SVM Compute Core (LUT Kernel)
 
 RTL file: `svm_compute_core.sv`  
 Simulator: Icarus Verilog 13.0 / cocotb 2.0.1  
-Date: 2026-05-18 (pre-netlist); DRT hardened 2026-05-23
-
-> **m4 synthesis parameters:** `FEATURE_DIM=128  NUM_SV=256  FIFO_DEPTH=4096`
-> Structural testbenches (tb_error_codes through tb_interface) are
-> parameter-agnostic — they validate FSM/kernel/error logic independently of
-> feature dimension. The full-pipeline classifier test was run with the 256-dim
-> model data (m3 baseline); regenerate `tb_svm_params.svh` with `gen_tb_data.py
-> --feature_dim 128` for an exact 128-dim accuracy check.
+Date: 2026-05-05
 
 ---
 
@@ -27,7 +20,6 @@ Date: 2026-05-18 (pre-netlist); DRT hardened 2026-05-23
 | 8 | **`vbatt_ok_s` guard in IDLE counter management** — `sv_count_reg`, `gamma_latched`, and `num_samples_latched` now only latch when `start && vbatt_ok_s` (previously just `start`) | The IDLE counter block could capture stale counts when `vbatt_ok=0` would have blocked the FSM from leaving IDLE anyway |
 | 9 | **2-FF input synchronizers** for `vbatt_ok` and `vbatt_warn` (new `sync_ff` module) — reset values: `vbatt_ok→1` (assume power OK at POR), `vbatt_warn→0`; FSM and `err_detect` use `_s` suffix signals | Async comparator outputs driven into a synchronous FSM violate setup/hold, causing metastability at netlist/ASIC |
 | 10 | **Distance matrix drain-flush** (`drain_cnt [1:0]`) — 2 extra cycles after the last `valid_in` flush the 2-stage `diff→diff_squared→accumulator` pipeline so all `FEATURE_DIM` (256) contributions are accumulated; `diff`/`diff_sq` also reset in IDLE to prevent stale values from contaminating the next SV computation | Last 2 feature dimensions were silently dropped from every kernel computation, reducing effective feature coverage from 256 to 254 |
-| 11 | **`arm_interrupted` ASIC async reset** (`ifdef SYNTHESIS`) — adds `negedge rst_n` sensitivity and `if (!rst_n) arm_interrupted <= 0` path so synthesis produces a properly reset FF; Icarus keeps the gated-only path to avoid its non-standard cross-block NBA ordering; inline `= 1'b0` is simulation init only (synthesis tools ignore it) | Without this fix, synthesis generates an unreset FF (lint DRC); inline init is not a reset and would be silently dropped by Yosys/DC/Genus |
 
 ---
 
@@ -52,9 +44,8 @@ iverilog -g2012 -o <out> <tb>.sv svm_compute_core.sv && vvp <out>
 | `tb_warmup.sv` | 14 | **PASS** | `ERR_WARMING_UP` (0x8) clean start; `ERR_INTERRUPTED` (0x9) after mid-warm-up reset; real fault overrides advisory; auto-clear at beat 100; reset after completed warm-up shows 0x8 not 0x9 |
 | `tb_power.sv` | 16 | **PASS** | `ERR_LOW_BATTERY` (0xA) advisory while `vbatt_warn` high; `ERR_POWER_FAIL` (0xB) blocks start while `vbatt_ok` low; FSM completes mid-run; real fault overrides; auto-clear on pin restore |
 | `tb_svm_classifier.sv` | 5/5 correct | **PASS** | Full 5-class cardiac arrhythmia classification (Normal/PVC/AFib/VT/SVT); kernel MAE < 0.003; no error flag |
-| `tb_interface.sv` | 25 | **PASS** | Interface contract: register map defaults/writes/reserved; ERR_GAMMA_SAT/SV_ZERO/SV_OVERFLOW/GAMMA_ZERO/NUM_SAMPLES_ZERO; sticky hold; start-triggers-batch; start-outside-IDLE ignored; 2-sample batch |
 
-**iverilog total: 13/13 PASS** (all tests revalidated after fixes 7–10; tb_interface vbatt ports connected)
+**iverilog total: 12/12 PASS** (all tests revalidated after fixes 7–10)
 
 ---
 

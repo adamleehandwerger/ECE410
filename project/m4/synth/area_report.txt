@@ -1,33 +1,37 @@
-Design Area Report — svm_compute_core (sky130A, OpenLane Classic, job 91966)
-=============================================================================
+Area Report — svm_compute_core + user_project_wrapper (OL2 jobs 92840 / 92861)
+===============================================================================
 
-Design Name  : svm_compute_core
+STATUS: COMPLETE (core job 92840; wrapper job 92861)
+
 PDK          : sky130A (sky130_fd_sc_hd)
-Clock Period : 25.0 ns (40 MHz)
-Tool         : OpenLane 2 Classic flow (OL2 v2.3.10 / OpenROAD / TritonRoute)
-Parameters   : FEATURE_DIM=256, NUM_SV=500, DATA_WIDTH=16, FRAC_BITS=10
+Tool         : OpenLane 2 v2.3.10 Classic
+NUM_SV       : 500  (100 per class)
+RAM_LATENCY  : 3
 
-Area
-----
-  Die area       : 6,250,000 µm²  (2500 × 2500 µm, 6.25 mm²)
-  Core area      : 6,166,550 µm²
-  Instance area  :   ~866,000 µm²
-  Utilization    :    ~14%  (PL_TARGET_DENSITY_PCT=45)
+svm_compute_core  (job 92840)
+------------------------------
+  Die area     : 2500 × 2500 µm  (6,250,000 µm²)
+  Core area    : 6,166,550 µm²
+  Cell area    : 927,920 µm²  (std cells only — SRAM is off-chip)
+  Std cells    : 157,991
+  Utilization  : 15.05%
+  GDS size     : 226 MB
 
-Cell Count
-----------
-  Standard cells : ~146K  (alpha_table[500] stored in registers)
-  SRAM macros    : 0  (SV RAM and input matrix are off-chip via GPIO/LA)
+user_project_wrapper  (job 92861)
+---------------------------------
+  Die area        : 2920 × 3520 µm  (10,278,400 µm²)  (Caravel fixed, FP_DEF_TEMPLATE)
+  Core area       : 10,174,000 µm²
+  Macro area      : 6,250,000 µm²   (u_svm svm_compute_core, 2500×2500 µm)
+  Std cell area   : 7,275.73 µm²    (707 cells — Wishbone glue logic only)
+  Utilization     : 61.5% (including macro) / 0.19% std cell only
+  GDS size        : 234 MB
 
-Routing
--------
-  Max routing layer     : met4
-  Power grid violations : 0 (VPWR), 0 (VGND)
-  Disconnected pins     : 0
-  Floating nets         : 0
+  Macro Instance
+  --------------
+    u_svm (svm_compute_core) : 2500 × 2500 µm at (253, 554) N
+    Right margin : 167 µm
+    Top margin   : 466 µm
 
-Artifacts
----------
-  GDS : gds/svm_compute_core.gds     (226 MB, Magic stream-out)
-  LEF : lef/svm_compute_core.lef     ( 94 KB)
-  GL  : verilog/gl/svm_compute_core.v (13 MB)
+  Wrapper contains 707 std cells (Wishbone decode, clock gate, alpha_wr register)
+  around the pre-hardened svm_compute_core macro. Full synthesis (SYNTH_ELABORATE_ONLY=0)
+  via 3-phase ODB flow.

@@ -1,5 +1,5 @@
 // ============================================================================
-// tb_consecutive.sv  —  ECE410_project_tb_netlist  pre-netlist suite
+// tb_consecutive.sv  —  ECE410_project_LUT  pre-netlist suite
 // ============================================================================
 // Verifies that two complete classification batches can be run back-to-back
 // without an intervening reset.  After the first batch completes (done=1,

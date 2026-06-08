@@ -1,8 +1,15 @@
-# Testbench Results — ECE410 SVM Compute Core (LUT Kernel)
+# Testbench Results — ECE410 SVM Compute Core (LUT Kernel, m4)
 
 RTL file: `svm_compute_core.sv`  
 Simulator: Icarus Verilog 13.0 / cocotb 2.0.1  
-Date: 2026-05-18
+Date: 2026-05-18 (pre-netlist); DRT hardened 2026-05-23
+
+> **m4 synthesis parameters:** `FEATURE_DIM=128  NUM_SV=256  FIFO_DEPTH=4096`
+> Structural testbenches (tb_error_codes through tb_interface) are
+> parameter-agnostic — they validate FSM/kernel/error logic independently of
+> feature dimension. The full-pipeline classifier test was run with the 256-dim
+> model data (m4 baseline); regenerate `tb_svm_params.svh` with `gen_tb_data.py
+> --feature_dim 128` for an exact 128-dim accuracy check.
 
 ---
 

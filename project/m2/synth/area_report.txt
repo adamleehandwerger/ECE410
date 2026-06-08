@@ -1,0 +1,24 @@
+Design Area Report — svm_compute_core (sky130A, OpenROAD GRT estimate)
+========================================================================
+
+Design Name  : svm_compute_core
+PDK          : sky130A (sky130_fd_sc_hd)
+Clock Period : 10.0 ns (100 MHz target)
+Tool         : OpenROAD / OpenLane  (job 89470, global routing level)
+
+Area
+----
+  Design area   : 5,773,204 µm²  (5.773 mm²)
+  Utilization   : 50%
+  Core util set : 45% (FP_CORE_UTIL)
+  PL density    : 0.50 (PL_TARGET_DENSITY)
+
+Notes
+-----
+  Area is reported at global-routing (GRT) level. Detailed routing (DRT)
+  did not complete due to a TritonRoute internal vector bounds error at 70%
+  of the first routing pass. GRT-level area is the placed result and is
+  accurate; wire capacitance estimates are approximations until DRT finishes.
+
+  At 50% utilization the core is 5.773 mm² — well within the Caravel
+  user_project_wrapper area budget (~10 mm²) for a chipIgnite submission.

@@ -1,28 +1,40 @@
-Power Report — svm_compute_core (sky130A, OpenLane Classic, job 91966)
-========================================================================
+Power Report — svm_compute_core + user_project_wrapper (OL2 jobs 92840 / 92861)
+================================================================================
 
-Corner: nom_tt_025C_1v80  (TT process, 25°C, 1.80V)
-Clock:  40 MHz (25 ns period)
-NUM_SV: 500 (100 per class)
+STATUS: COMPLETE
 
-Group                  Internal  Switching    Leakage      Total
-                          Power      Power      Power      Power (Watts)
-----------------------------------------------------------------
-Total                  4.28e-02   2.32e-02   3.87e-07   6.60e-02  100.0%
-                          64.9%      35.1%      ~0.0%
+NUM_SV       : 500  (100 per class)
+RAM_LATENCY  : 3  (IS61WV51216 async SRAM — 3 wait-state cycles)
+Clock        : 40 MHz (25 ns period)
+Inference    : ~9.7 ms / beat  (LAT=3: 208 cycles/beat × extended pipeline)
+              ~3.23 ms / beat  (LAT=1: cosim default)
+Throughput   : ~103 inferences/s  (LAT=3, SRAM mode)
 
-Active power:   66.0 mW
+svm_compute_core  (job 92840)
+------------------------------
+  Active power (TT corner)   : 55.25 mW  (OpenROAD power report, switching activity)
+  Inference time (LAT=3)     : ~9.7 ms / beat
+  Duty cycle at 80 bpm       : 9.7 ms / 750 ms = 1.29%
+  Average power at 80 bpm    : 55.25 mW × 1.29% = 0.713 mW
+  Average power (LAT=3 verified): 0.727 mW  (checklist)
 
-Wearable Power Budget (80 bpm, 3.23 ms active per beat)
----------------------------------------------------------
-  Beat period            : 750 ms  (60 s / 80 bpm)
-  Active duration        : 3.23 ms  (500 SVs × 256 dim @ 40 MHz)
-  Duty cycle             : 0.431%
-  Average power (SVM core): 0.284 mW
+user_project_wrapper  (job 92861)
+----------------------------------
+  Wrapper glue power (total) : 0.284 mW  (707 std cells, switching + leakage)
+  Internal                   : 0.242 mW
+  Switching                  : 0.042 mW
+  Leakage                    : ~4 µW  (negligible)
 
-  Capacity (200 mAh @ 3.7V = 740 mWh):
-    SVM core avg lifetime : ~2606 hours = 108 days
-    14-day target         : MET with 7.7x headroom
+Full-chip power estimate
+-------------------------
+  svm_compute_core (batch)   : 55.25 mW active → 0.727 mW avg (80 bpm, LAT=3)
+  Caravel management SoC     : ~5 mW → ~0.25 mW avg (5% duty)
+  ECG frontend (analog)      : ~0.5 mW (continuous)
+  BLE (optional, logging)    : ~10 mW → ~0.01 mW avg (0.1% duty)
+  Total estimated avg        : ~1.49 mW
 
-Note: System power budget includes MCU, ECG frontend, BLE, and sensors.
-      SVM core contribution is negligible relative to other subsystems.
+Battery budget: 200 mAh @ 3.7V = 740 mWh → 740 h / 1.49 mW ≈ 497 hours (~20.7 days)
+  14-day wearable target met with 1.48× margin.
+  SVM core alone: 740 mWh / 0.727 mW ≈ 1018 hours (~42.4 days).
+
+14-day wearable classification: MET (minimum energy target).

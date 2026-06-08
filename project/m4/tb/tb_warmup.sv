@@ -1,5 +1,5 @@
 // ============================================================================
-// tb_warmup.sv  —  ECE410_project_tb_netlist  pre-netlist suite
+// tb_warmup.sv  —  ECE410_project_LUT  pre-netlist suite
 // ============================================================================
 // Verifies ERR_WARMING_UP (0x8) and ERR_INTERRUPTED (0x9) advisory behavior.
 //

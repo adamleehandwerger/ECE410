@@ -2,12 +2,18 @@
   SVM Compute Core — Classification Testbench (LUT kernel)
   ECE 410 · 5-Class Cardiac Arrhythmia Detection · MIT-BIH
 ================================================================
+  NOTE (m4): This simulation was run against the pre-hardening RTL with
+  FEATURE_DIM=256 (m3 multi-scale model, 495 active SVs). The m4 hardened
+  design uses FEATURE_DIM=128 (single-beat, 154 active SVs), instantiated at
+  synthesis via: chparam -set FEATURE_DIM 128 -set NUM_SV 256
+  m4 HW accuracy (128-dim): 96.39% (sklearn = HW, 0.00% gap).
+  ---------------------------------------------------------------
   Clock      : 50 MHz  (20 ns period)
   Format     : Q6.10 fixed-point  (scale = 1024)
   gamma      : 0.25  (Q6.10 = 0x0100 = 256)
   Kernel     : range-reduction LUT  exp(-I) x exp(-F)
-  Features   : 256-dim multi-scale (128 beat + 64 mean + 64 RR)
-  NUM_SV     : 500 (DUT parameter)   N_SV_active: 495
+  Features   : 256-dim multi-scale (128 beat + 64 mean + 64 RR)  [m3 run]
+  NUM_SV     : 500 (DUT parameter)   N_SV_active: 495             [m3 run]
   SVs/class  : Normal=45  PVC=171  AFib=56  VT=41  SVT=182
   Test beats : 5 (one per class)
   Pass thresh: 4 / 5 correct (>= 80%)

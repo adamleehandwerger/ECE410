@@ -1,5 +1,5 @@
 // ============================================================================
-// tb_dist_zero.sv  —  ECE410_project_tb_netlist  pre-netlist suite
+// tb_dist_zero.sv  —  ECE410_project_LUT  pre-netlist suite
 // ============================================================================
 // Verifies that a zero squared-distance produces kernel_out = 1024 (= 1.0
 // in Q6.10), i.e. K(x, sv) = exp(0) = 1.
