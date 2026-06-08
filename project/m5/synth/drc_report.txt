@@ -40,4 +40,6 @@ Assessment
   There are zero DRC violations within the svm_compute_core interior routing.
 
 KLayout DRC  : 0 violations (run 2026-06-06, KLayout 0.30.9, sky130A.lydrc, local Mac)
-KLayout XOR  : Pending — re-run on final 92861 GDS once local copy confirmed
+KLayout XOR  : 0 physical differences  (2026-06-07, local Mac, 8 threads, 500 µm tiles)
+               33 areaid.sc (layer 81/14) annotation differences — expected Magic vs KLayout
+               stream-out artifact; not a physical layer. All routing/device layers clean.

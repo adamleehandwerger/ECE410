@@ -306,7 +306,7 @@ The `user_project_wrapper` was hardened in m5 (OL2 jobs 92840/92861) with all DR
 
 **IR drop analysis skipped.** `OpenROAD.IRDropReport` was skipped at OL2 job 92840 due to PSM-0069 ("check connectivity failed on vccd1"). The power sign-off tool requires `VSRC_LOC_FILES` specifying the vccd1/vssd1 entry points on the Caravel die boundary. These files were not available on Orca's OL2 installation at the time of submission.
 
-**KLayout DRC: completed locally, 0 violations.** KLayout DRC was run on a local installation against the final `user_project_wrapper.gds` and returned 0 violations — the wrapper is DRC-clean under KLayout signoff. KLayout XOR (phantom geometry check between the routed DEF and the GDS) was not run and remains pending before a shuttle submission.
+**KLayout DRC and XOR: both complete, 0 physical differences.** KLayout DRC was run locally (KLayout 0.30.9, sky130A.lydrc, 2026-06-06) and returned 0 violations. KLayout XOR was run locally (2026-06-07, 8 threads, 500 µm tiles) comparing the Magic stream-out against the KLayout stream-out from OL2 job 92861. Total XOR differences: 33, all on `areaid.sc` (layer 81/14) — a non-physical annotation layer that Magic and KLayout annotate differently. All routing, device, and via layers are geometrically identical between stream-outs.
 
 ---
 

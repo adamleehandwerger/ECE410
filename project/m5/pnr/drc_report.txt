@@ -41,4 +41,6 @@ Assessment
   KLayout ruleset.
 
 KLayout DRC  : 0 violations (KLayout 0.30.9, sky130A.lydrc, 2026-06-06)
-KLayout XOR  : Pending — requires two GDS inputs; run after final GDS confirmed
+KLayout XOR  : 0 physical differences  (2026-06-07, local Mac, 8 threads, 500 µm tiles)
+               33 areaid.sc (layer 81/14) annotation differences — expected Magic vs KLayout
+               stream-out artifact; not a physical layer. All routing/device layers clean.

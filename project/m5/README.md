@@ -198,10 +198,9 @@ Required before submitting to an Efabless Caravel shuttle or equivalent:
   properly handled in the PDN and that deleting their routing BTERMs does not affect
   the Caravel SoC power delivery network for adjacent user projects.
 
-- **KLayout XOR** — KLayout DRC was run locally and returned **0 violations**.
-  KLayout XOR (phantom geometry check between the routed DEF and final GDS) was
-  not run. Run `klayout -b -r xor.lydrc` on the final GDS before submitting to
-  a shuttle.
+- **KLayout DRC + XOR** — both complete locally (2026-06-07). KLayout DRC: 0 violations.
+  KLayout XOR: 0 physical differences (33 `areaid.sc` layer 81/14 annotation artifacts —
+  expected Magic vs KLayout stream-out discrepancy, not a physical layer).
 
 - **Wrapper hold violations (TT corner)** — `Checker.HoldViolations` reports hold
   violations at nom_tt_025C_1v80 in the wrapper (checker skipped to allow flow
