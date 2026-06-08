@@ -31,6 +31,8 @@ Arrhythmia Database.
 
 ```
 project/
+├── m1/   ← Project proposal: algorithm design, scope, SVM baseline
+├── m2/   ← Architecture exploration and interface selection
 ├── m3/   ← RTL verification & synthesis (19/19 tests PASS)
 ├── m4/   ← Place-and-route: core GDS, 0 DRC, +7.83 ns WNS
 └── m5/   ← Wrapper hardening, RAM_LATENCY, Caravel submission
@@ -40,9 +42,21 @@ project/
 
 ## Milestone Deliverables
 
+### m1 — Project Proposal
+[`project/m1/`](project/m1/)
+
+- Algorithm design: `Batch SVM Algorithm.pdf`
+- System diagram, interface and storage trade studies
+
+### m2 — Architecture Exploration
+[`project/m2/`](project/m2/)
+
+- Interface selection, data storage and transmission analysis
+
 ### m3 — RTL Verification & Synthesis
 [`project/m3/`](project/m3/)
 
+- Scope assessment: `scope_assessment.md`
 - RTL source: `rt1/compute_core.sv`, `rt1/top.sv`, `rt1/interface.sv`
 - 19/19 testbenches PASS (iverilog + cocotb)
 - OpenLane synthesis: area, timing, power reports in `synth/`
