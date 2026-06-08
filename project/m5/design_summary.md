@@ -576,6 +576,33 @@ another batch on the same data.
 | Clear | CONTROL | `0x04` | `0x0A` | start=0, vbatt_ok=1, kern_ready=1 |
 | Read result | STATUS | `0x08` | — | `[8:6]`=class, `[1]`=error, `[0]`=done |
 
+### C.2 — Data history storage
+
+Per-beat `class_out` values captured from IRQ[0] pulses are held in the nRF52840's
+256 KB internal SRAM during classification. For long-term history that must survive
+power cycles, the MCU flushes each completed batch to external non-volatile storage.
+
+**External flash (recommended for wearable logging)**
+
+The nRF52840 QSPI interface connects to a NOR flash such as the MX25R6435F (4 MB,
+1.8 V, ultra-low standby ~4 µA). Each classification record is compact — 3-bit class
++ 32-bit timestamp = 5 bytes — so 4 MB holds ~800,000 beat records (~11 days at
+80 bpm continuous). The MCU buffers one batch in internal SRAM, then issues a single
+QSPI page-program on `done` IRQ before sleeping.
+
+**BLE streaming (recommended for real-time clinical offload)**
+
+The nRF52840 BLE stack can stream `class_out` records to a paired phone or gateway
+in real time. Each `sample_rdy` IRQ enqueues a 5-byte record into a BLE notification
+buffer; the phone application handles long-term storage and trend analysis. No
+external flash is required if connectivity is assumed.
+
+**Hybrid (wearable + clinic)**
+
+Buffer to flash during normal wear; bulk-transfer history to phone over BLE when
+within range. The nRF52840 supports concurrent QSPI and BLE without additional
+hardware.
+
 ---
 
 ## Appendix B.10 — RTL Improvements
