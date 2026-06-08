@@ -198,13 +198,10 @@ Required before submitting to an Efabless Caravel shuttle or equivalent:
   properly handled in the PDN and that deleting their routing BTERMs does not affect
   the Caravel SoC power delivery network for adjacent user projects.
 
-- **KLayout XOR / DRC** — `KLayout.XOR` and `KLayout.DRC` are skipped on Orca
-  (Ruby not available on compute nodes). XOR checks for phantom geometry between
-  the GDS and the routed DEF; KLayout DRC is a second DRC signoff layer. Both
-  must pass on a Ruby-capable machine (local install or a machine with KLayout +
-  Ruby) before submitting to a shuttle. Run `klayout -b -r $PDK_ROOT/.../drc.lydrc
-  -rd input=user_project_wrapper.gds` and `klayout -b -r xor.lydrc` on the final
-  GDS produced by Magic.
+- **KLayout XOR** — KLayout DRC was run locally and returned **0 violations**.
+  KLayout XOR (phantom geometry check between the routed DEF and final GDS) was
+  not run. Run `klayout -b -r xor.lydrc` on the final GDS before submitting to
+  a shuttle.
 
 - **Wrapper hold violations (TT corner)** — `Checker.HoldViolations` reports hold
   violations at nom_tt_025C_1v80 in the wrapper (checker skipped to allow flow

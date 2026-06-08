@@ -306,7 +306,7 @@ The `user_project_wrapper` was hardened in m5 (OL2 jobs 92840/92861) with all DR
 
 **IR drop analysis skipped.** `OpenROAD.IRDropReport` was skipped at OL2 job 92840 due to PSM-0069 ("check connectivity failed on vccd1"). The power sign-off tool requires `VSRC_LOC_FILES` specifying the vccd1/vssd1 entry points on the Caravel die boundary. These files were not available on Orca's OL2 installation at the time of submission.
 
-**KLayout XOR and DRC skipped on Orca.** The Orca compute nodes do not have Ruby installed, which is required by KLayout's DRC and XOR scripts. Both checks must be run on a local KLayout installation before submitting to a shuttle.
+**KLayout DRC: completed locally, 0 violations.** KLayout DRC was run on a local installation against the final `user_project_wrapper.gds` and returned 0 violations — the wrapper is DRC-clean under KLayout signoff. KLayout XOR (phantom geometry check between the routed DEF and the GDS) was not run and remains pending before a shuttle submission.
 
 ---
 
