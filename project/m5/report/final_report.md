@@ -3,7 +3,7 @@
 
 **Author:** Adam Handwerger · handwerg@pdx.edu  
 **Course:** ECE410, Portland State University  
-**Date:** 2026-05-26  
+**Date:** 2026-06-07  
 **Repository:** [https://github.com/adamleehandwerger/ECE410](https://github.com/adamleehandwerger/ECE410)  
 **m5 milestone:** [https://github.com/adamleehandwerger/ECE410/tree/main/project/m5](https://github.com/adamleehandwerger/ECE410/tree/main/project/m5)  
 **Caravel repo:** [https://github.com/adamleehandwerger/caravel_svm_project](https://github.com/adamleehandwerger/caravel_svm_project)
@@ -184,23 +184,23 @@ A five-level testbench hierarchy was developed covering the core in isolation th
 
 ## Section 7 — Synthesis Results
 
-### 7.1 svm_compute_core (core, OL2 job 91966)
+### 7.1 svm_compute_core (core, OL2 job 92840)
 
 | Metric | Value |
 |--------|-------|
 | Technology | sky130A (sky130_fd_sc_hd) |
 | Clock | 40 MHz (25 ns period) |
 | Die area | 2500 × 2500 µm (6.25 mm²) |
-| Core utilization | ~14% |
-| Standard cells | ~146K |
+| Core utilization | 15.0% |
+| Standard cells | 157,991 |
 | SRAM macros | 0 |
-| Setup WNS (TT 25°C 1.8V) | **+7.83 ns** — 0 violations |
-| Hold WNS (TT) | **+0.30 ns** — 0 violations |
+| Setup WNS (TT 25°C 1.8V) | **+3.96 ns** — 0 violations |
+| Setup WNS (FF) | **+11.24 ns** — 0 violations |
+| Setup WNS (SS 100°C 1.6V) | −14.56 ns — 163 violations (expected corner) |
+| Hold WNS (TT) | **+0.23 ns** — 0 violations |
 | DRC violations | **0** |
-| Active power | **66 mW** |
-| Internal power fraction | 64.9% (sequential logic) |
-| Switching power fraction | 35.1% |
-| Leakage | ~0% |
+| Active power | **55.25 mW** |
+| Avg power (80 bpm, LAT=3) | **0.727 mW** |
 
 **Area dominant contributor:** The `alpha_table[500]` register file — 500 × 16-bit alpha coefficients stored in flip-flops — accounts for the majority of cell count (~80K of the 146K standard cells). This was intentional: storing alphas on-chip avoids an additional RAM access per kernel evaluation, keeping the inner loop bandwidth-bound on SV data rather than alpha data.
 
@@ -208,14 +208,15 @@ A five-level testbench hierarchy was developed covering the core in isolation th
 
 **Power dominant contributor:** Internal (sequential) power at 64.9% reflects the large register file toggling at 40 MHz during computation. Switching power (35.1%) comes from the distance accumulator and kernel multiplier combinational logic.
 
-### 7.2 user_project_wrapper (OL2 job 91967)
+### 7.2 user_project_wrapper (OL2 job 92861)
 
 | Metric | Value |
 |--------|-------|
 | Die area | 2920 × 3520 µm (Caravel fixed) |
 | Macro instance | u_svm at (253, 554), 2500 × 2500 µm |
-| Wrapper logic | ~500–2000 std cells (Wishbone decode + clock gate) |
-| DRC | 11,923 Magic DRC (boundary artifacts, no interior violations) |
+| Wrapper std cells | 707 |
+| KLayout DRC | **0 violations** |
+| Magic DRC | 11,906 boundary artifacts (macro-interface, no interior violations) |
 | LVS | 1,683 errors (boundary artifacts) |
 
 The wrapper DRC and LVS counts reflect boundary rule violations at the macro interface edge — a known artifact of hardening a pre-hardened macro inside the Caravel wrapper template. No interior routing violations were present.
@@ -285,6 +286,28 @@ The QSPI streaming interface was the original host communication design. It was 
 
 An output SRAM (result buffer) was added late in the design to hold per-beat classification results. The original design used a single `class_out[2:0]` GPIO register that was overwritten each beat — the MCU had to poll and capture the result within a narrow window between `sample_rdy` assertion and the next beat starting. At the cosim RTL timing, this window was reliably captured. However, in the projected Caravel silicon environment with a RISC-V core at variable CPI and potential IRQ latency, the window was not guaranteed. The output SRAM provides a persistent record of all classification results that the MCU can read at any time after `done` asserts, eliminating the race condition entirely. It also enables post-hoc analysis (the MCU can upload the full beat-by-beat classification log over BLE), supports a rolling window mode for online display, and decouples classification latency from MCU responsiveness.
 
+### 9.4 RAM_LATENCY=1 was insufficient for physical SRAM
+
+All simulation and cosim was performed with `RAM_LATENCY=1` — one clock cycle between `ram_ren` assertion and data capture on `ram_rdata`. This works correctly in RTL simulation where the testbench model returns data combinationally, and it was the default throughout m3 and m4 verification.
+
+In m5, preparing for physical board bringup with the IS61WV51216 async SRAM (25 ns access time), `RAM_LATENCY=1` was found to be insufficient. At a 40 MHz clock (25 ns period), a single-cycle latency provides exactly 0 ns of setup margin — any board-level parasitics, trace capacitance, or process variation would cause setup violations on the `ram_rdata` bus. The IS61WV51216 datasheet specifies a worst-case read cycle of 25 ns, but this assumes minimal load capacitance; a physical board with a 10–20 cm PCB trace adds 3–8 ns of additional propagation delay.
+
+`RAM_LATENCY` was increased to **3** (75 ns of wait time), providing approximately 50 ns of margin over the SRAM's worst-case access time. The parameter is configurable at synthesis time — the cosim and unit tests continue to use LAT=1 for simulation speed; the physical SRAM target uses LAT=3. At LAT=3, per-beat inference time increases from 3.23 ms to 9.87 ms, which remains within the 750 ms heartbeat period by a factor of 76×.
+
+The root issue was that the original simulation model did not model SRAM access latency — returning data in the same cycle as the address — and this discrepancy was not caught until the physical SRAM datasheet was consulted during m5.
+
+### 9.5 Wrapper hardening: open items from m5
+
+The `user_project_wrapper` was hardened in m5 (OL2 jobs 92840/92861) with all DRC passing under KLayout. Several issues remain open for a tapeout submission:
+
+**Hold violations in the wrapper (TT corner).** The wrapper was hardened with `RUN_CTS=0` — no clock tree synthesis was run in the wrapper, since the SVM core has its own gated clock. The Wishbone controller registers in the wrapper fabric were synthesized without a clock tree, leading to hold violations at `nom_tt_025C_1v80`. The core itself has zero hold violations (+0.23 ns). For tapeout, `RUN_CTS=1` must be re-enabled in the wrapper config to insert hold buffers. This was known and accepted for the class submission.
+
+**Antenna violations (advisory).** The `svm_compute_core` has 554 net / 808 pin antenna violations. These are flagged as advisory (not blocking) under the class DRC rules but would be blocking for an Efabless shuttle. Re-hardening with `GRT_REPAIR_ANTENNAS=1` and `RUN_FILL_INSERTION=1` is required before tapeout.
+
+**IR drop analysis skipped.** `OpenROAD.IRDropReport` was skipped at OL2 job 92840 due to PSM-0069 ("check connectivity failed on vccd1"). The power sign-off tool requires `VSRC_LOC_FILES` specifying the vccd1/vssd1 entry points on the Caravel die boundary. These files were not available on Orca's OL2 installation at the time of submission.
+
+**KLayout XOR and DRC skipped on Orca.** The Orca compute nodes do not have Ruby installed, which is required by KLayout's DRC and XOR scripts. Both checks must be run on a local KLayout installation before submitting to a shuttle.
+
 ---
 
 ## Section 10 — Figures
@@ -305,7 +328,7 @@ Design assistance, RTL debugging, testbench development, documentation, and benc
 
 ---
 
-*ECE410 — Portland State University · Adam Handwerger · 2026-05-26*  
+*ECE410 — Portland State University · Adam Handwerger · 2026-06-07*  
 *sky130A · OpenLane 2 v2.3.10 · MIT-BIH Arrhythmia Database · PhysioNet*
 
 ---
