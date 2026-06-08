@@ -642,3 +642,28 @@ reg_num_samples <= 10'd1000;   // match nominal deployment batch size
 This makes `NUM_SAMPLES` consistent with `NUM_SV` (sticky, sensible default) and
 eliminates a bringup gotcha where a forgotten register write produces a zero-beat
 batch that appears to succeed.
+
+## Appendix B.11 — Model Improvements for Next Iteration
+
+### B.11.1 Class weight tuning
+
+The current model uses `class_weight='balanced'` in sklearn, which scales the SVM
+penalty parameter C inversely with class frequency. This corrects for the MIT-BIH
+class imbalance (Normal beats dominate) but does not account for **clinical
+asymmetry** — missing a VT is far more dangerous than missing a PVC or SVT.
+
+`class_weight='balanced'` treats all arrhythmia classes equally after frequency
+correction. For clinical deployment, a better approach is to treat per-class weights
+as hyperparameters and tune them explicitly, optimizing for **recall on VT and AFib**
+subject to a constraint on the Normal false-positive rate rather than optimizing for
+overall accuracy.
+
+A grid search over class weights (e.g. boosting VT weight 2–4× beyond balanced)
+would likely maintain or improve the 97.67% overall accuracy while providing stronger
+guarantees on the clinically dangerous classes. The zero-gap property would need to
+be re-verified at Q6.10 after retraining with new weights.
+
+**Impact on hardware:** class weights only affect training. The ASIC inference path
+(kernel evaluation, alpha accumulation, argmax) is unchanged — new weights produce
+new alpha coefficients and bias values loaded via the Wishbone parameter interface
+at startup.
