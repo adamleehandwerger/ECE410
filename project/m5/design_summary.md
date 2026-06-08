@@ -575,3 +575,28 @@ another batch on the same data.
 | Fire | CONTROL | `0x04` | `0x0B` | start=1, vbatt_ok=1, kern_ready=1 |
 | Clear | CONTROL | `0x04` | `0x0A` | start=0, vbatt_ok=1, kern_ready=1 |
 | Read result | STATUS | `0x08` | — | `[8:6]`=class, `[1]`=error, `[0]`=done |
+
+---
+
+## Appendix B.10 — RTL Improvements
+
+### B.10.1 NUM_SAMPLES reset default
+
+`reg_num_samples` resets to `10'd0` on power-on. Unlike `NUM_SV[0–4]` which reset
+to `8'd50` (a safe non-zero default), a zero `NUM_SAMPLES` causes the batch FSM to
+complete immediately with no classifications if the MCU forgets to write the register
+before asserting start — a silent failure with no error flag.
+
+**Recommended fix:** change the reset assignment in `top.sv`:
+
+```systemverilog
+// current
+reg_num_samples <= 0;
+
+// improved
+reg_num_samples <= 10'd1000;   // match nominal deployment batch size
+```
+
+This makes `NUM_SAMPLES` consistent with `NUM_SV` (sticky, sensible default) and
+eliminates a bringup gotcha where a forgotten register write produces a zero-beat
+batch that appears to succeed.
