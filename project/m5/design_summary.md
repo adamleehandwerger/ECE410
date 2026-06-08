@@ -244,7 +244,9 @@ simply overwritten in place.
 |-----------|----------|------|
 | SV matrix (500 × 256 × 16-bit features) | Off-chip SRAM, rows 0–499 | 256 KB |
 | Alpha coefficients (500 × 16-bit) | On-chip `alpha_table[]` registers | 8 KB |
-| Gamma (γ, Q6.10) | On-chip `gamma_reg` shadow register | 2 bytes |
+| Gamma (γ, Q6.10) | On-chip `gamma_reg` (PARAM_WR addr=0) | 2 bytes |
+| C (regularization, Q6.10) | On-chip `c_int` (PARAM_WR addr=1) | 2 bytes |
+| Bias[0–4] (per-class, Q6.10) | On-chip `bias_int[0–4]` (PARAM_WR addr=2–6) | 10 bytes |
 | SV counts per class (`NUM_SV[0–4]`) | On-chip Wishbone registers | 5 bytes |
 
 ### Reload sequence
@@ -278,13 +280,26 @@ for idx in range(500):
     wishbone_write(WB_BASE + 0x28, word)
 ```
 
-**Step 3 — Update gamma via PARAM_WR**
+**Step 3 — Update gamma, C, and biases via PARAM_WR**
+
+PARAM_WR (`0x24`): `[19]=en, [18:16]=addr, [15:0]=Q6.10 value`
+
+| addr | Parameter |
+|------|-----------|
+| 0 | Gamma (γ) |
+| 1 | C (regularization) |
+| 2–6 | Bias[0–4] (per-class) |
 
 ```
 PARAM_WR offset = 0x24
-# addr=0 is gamma register; [19]=en, [18:16]=addr, [15:0]=value
-word = (1 << 19) | (0 << 16) | gamma_Q6_10
-wishbone_write(WB_BASE + 0x24, word)
+
+def param_write(addr, val_Q6_10):
+    wishbone_write(WB_BASE + 0x24, (1 << 19) | (addr << 16) | (val_Q6_10 & 0xFFFF))
+
+param_write(0, gamma_Q6_10)
+param_write(1, C_Q6_10)
+for c in range(5):
+    param_write(2 + c, bias_Q6_10[c])
 ```
 
 **Step 4 — Update SV counts if changed**
