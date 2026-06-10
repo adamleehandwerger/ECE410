@@ -136,4 +136,22 @@ else if (drain_cnt != 2'd0)
 
 ---
 
+## 9. Caravel SoC Harness
+
+**What it is:** An open-source SoC frame designed by Efabless for Google-sponsored shuttle runs (including TinyTapeout on sky130). You design the `user_project_wrapper`; Caravel is the fixed surrounding infrastructure.
+
+**What Caravel provides:**
+
+| Component | Details |
+|-----------|---------|
+| **RISC-V core** | PicoRV32 management processor; runs C firmware from on-chip flash; issues Wishbone transactions to your design |
+| **Wishbone bus** | B4 protocol; management core is bus master; user project is slave at base address 0x3000_0000 |
+| **GPIO mux** | 38 configurable IO pads; project drives `io_out` / reads `io_in`; mux configured by firmware. Used here for SRAM address (GPIO[28:10]) and read enable (GPIO[29]) |
+| **Logic Analyzer** | 128 `la_data_in` / `la_data_out` wires direct to user project. Used here for SRAM read data (`la_data_in[15:0]`) |
+| **Clock / reset** | `wb_clk_i`, `wb_rst_i`, power domains routed to wrapper boundary |
+
+**What it does not provide:** Any application logic — that is entirely your `user_project_wrapper`.
+
+---
+
 *This sheet grows as the study session continues. Add new topics below.*
