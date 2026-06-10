@@ -126,4 +126,14 @@ else if (drain_cnt != 2'd0)
 
 ---
 
+## 8. RR Normalization
+
+**Purpose:** Makes rhythm features rate-independent across patients and conditions. Raw RR intervals vary with heart rate (60 bpm -> ~1000 ms; 90 bpm -> ~667 ms), so the same arrhythmia pattern would look different for different patients. Dividing by a reference value expresses each interval as a ratio.
+
+**Reference value:** `NORMAL_RR = 308 ms` — median normal sinus rhythm interval in the MIT-BIH + SVDB + INCART training set.
+
+**Separate fact — 64 RR features:** The 256-dim feature vector is split as 192 morphology dims (QRS waveform shape, 3 multi-scale windows x 64) + 64 rhythm dims (normalized RR history over ~100 beats). The 64 is the dimensionality of the rhythm slice, not a consequence of normalization.
+
+---
+
 *This sheet grows as the study session continues. Add new topics below.*
