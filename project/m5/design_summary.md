@@ -63,7 +63,7 @@
 
 | Parameter | Value |
 |-----------|-------|
-| Source | MIT-BIH Arrhythmia Database (PhysioNet) |
+| Source | MIT-BIH + SVDB + INCART (PhysioNet) — pooled, stratified |
 | Split | 80% train / 20% test — stratified, `random_state=42` |
 | Beats per class | 240 |
 | Classes | Normal (N), PVC, AFib, VT, SVT |
@@ -77,7 +77,7 @@
 
 | Parameter | Value |
 |-----------|-------|
-| Source | MIT-BIH Arrhythmia Database (PhysioNet) — held-out 20% |
+| Source | MIT-BIH + SVDB + INCART (PhysioNet) — held-out 20% stratified |
 | Beats per class | 60 |
 | **Total test beats** | **300** |
 | sklearn accuracy | 97.67% (293/300) |
@@ -223,8 +223,8 @@ classification conventions:
 | RR-interval history (99 intervals → 64 pts, norm to NORMAL_RR=308 ms) | 64 | Llamedo M, Martínez JP. "Heartbeat classification using feature selection driven by database generalization criteria." *IEEE Trans Biomed Eng* 58(3):616-25, 2011. DOI: [10.1109/TBME.2010.2068048](https://doi.org/10.1109/TBME.2010.2068048) |
 
 Standard: AAMI ANSI EC57:2012 — Performance Requirements for Ambulatory ECG Analysers.  
-Dataset: PhysioNet MIT-BIH Arrhythmia Database (Moody GB, Mark RG, 2001).  
-DOI: [10.13026/C2F305](https://doi.org/10.13026/C2F305)
+Datasets: PhysioNet MIT-BIH Arrhythmia Database (Moody GB, Mark RG, 2001) DOI: [10.13026/C2F305](https://doi.org/10.13026/C2F305);  
+SVDB (Greenwald SD, 1990); INCART (Taddei A et al., 1992) — all via wfdb Python package.
 
 ---
 
@@ -643,6 +643,21 @@ This makes `NUM_SAMPLES` consistent with `NUM_SV` (sticky, sensible default) and
 eliminates a bringup gotcha where a forgotten register write produces a zero-beat
 batch that appears to succeed.
 
+### B.10.2 NUM_SAMPLES sticky behavior
+
+`NUM_SAMPLES` should retain its value across batches without being rewritten by the
+MCU each time. Currently the register holds its value (Wishbone registers are
+persistent by design), but the reset default of `10'd0` means the first batch after
+power-on will silently process zero beats unless the MCU writes the register before
+firing `start`.
+
+**Recommended fix:** in addition to the reset default change in B.10.1, document
+`NUM_SAMPLES` as a sticky configuration register in firmware — write it once at
+startup alongside `NUM_SV[0–4]`, `ALPHA_WR`, and `PARAM_WR`, and only rewrite if
+the batch size changes. This matches the behavior of all other configuration registers
+and avoids a class of firmware bugs where the register is written in the first batch
+but forgotten in subsequent batches after a partial reset.
+
 ## Appendix B.11 — Model Improvements for Next Iteration
 
 ### B.11.1 Class weight tuning
@@ -667,3 +682,42 @@ be re-verified at Q6.10 after retraining with new weights.
 (kernel evaluation, alpha accumulation, argmax) is unchanged — new weights produce
 new alpha coefficients and bias values loaded via the Wishbone parameter interface
 at startup.
+
+## Appendix B.12 — System-Level Improvements for Next Iteration
+
+### B.12.1 Argmax confidence and OvR score calibration
+
+The current hardware outputs a hard class label via argmax across 5 OvR scores with
+no confidence information. This creates two clinical risks:
+
+**Out-of-distribution beats:** If the input beat is unlike any training data (e.g.,
+pacemaker spikes, WPW, artifact), all 5 scores may be low and the argmax picks the
+least-bad class with no indication of low confidence. The device outputs a definitive
+label when it should flag the beat for physician review.
+
+**OvR score miscalibration:** The 5 binary classifiers are trained independently with
+no guarantee their score scales are comparable. A classifier trained on a highly
+imbalanced class may produce scores with systematically larger or smaller magnitude
+than others. Argmax across uncalibrated scores can favor a class not because it is
+most likely but because its scores are larger in magnitude.
+
+**Recommended improvements:**
+
+1. **Platt scaling** — fit a sigmoid to each classifier's raw scores post-training to
+   convert them to calibrated probabilities. Argmax over probabilities is better
+   justified than argmax over raw margins.
+
+2. **Confidence threshold** — add a `confidence` output to STATUS register encoding
+   the margin between the top two scores. If the margin is below a threshold, assert
+   a `low_confidence` flag so firmware can defer to a clinician rather than acting
+   on an uncertain classification.
+
+3. **Unknown class** — add a 6th "unknown/artifact" class trained on out-of-distribution
+   beats (pacemaker, noise, WPW). This requires an additional classifier and alpha
+   table entry but eliminates silent misclassification of unseen beat types.
+
+**Impact on hardware:** Platt scaling only changes the bias and alpha values (training
+change). The confidence threshold requires one additional STATUS register bit and a
+comparator on the two highest accumulators — minimal RTL change. The unknown class
+requires widening `class_out` from 3 to 3 bits (still fits) and adding one more OvR
+classifier (6th alpha table partition of 100 SVs).
