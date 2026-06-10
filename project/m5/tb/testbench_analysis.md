@@ -11,13 +11,13 @@ header-includes:
 title: "Testbench Analysis"
 subtitle: "5-Class Cardiac Arrhythmia Classifier — RBF-SVM ASIC"
 author: "Adam Handwerger · ECE410, Portland State University"
-date: "2026-06-04"
+date: "2026-06-10"
 ---
 
 The verification strategy covers five levels, from bare RTL ports through the full Caravel
 SoC. Levels 1 and 2 target `svm_compute_core` directly; Level 3 verifies the
 `RAM_LATENCY` parameter added in m5; Levels 4 and 5 drive the complete
-`user_project_wrapper` through the Wishbone register interface. All 25 tests pass.
+`user_project_wrapper` through the Wishbone register interface. All 30 tests pass.
 
 ---
 
@@ -36,25 +36,23 @@ simulation completes in milliseconds and waveform inspection is practical.
 Classifies one representative heartbeat per class (Normal, PVC, AFib, VT, SVT) using the
 trained SVM parameters from `tb_svm_params.svh`. The testbench programs gamma (0.25 ->
 0x0100 in Q6.10), sets SV counts for all five classes, streams a 256-dimensional feature
-vector through the FIFO interface, services the SV RAM read requests from a precomputed hex
-file, and collects kernel outputs. After all SVs are processed, it applies the OVR decision
-function (weighted kernel sum + bias) and compares the predicted class against the expected
-label. Pass criterion is 4 of 5 correct classifications with no error flag asserted.
+vector through the GPIO/SRAM interface, services the SV RAM read requests from a precomputed
+hex file, and collects kernel outputs. After all SVs are processed, it applies the OVR
+decision function (weighted kernel sum + bias) and compares the predicted class against the
+expected label. Pass criterion is 4 of 5 correct classifications with no error flag asserted.
 This test is the primary smoke test for a new RTL build — if it fails, the issue is
 in the core pipeline rather than a corner case.
 
 ## tb\_error\_codes.sv — Fault Detection and Sticky Latch
 
-Exercises all diagnostic error codes in sequence using two separate DUT instances. The main
-instance (FEATURE\_DIM=16, NUM\_SV=10, FIFO\_DEPTH=256) tests ERR\_SV\_ZERO (code 0x1) by
+Exercises all diagnostic error codes in sequence. Tests ERR\_SV\_ZERO (code 0x1) by
 setting all SV counts to zero, ERR\_SV\_OVERFLOW (0x2) by loading more SVs than NUM\_SV,
-and ERR\_GAMMA\_SAT (0x4) by writing a gamma value above the saturation threshold. A
-second instance (FIFO\_DEPTH=4) tests ERR\_FIFO\_OVERFLOW (0x5) by streaming more words
-than the FIFO can hold. After triggering a fault, the testbench verifies that the
-`error_code` register holds its value for 50 idle cycles (sticky latch), then pulses
-`rst_n` and confirms that both `error` and `error_code` return to zero. This test
-directly validates the medical-device requirement that faults be persistently visible
-until the host explicitly resets the core.
+ERR\_NUM\_SAMPLES\_ZERO (0x7) by setting num\_samples to zero, and ERR\_GAMMA\_SAT (0x4)
+by writing a gamma value above the saturation threshold. After triggering a fault, the
+testbench verifies that the `error_code` register holds its value for 50 idle cycles
+(sticky latch), then pulses `rst_n` and confirms that both `error` and `error_code` return
+to zero. This test directly validates the medical-device requirement that faults be
+persistently visible until the host explicitly resets the core.
 
 ## tb\_backpressure.sv — Kernel-Ready Handshake
 
@@ -85,9 +83,7 @@ and the SV feature is 0x8000 (−32.0 in Q6.10), maximizing the squared differen
 For a 16-element FEATURE\_DIM, this accumulates to a value that saturates the 20-bit
 accumulator at 0xFFFFF. The testbench verifies that the Horner LUT correctly maps this
 saturated distance to `kernel_out = 0`, which corresponds to exp(−∞) = 0 — the kernel
-value for two features that are as far apart as possible in the fixed-point space. The
-saturation is non-silent: `ERR_DIST_OVERFLOW` asserts if configured, so the host can
-distinguish a true distant feature pair from a numerical failure.
+value for two features that are as far apart as possible in the fixed-point space.
 
 ## tb\_dist\_zero.sv — Zero-Distance Kernel Identity
 
@@ -95,7 +91,7 @@ Sets every input feature equal to its corresponding SV feature (both 0x0400 = 1.
 Q6.10) and verifies that the kernel output is exactly 1024 (= 1.0 in Q6.10). The expected
 computation trace is: diff = 0 for all dimensions, accumulator = 0, distance = 0,
 gamma × 0 = 0, LUT index = 0 -> lut\_val = 1024, Horner residual = 0 -> correction = 1024,
-final result = (1024 × 1024) >> 10 = 1024. This test is also the canonical check for
+final result = (1024 × 1024) >> 10 = 1024. This test is the canonical check for
 the 2-cycle pipeline drain: if the FSM reads the accumulator one cycle too early, the
 last dimension is not yet included and the distance is nonzero, producing a kernel output
 below 1024 and failing the check.
@@ -115,7 +111,7 @@ misconfiguration.
 
 Checks the interface contract across 25 individual assertions covering reset state, register
 defaults, and protocol edge cases. Key checks include: all outputs (done, error,
-kernel\_valid, qspi\_ready) deasserted immediately after `rst_n`; `gamma_reg` reads back
+kernel\_valid, sample\_rdy) deasserted immediately after `rst_n`; `gamma_reg` reads back
 the default value (0x0100 = 0.25 in Q6.10); a `start` pulse while the FSM is not in IDLE
 is ignored and does not restart classification mid-batch; and a 2-sample batch terminates
 with exactly two `sample_rdy` pulses followed by exactly one `done`. This test is
@@ -173,9 +169,7 @@ ERR\_INTERRUPTED (0x9) fires if `rst_n` asserts while the warmup counter is betw
 run is required before results can be trusted. Five sub-tests cover the normal warmup
 sequence, mid-warmup reset, real fault override (ERR\_GAMMA\_SAT latching sticky over an
 active advisory), advisory clearance at beat 100, and the re-warming-up condition after
-a reset that fires at count = 100. The timing note in the source confirms that the check
-waits two cycles after `done` because the advisory latches one cycle after the heartbeat
-counter increments.
+a reset that fires at count = 100.
 
 ---
 
@@ -183,7 +177,7 @@ counter increments.
 
 **Location:** `m4/tb/` · **Simulator:** Icarus Verilog + cocotb 2.0.1 · **Run:** `cd m4/tb && make cocotb`
 
-These 9 tests use Python coroutines to drive the same RTL ports as Level 1, enabling
+These 7 tests use Python coroutines to drive the same RTL ports as Level 1, enabling
 programmatic stimulus generation, floating-point reference computation, and result
 comparison in a single script. Cocotb tests run in simulated time alongside the RTL,
 yielding fine-grained control over timing that is tedious to express in pure SystemVerilog.
@@ -191,9 +185,9 @@ yielding fine-grained control over timing that is tedious to express in pure Sys
 ## test\_reset\_outputs
 
 Confirms that every output port is in its reset state immediately after `rst_n`
-deasserts. The checked signals are `done`, `error`, `kernel_valid`, and `qspi_ready`,
+deasserts. The checked signals are `done`, `error`, `kernel_valid`, and `sample_rdy`,
 all of which must be low (or deasserted) within 120 ns of reset release. This test runs
-in under 10 clock cycles and acts as a gate for the remaining 8 tests — if output
+in under 10 clock cycles and acts as a gate for the remaining tests — if output
 initialization is broken, no downstream test result is reliable.
 
 ## test\_param\_programming
@@ -209,8 +203,6 @@ indicates a bit-width or sign-extension problem in the parameter latch.
 Programs an unequal but valid SV distribution — [60, 45, 55, 50, 40] totaling 250 SVs —
 and reads it back from the `num_sv_per_class` array. The checks confirm that each class
 entry stores independently and that the sum (250) does not trigger ERR\_SV\_OVERFLOW.
-This is the nominal training configuration from the m3 era (250 SVs, later doubled to
-500 in m4/m5).
 
 ## test\_sv\_counts\_unequal\_stress
 
@@ -219,24 +211,6 @@ register file accepts it without error, even though one class (Normal) holds 5×
 than another (PVC). The test verifies that the SV counter loop handles non-uniform class
 sizes correctly and does not mis-index into the alpha table when the class boundaries
 are irregular.
-
-## test\_qspi\_fifo\_load *(name retained from m3 development; interface replaced by Wishbone + SRAM in m5)*
-
-Streams a full 256-word feature vector through the QSPI interface (`qspi_valid` /
-`qspi_data` / `qspi_ready`) and confirms that the FIFO absorbs all 256 words without
-asserting `qspi_ready = 0` (no backpressure triggered). The simulation wall time is
-10,420 ns — roughly 1042 clock cycles — reflecting one word per cycle throughput.
-This test was the initial vehicle for finding FIFO depth misconfigurations that would
-silently drop feature dimensions.
-
-## test\_qspi\_backpressure *(name retained from m3 development; interface replaced by Wishbone + SRAM in m5)*
-
-Deliberately overflows the FIFO by continuing to send `qspi_valid` after it is
-full, then verifies that `qspi_ready` deasserts to signal backpressure. Words presented
-while `qspi_ready` is low must not be written into the FIFO; the test confirms that the
-FIFO word count does not exceed FIFO\_DEPTH and that no ERR\_FIFO\_OVERFLOW fires (because
-the host respected backpressure). The 168,000 ns simulation time reflects waiting for
-the core to drain the FIFO while new words are held off.
 
 ## test\_default\_gamma\_fixed\_point
 
@@ -305,33 +279,29 @@ overhead ≈ 208 cycles.
 
 ## tb\_wb\_unit.py — Wishbone Interface Unit Tests
 
-`tb_wb_unit.py` replaces the legacy QSPI/FIFO tests from m3 with 7 targeted tests that
-exercise the Wishbone register map through the `user_project_wrapper`. All tests use a
-minimal 5-SV-per-class configuration (25 total) so each test completes in under 200,000 ns.
-Stimulus is synthetic constant-value fixed-point patterns — the goal is interface correctness,
-not classification accuracy.
+`tb_wb_unit.py` provides 7 targeted tests that exercise the Wishbone register map through
+the `user_project_wrapper`. All tests use a minimal 5-SV-per-class configuration (25 total)
+so each test completes in under 200,000 ns. Stimulus is synthetic constant-value fixed-point
+patterns — the goal is interface correctness, not classification accuracy.
 
 ## test\_wb\_reset\_outputs
 
 Reads the STATUS register immediately after reset and confirms that `done`, `error`, and
-`class_out` are all zero. Replaces m3 `test_reset_outputs`, which checked the same condition
-on the direct-port interface; this version drives via Wishbone read at offset 0x08.
+`class_out` are all zero. Drives via Wishbone read at offset 0x08.
 
 ## test\_wb\_gamma\_register
 
-Writes `gamma = 0.25` to `PARAM_WR` (offset 0x24) using the `(write_en << 19) | (addr << 16) | data` encoding, then reads back the internal `gamma_reg` signal via hierarchy. Confirms that the Q6.10 encoding 0x0100 round-trips correctly. Replaces m3 `test_param_programming`.
+Writes `gamma = 0.25` to `PARAM_WR` (offset 0x24) using the `(write_en << 19) | (addr << 16) | data` encoding, then reads back the internal `gamma_reg` signal via hierarchy. Confirms that the Q6.10 encoding 0x0100 round-trips correctly.
 
 ## test\_wb\_num\_sv\_registers
 
-Writes five distinct SV counts — [10, 20, 15, 25, 30] — to `NUM_SV[0..4]` (offsets 0x10–0x20) and attempts to read them back via signal hierarchy. Confirms total = 100 and that no SV count exceeds the valid range. Replaces m3 `test_sv_counts_set`.
+Writes five distinct SV counts — [10, 20, 15, 25, 30] — to `NUM_SV[0..4]` (offsets 0x10–0x20) and attempts to read them back via signal hierarchy. Confirms total = 100 and that no SV count exceeds the valid range.
 
 ## test\_wb\_alpha\_load
 
 Loads 25 alpha coefficients (one per SV, linearly varying from +0.50 to +0.26) through
 `ALPHA_WR` (offset 0x28) using the `(index << 16) | value` encoding. Verifies that the
-STATUS error flag is not asserted after all 25 writes complete. Replaces m3
-`test_sv_counts_unequal_stress`, which tested the same stress-load pattern on the direct
-alpha table port.
+STATUS error flag is not asserted after all 25 writes complete.
 
 ## test\_wb\_sram\_load
 
@@ -339,24 +309,22 @@ Configures the full 5-SV-per-class SVM, arms a 1-cycle SRAM model (`ram_model_la
 and fires `CONTROL[start=1, vbatt_ok=1]`. Waits for `sample_rdy` on GPIO[3] and confirms
 that the ASIC classifies the single-sample batch without a sticky error (error\_code < 0x8).
 Advisory `ERR_WARMING_UP` (code 0x8) is expected for a 1-beat batch and is not treated as
-a failure — the same condition is confirmed by the Level 3 RAM\_LATENCY test. Replaces m3
-`test_qspi_fifo_load`.
+a failure.
 
 ## test\_wb\_ram\_latency
 
 Same as `test_wb_sram_load` but uses a 2-cycle SRAM model (LAT=2). Confirms that the
 RAM\_LATENCY wait-state logic correctly holds off feature reads until data is valid,
 producing the same classification result as LAT=1. The cycle budget is doubled to
-accommodate the extra latency. Replaces m3 `test_qspi_backpressure`.
+accommodate the extra latency.
 
 ## test\_wb\_start\_clear
 
 Fires `start`, waits for `svm_done` (GPIO[4]), immediately writes `CONTROL[start=0]`, and
 then monitors GPIO[3] for 100 cycles to confirm that `sample_rdy` does not fire again. This
-verifies the v9 RTL behavior documented in design\_summary.md Appendix C: the FSM returns
-to IDLE after the batch and immediately re-fires if `start` remains asserted. The MCU must
-clear `CONTROL[0]` within one clock cycle of `done` to prevent re-classification. New test,
-no m3 equivalent.
+verifies that the FSM returns to IDLE after the batch and immediately re-fires if `start`
+remains asserted. The MCU must clear `CONTROL[0]` within one clock cycle of `done` to
+prevent re-classification.
 
 ---
 
@@ -371,8 +339,8 @@ This is the primary system-level verification. `tb_wb_cosim.py` acts as the host
 and drives the full `user_project_wrapper` exclusively through the Wishbone B4 register
 interface — the same path that production firmware uses on Caravel silicon.
 
-**Setup phase:** The script loads real MIT-BIH Arrhythmia Database ECG data using
-`wfdb` (PhysioNet library) and applies the same 80/20 stratified split as the training
+**Setup phase:** The script loads real ECG data from MIT-BIH, SVDB, and INCART
+(PhysioNet, via `wfdb`) and applies the same 80/20 stratified split as the training
 pipeline (`random_state=42`, 300 test samples, 60 per class). It trains an sklearn
 OVR-SVM with gamma=0.25 and C=1.0 in floating-point, extracts the 500 alpha coefficients
 and SV matrix in Q6.10, and writes them to a Python SRAM dictionary that models the
@@ -408,7 +376,7 @@ intrinsic morphological ambiguity of VT and SVT on a single-lead ECG.
 
 The Caravel DV framework compiles `svm_wb_test.c` to RISC-V machine code and runs it
 inside a full RTL simulation of the Caravel management SoC. Unlike Level 4, which drives
-Wishbone transactions directly from cocotb coroutines, Level 5 exercises the complete
+Wishbone transactions directly from cocotb coroutines, Level 6 exercises the complete
 silicon path: the RISC-V processor fetches instructions from a model of on-chip flash,
 the C firmware executes Wishbone writes through the SoC's native bus fabric, the GPIO
 mux routes `io_out` signals to the user project's GPIO ports, and the Logic Analyzer
@@ -425,24 +393,12 @@ without bus errors, GPIO transitions visible on the expected pins) constitutes a
 | Level | Testbench(es) | Interface | Framework | Tests | Result |
 |-------|---------------|-----------|-----------|-------|--------|
 | 1 — Unit | tb\_top, tb\_error\_codes, tb\_backpressure, tb\_consecutive, tb\_dist\_boundary, tb\_dist\_zero, tb\_gamma\_zero, tb\_interface, tb\_min\_sv, tb\_multi\_heartbeat, tb\_param\_write, tb\_power, tb\_warmup | Direct RTL | iverilog | 13 | **13/13 PASS** |
-| 2 — Integration | test\_reset\_outputs, test\_param\_programming, test\_sv\_counts\_set, test\_sv\_counts\_unequal\_stress, test\_qspi\_fifo\_load, test\_qspi\_backpressure, test\_default\_gamma\_fixed\_point, test\_full\_pipeline\_small\_batch, test\_kernel\_output\_range | Direct RTL | cocotb | 9 | **9/9 PASS** |
+| 2 — Integration | test\_reset\_outputs, test\_param\_programming, test\_sv\_counts\_set, test\_sv\_counts\_unequal\_stress, test\_default\_gamma\_fixed\_point, test\_full\_pipeline\_small\_batch, test\_kernel\_output\_range | Direct RTL | cocotb | 7 | **7/7 PASS** |
 | 3 — Feature | svm\_ram\_latency\_tb | Direct RTL | iverilog | 1 | **1/1 PASS** |
 | 4 — Wishbone Unit | tb\_wb\_unit (7 tests) | Wishbone + wrapper | cocotb | 7 | **7/7 PASS** |
 | 5 — System | tb\_wb\_cosim | Wishbone + wrapper | cocotb | 1 | **PASS — 97.67%** |
 | 6 — Platform DV | svm\_wb\_test.c | Wishbone + SoC RTL | Caravel DV | 1 | **RTL sim complete** |
-| **Total** | | | | **32** | **32/32 PASS** |
-
-**Note on interface terminology in Levels 1 and 2:** The Level 1 and 2 tests were written
-when the core still used a QSPI/FIFO streaming interface, and their signal names reflect
-that era (e.g., `qspi_valid`, `qspi_ready`, `sv_ram_addr`). These tests drive
-`svm_compute_core` at its direct RTL ports, bypassing the Caravel wrapper entirely, so the
-internal port names have not changed even though the top-level communication strategy moved
-to Wishbone. The Wishbone interface lives in `top.sv` and translates incoming bus
-transactions into the same internal signals the unit tests drive directly. The Level 1 and
-2 tests therefore remain valid for the final RTL. Levels 4 and 5 exercise the complete
-Wishbone path as silicon would see it — Level 4 (`tb_wb_unit.py`) verifies the register
-interface, and Level 5 (`tb_wb_cosim.py`) verifies end-to-end classification at 97.67%
-accuracy.
+| **Total** | | | | **30** | **30/30 PASS** |
 
 ---
-*ECE410 · Portland State University · Adam Handwerger · sky130A · MIT-BIH Arrhythmia Database*
+*ECE410 · Portland State University · Adam Handwerger · sky130A · MIT-BIH + SVDB + INCART*
