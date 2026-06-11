@@ -52,10 +52,29 @@
 
 | Implementation | Accuracy | SVs | Notes |
 |---------------|----------|-----|-------|
-| sklearn OVR (float) | 97.67% | 416 total (unlimited) | float precision |
-| ASIC binary OVR (Q6.10) | 97.67% | 500 total (100×5) | gamma=0.25, C=1.0 |
+| sklearn OVR (float, joint) | 97.67% | 416 total (unlimited) | float precision, joint multiclass training |
+| ASIC binary OVR (float) | 98.33% | 500 total (100x5) | 5 separate binary SVMs, float64, fair Q6.10 baseline |
+| ASIC binary OVR (Q6.10) | 97.67% | 500 total (100x5) | same model as above, fixed-point hardware |
 
-**Zero accuracy gap** — ASIC exactly matches sklearn on all 300 test samples. See Testing Set section for per-class breakdown.
+**Three-way accuracy breakdown** (see `confusion_3way.png`):
+
+The ASIC uses 5 separate binary OVR SVMs (one per class) each capped at 100 SVs/class,
+which is a different training approach from sklearn's joint multiclass OVR. A fair
+assessment of Q6.10 quantization error requires comparing the ASIC against a float
+reference using the identical model.
+
+- **sklearn vs. ASIC float (model architecture effect):** 4 samples differ. The binary
+  OVR model at 98.33% actually *outperforms* sklearn's joint OVR at 97.67% in float --
+  the constrained model is not a downgrade. Errors differ: the binary model eliminates
+  the 2 SVT->Normal errors present in sklearn but introduces 1 AFib->VT error.
+
+- **ASIC float vs. ASIC Q6.10 (quantization effect):** 4 samples differ. Q6.10
+  quantization flips 3 correct predictions to wrong (1 VT->AFib, 2 SVT->Normal) and
+  recovers 1 incorrect prediction (AFib->VT corrected to AFib). Net: -2 correct,
+  dropping from 98.33% to 97.67%.
+
+- **Final ASIC accuracy matching sklearn (97.67%) is coincidental** -- the binary OVR
+  model outperforms sklearn in float, and quantization error happens to cancel the gain.
 
 ---
 
@@ -605,6 +624,42 @@ be re-verified at Q6.10 after retraining with new weights.
 new alpha coefficients and bias values loaded via the Wishbone parameter interface
 at startup.
 
+### B.11.2 Q6.10 quantization error mitigation
+
+A three-way comparison (confusion_3way.png) separates two independent accuracy effects:
+
+- **Model architecture vs. sklearn:** The ASIC uses 5 separate binary OVR SVMs capped
+  at 100 SVs/class (500 total), trained independently per class. sklearn uses a joint
+  multiclass OVR SVM with all natural SVs (416 total). These produce different decision
+  boundaries. In float, the binary OVR model achieves **98.33%** — higher than sklearn's
+  97.67%. 4 samples differ between the two float models.
+
+- **Q6.10 quantization vs. binary OVR float:** Q6.10 fixed-point arithmetic flips 4
+  boundary samples relative to the identical float model: 3 correct predictions become
+  wrong (1 VT->AFib, 2 SVT->Normal) and 1 wrong prediction is accidentally corrected
+  (AFib->VT recovered). Net: -2 correct, dropping from 98.33% to 97.67%. The final
+  ASIC accuracy matching sklearn is coincidental.
+
+The 2 SVT->Normal quantization errors occur because SVT has 308 natural SVs but is
+hard-capped at 100 — losing 68% of its boundary information and leaving SVT samples
+near thinner margins.
+
+**Mitigation options ranked by implementation cost:**
+
+| Option | Description | RTL change | Reharden | Retrain |
+|--------|-------------|-----------|---------|---------|
+| 1 | Adaptive SV allocation (e.g. [80,80,80,80,180], total=500) | No | No | Yes |
+| 2 | Wider Horner internal precision (24-bit intermediate) | Yes | Yes | No |
+| 3 | Q6.12 precision (more fractional bits) | Yes | Yes | Yes |
+
+**Recommended next step:** Option 1 — reallocate the fixed 500 SV budget across
+classes. The hardware constraint is 500 total entries in `alpha_table[500]`; the
+`NUM_SV[0-4]` registers are 8-bit (max 255 each) so any per-class allocation summing
+to 500 is valid without RTL changes. SVT has 308 natural SVs but currently gets only
+100. Giving SVT 180 SVs (taking 20 each from the four well-separated classes) gives
+SVT 58% more boundary coverage. The reallocation requires only retraining and
+reloading via `ALPHA_WR` and `NUM_SV` Wishbone registers at startup.
+
 ## Appendix B.12 — System-Level Improvements for Next Iteration
 
 ### B.12.1 Argmax confidence and OvR score calibration
@@ -637,6 +692,30 @@ most likely but because its scores are larger in magnitude.
 3. **Unknown class** — add a 6th "unknown/artifact" class trained on out-of-distribution
    beats (pacemaker, noise, WPW). This requires an additional classifier and alpha
    table entry but eliminates silent misclassification of unseen beat types.
+
+### B.12.2 VT/PVC discrimination: beat-to-beat morphology consistency
+
+The confusion matrix shows the primary remaining error is VT misclassified as PVC
+(4 beats in sklearn, 3 in ASIC). This reflects a well-known clinical overlap: both
+VT and PVC produce wide, aberrant QRS complexes that are morphologically similar on
+a single-beat basis.
+
+The clinical discriminator a cardiologist uses is **sustained rhythm context** — VT
+is a run of consecutive wide-QRS beats at elevated rate, whereas a PVC is an
+isolated ectopic beat followed by a compensatory pause and return to normal rhythm.
+The current 10-beat mean morphology template and RR-interval history partially
+capture this, but for short VT runs (3–5 beats) the mean template may not yet
+diverge enough from an isolated-PVC pattern.
+
+**Recommended improvement:** explicitly encode **beat-to-beat morphology consistency**
+as a feature — e.g., the standard deviation of the QRS morphology over the preceding
+10 beats, or a binary flag for whether the preceding 3 beats are morphologically
+similar to the current beat. Low variance across consecutive beats is the hallmark
+of sustained VT; high variance (one aberrant beat among normal beats) is the
+hallmark of isolated PVC. This feature would live in the RR/rhythm slice of the
+256-dim vector and could replace or supplement several of the RR-interval history
+dimensions. No hardware changes are required — the feature is computed during
+MCU-side feature extraction before the SRAM load.
 
 ---
 
