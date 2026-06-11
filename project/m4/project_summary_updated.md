@@ -652,13 +652,26 @@ near thinner margins.
 | 2 | Wider Horner internal precision (24-bit intermediate) | Yes | Yes | No |
 | 3 | Q6.12 precision (more fractional bits) | Yes | Yes | Yes |
 
-**Recommended next step:** Option 1 — reallocate the fixed 500 SV budget across
-classes. The hardware constraint is 500 total entries in `alpha_table[500]`; the
-`NUM_SV[0-4]` registers are 8-bit (max 255 each) so any per-class allocation summing
-to 500 is valid without RTL changes. SVT has 308 natural SVs but currently gets only
-100. Giving SVT 180 SVs (taking 20 each from the four well-separated classes) gives
-SVT 58% more boundary coverage. The reallocation requires only retraining and
-reloading via `ALPHA_WR` and `NUM_SV` Wishbone registers at startup.
+**Recommended next step:** Option 1 — tested and confirmed. The allocation
+`[90, 90, 90, 140, 90]` (VT gets 140 of its 307 natural SVs, others drop from
+100 to 90, total=500) was evaluated against the baseline `[100x5]`:
+
+| Allocation | Float | Q6.10 | Quant. flips |
+|------------|-------|-------|--------------|
+| Baseline [100, 100, 100, 100, 100] | 98.33% | 98.00% | 1 (Normal->SVT) |
+| VT-modest  [ 90,  90,  90, 140,  90] | 98.33% | **98.33%** | **0** |
+
+The VT-modest allocation eliminates all quantization-induced prediction changes —
+float and Q6.10 produce identical confusion matrices. It also fixes the 1 AFib->VT
+float error present in baseline (AFib 60/60 vs 59/60). Remaining errors (3 VT->PVC,
+1 SVT->PVC, 1 Normal->SVT) are identical in float and Q6.10, confirming they are
+genuine model limitations rather than quantization artifacts.
+
+The hardware constraint is 500 total entries in `alpha_table[500]`; the `NUM_SV[0-4]`
+registers are 8-bit (max 255 each) so any per-class allocation summing to 500 is valid
+without RTL changes. The reallocation requires only retraining and reloading via
+`ALPHA_WR` and `NUM_SV` Wishbone registers at startup. See `confusion_sv_modest.png`
+for the side-by-side comparison.
 
 ## Appendix B.12 — System-Level Improvements for Next Iteration
 
