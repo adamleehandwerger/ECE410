@@ -154,4 +154,19 @@ else if (drain_cnt != 2'd0)
 
 ---
 
+## 10. start → sample_rdy Cycle Sequence (LAT=3, 500 SVs)
+
+| Phase | Cycles (LAT=3) | What happens |
+|-------|---------------|--------------|
+| **LOAD_INPUT** | 768 | FSM asserts ram_ren, puts {row=500+beat, col=dim} on GPIO[28:10]. Waits 3 cycles per feature for ram_rdata on la_data_in[15:0]. 256 features × 3 = 768 cycles. |
+| **COMPUTE_DIST** (×500 SVs) | 500 × 770 = 385,000 | Per SV: 256 SRAM reads from rows 0–499 (LAT=3 each), subtract→square→accumulate pipeline runs in parallel. **2 drain cycles** after feature 255 flush the pipeline before reading the final distance. |
+| **COMPUTE_KERNEL** (×500 SVs) | ~500 × 18 = 9,000 | Horner LUT evaluates exp(−γD) for each accumulated distance. LAT-independent. |
+| **WRITE_CLASS / argmax** | small | Accumulates weighted kernel sums into 5 class score registers; argmax selects winner. |
+| **sample_rdy fires** | — | GPIO[3] pulses, class_out[2:0] holds result, IRQ[0] wakes MCU. |
+| **Total** | ~394,000 cycles | At 40 MHz = **~9.87 ms** — matches design summary. |
+
+**Key constraint:** The 2 drain cycles in COMPUTE_DIST are critical — without them, features 254 and 255 are missing from every distance sum (see §3).
+
+---
+
 *This sheet grows as the study session continues. Add new topics below.*
