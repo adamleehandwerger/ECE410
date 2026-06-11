@@ -542,115 +542,6 @@ theoretically LAT=1 works on a benchtop, but LAT=3 is used for field margin.
 
 ---
 
-## Appendix C — MCU Task Sequence
-
-### C.0 — MCU Integration and Prototype Bringup
-
-The term "host" refers to whatever processor issues Wishbone register writes and reads GPIO
-results. The ASIC is agnostic to which processor plays this role.
-
-**On Caravel silicon (tape-out):** The on-chip RISC-V management core (PicoRV32) is the
-host. It runs compiled C firmware (`svm_wb_test.c`), issues all Wishbone writes, and
-monitors GPIO for `sample_rdy` and `class_out`. The RISC-V is also the host during the
-Caravel DV simulation (Level 6 testbench).
-
-**On a wearable PCB (production):** An external low-power MCU (e.g. STM32L4) becomes the
-host. It connects to the ASIC's Wishbone interface via SPI or I²C bridge and drives GPIO
-directly. The RISC-V management core is bypassed or unused.
-
-**For prototype bringup when silicon arrives:** The chain is PC → Caravel → ASIC:
-
-1. Connect a laptop to the Caravel chip via the **housekeeping SPI** port — a dedicated
-   SPI interface on the Caravel die for external firmware loading and GPIO monitoring.
-2. Use the Efabless `caravel_board` Python utility to flash `svm_wb_test.c` firmware onto
-   the management core's on-chip flash.
-3. The PicoRV32 boots, runs the firmware, and issues Wishbone writes to configure the SVM
-   (alpha coefficients, SV counts, gamma, NUM_SAMPLES).
-4. The RISC-V fires `start` via `CONTROL[0]`, monitors `sample_rdy` on GPIO, and echoes
-   results back to the laptop over UART.
-
-In all three cases the ASIC interface is identical — Wishbone registers at `0x3000_0000`,
-GPIO address bus on `GPIO[28:10]`, read data on `la_data_in[15:0]`. Switching from
-prototype to production only requires replacing the firmware host; no RTL changes.
-
----
-
-The MCU drives every phase of the system. The ASIC is passive until `start` fires
-and runs autonomously until `done` pulses. The MCU must not assume `start` self-clears —
-if `start` remains asserted when the FSM returns to IDLE, the ASIC immediately begins
-another batch on the same data.
-
-### Per-batch sequence
-
-**Phase 1 — Data loading (MCU active, ASIC idle)**
-
-1. Collect 1000 heartbeats via ECG frontend (250 Hz sampling, feature extraction per beat)
-2. Write SV matrix to off-chip SRAM: 500 rows × 256 Q6.10 features → rows 0–499
-3. Write input matrix to off-chip SRAM: up to 1000 beats × 256 Q6.10 features → rows 500–1499
-4. Write alpha coefficients via `ALPHA_WR` (Wishbone `0x28`): one write per SV (500 total)
-5. Write `NUM_SAMPLES` (Wishbone `0x0C`): number of beats in this batch
-6. Write `NUM_SV[0–4]` (Wishbone `0x10–0x20`): SVs per class (100 each)
-
-**Phase 2 — Fire and sleep (MCU sleeps, ASIC classifies)**
-
-7. Assert `start`: write `0x0B` to CONTROL (`0x04`) — sets `start=1`, `vbatt_ok=1`, `kern_ready=1`
-8. MCU enters deep sleep — ASIC classifies the full batch autonomously (~9.87 ms at LAT=3)
-
-**Phase 3 — Done handling (MCU wakes on IRQ)**
-
-9. IRQ[1] (`done`) fires — MCU wakes from sleep
-10. **Clear `start`**: write `0x0A` to CONTROL (`0x04`) — clears bit 0, leaving `vbatt_ok` and `kern_ready` set.
-    If `start` is not cleared before the FSM reaches IDLE, the ASIC will immediately re-classify the same batch.
-11. Read `STATUS` (`0x08`): bits `[8:6]` = `class_out` for the final beat; bit `[1]` = error flag
-12. Per-beat results were signalled by `sample_rdy` (IRQ[0]) during classification — MCU firmware
-    should have latched `class_out` on each IRQ[0] pulse for the full per-beat result log
-
-**Phase 4 — Next batch**
-
-13. Load new input matrix into SRAM rows 500–1499 (SV matrix in rows 0–499 is unchanged unless model reloaded)
-14. Update `NUM_SAMPLES` if batch size changed
-15. Re-assert `start` → repeat from Phase 2
-
-### Register writes summary
-
-| Step | Register | Offset | Value | Effect |
-|------|----------|--------|-------|--------|
-| Load alpha | ALPHA_WR | `0x28` | `{sv_idx[8:0], alpha[15:0]}` | Write one alpha coefficient |
-| Set batch size | NUM_SAMPLES | `0x0C` | `0x03E8` (1000) | Beats per batch |
-| Set SV counts | NUM_SV[0–4] | `0x10–0x20` | `0x64` (100) each | SVs per class |
-| Fire | CONTROL | `0x04` | `0x0B` | start=1, vbatt_ok=1, kern_ready=1 |
-| Clear | CONTROL | `0x04` | `0x0A` | start=0, vbatt_ok=1, kern_ready=1 |
-| Read result | STATUS | `0x08` | — | `[8:6]`=class, `[1]`=error, `[0]`=done |
-
-### C.2 — Data history storage
-
-Per-beat `class_out` values captured from IRQ[0] pulses are held in the nRF52840's
-256 KB internal SRAM during classification. For long-term history that must survive
-power cycles, the MCU flushes each completed batch to external non-volatile storage.
-
-**External flash (recommended for wearable logging)**
-
-The nRF52840 QSPI interface connects to a NOR flash such as the MX25R6435F (4 MB,
-1.8 V, ultra-low standby ~4 µA). Each classification record is compact — 3-bit class
-+ 32-bit timestamp = 5 bytes — so 4 MB holds ~800,000 beat records (~11 days at
-80 bpm continuous). The MCU buffers one batch in internal SRAM, then issues a single
-QSPI page-program on `done` IRQ before sleeping.
-
-**BLE streaming (recommended for real-time clinical offload)**
-
-The nRF52840 BLE stack can stream `class_out` records to a paired phone or gateway
-in real time. Each `sample_rdy` IRQ enqueues a 5-byte record into a BLE notification
-buffer; the phone application handles long-term storage and trend analysis. No
-external flash is required if connectivity is assumed.
-
-**Hybrid (wearable + clinic)**
-
-Buffer to flash during normal wear; bulk-transfer history to phone over BLE when
-within range. The nRF52840 supports concurrent QSPI and BLE without additional
-hardware.
-
----
-
 ## Appendix B.10 — RTL Improvements
 
 ### B.10.1 NUM_SAMPLES reset default
@@ -747,8 +638,148 @@ most likely but because its scores are larger in magnitude.
    beats (pacemaker, noise, WPW). This requires an additional classifier and alpha
    table entry but eliminates silent misclassification of unseen beat types.
 
-**Impact on hardware:** Platt scaling only changes the bias and alpha values (training
-change). The confidence threshold requires one additional STATUS register bit and a
-comparator on the two highest accumulators — minimal RTL change. The unknown class
-requires widening `class_out` from 3 to 3 bits (still fits) and adding one more OvR
-classifier (6th alpha table partition of 100 SVs).
+---
+
+## Appendix C — MCU Task Sequence
+
+### C.0 — MCU Integration and Prototype Bringup
+
+The term "host" refers to whatever processor issues Wishbone register writes and reads GPIO
+results. The ASIC is agnostic to which processor plays this role.
+
+**On Caravel silicon (tape-out):** The on-chip RISC-V management core (PicoRV32) is the
+host. It runs compiled C firmware (`svm_wb_test.c`), issues all Wishbone writes, and
+monitors GPIO for `sample_rdy` and `class_out`. The RISC-V is also the host during the
+Caravel DV simulation (Level 6 testbench).
+
+**On a wearable PCB (production):** An external low-power MCU (e.g. STM32L4) becomes the
+host. It connects to the ASIC's Wishbone interface via SPI or I²C bridge and drives GPIO
+directly. The RISC-V management core is bypassed or unused.
+
+**For prototype bringup when silicon arrives:** The chain is PC → Caravel → ASIC:
+
+1. Connect a laptop to the Caravel chip via the **housekeeping SPI** port — a dedicated
+   SPI interface on the Caravel die for external firmware loading and GPIO monitoring.
+2. Use the Efabless `caravel_board` Python utility to flash `svm_wb_test.c` firmware onto
+   the management core's on-chip flash.
+3. The PicoRV32 boots, runs the firmware, and issues Wishbone writes to configure the SVM
+   (alpha coefficients, SV counts, gamma, NUM_SAMPLES).
+4. The RISC-V fires `start` via `CONTROL[0]`, monitors `sample_rdy` on GPIO, and echoes
+   results back to the laptop over UART.
+
+In all three cases the ASIC interface is identical — Wishbone registers at `0x3000_0000`,
+GPIO address bus on `GPIO[28:10]`, read data on `la_data_in[15:0]`. Switching from
+prototype to production only requires replacing the firmware host; no RTL changes.
+
+---
+
+The MCU drives every phase of the system. The ASIC is passive until `start` fires
+and runs autonomously until `done` pulses. The MCU must not assume `start` self-clears —
+if `start` remains asserted when the FSM returns to IDLE, the ASIC immediately begins
+another batch on the same data.
+
+### C.1 — Per-batch task sequence
+
+**Phase 1 — Data loading (MCU active, ASIC idle)**
+
+1. Collect 1000 heartbeats via ECG frontend (250 Hz sampling, feature extraction per beat)
+2. Write SV matrix to off-chip SRAM: 500 rows × 256 Q6.10 features → rows 0–499
+3. Write input matrix to off-chip SRAM: up to 1000 beats × 256 Q6.10 features → rows 500–1499
+4. Write alpha coefficients via `ALPHA_WR` (Wishbone `0x28`): one write per SV (500 total)
+5. Write `NUM_SAMPLES` (Wishbone `0x0C`): number of beats in this batch
+6. Write `NUM_SV[0–4]` (Wishbone `0x10–0x20`): SVs per class (100 each)
+
+**Phase 2 — Fire and sleep (MCU sleeps, ASIC classifies)**
+
+7. Assert `start`: write `0x0B` to CONTROL (`0x04`) — sets `start=1`, `vbatt_ok=1`, `kern_ready=1`
+8. MCU enters deep sleep — ASIC classifies the full batch autonomously (~9.87 ms at LAT=3)
+
+**Phase 3 — Done handling (MCU wakes on IRQ)**
+
+9. IRQ[1] (`done`) fires — MCU wakes from sleep
+10. **Clear `start`**: write `0x0A` to CONTROL (`0x04`) — clears bit 0, leaving `vbatt_ok` and `kern_ready` set.
+    If `start` is not cleared before the FSM reaches IDLE, the ASIC will immediately re-classify the same batch.
+11. Read `STATUS` (`0x08`): bits `[8:6]` = `class_out` for the final beat; bit `[1]` = error flag
+12. Per-beat results were signalled by `sample_rdy` (IRQ[0]) during classification — MCU firmware
+    should have latched `class_out` on each IRQ[0] pulse for the full per-beat result log
+
+**Phase 4 — Next batch**
+
+13. Load new input matrix into SRAM rows 500–1499 (SV matrix in rows 0–499 is unchanged unless model reloaded)
+14. Update `NUM_SAMPLES` if batch size changed
+15. Re-assert `start` → repeat from Phase 2
+
+### Register writes summary
+
+| Step | Register | Offset | Value | Effect |
+|------|----------|--------|-------|--------|
+| Load alpha | ALPHA_WR | `0x28` | `{sv_idx[8:0], alpha[15:0]}` | Write one alpha coefficient |
+| Set batch size | NUM_SAMPLES | `0x0C` | `0x03E8` (1000) | Beats per batch |
+| Set SV counts | NUM_SV[0–4] | `0x10–0x20` | `0x64` (100) each | SVs per class |
+| Fire | CONTROL | `0x04` | `0x0B` | start=1, vbatt_ok=1, kern_ready=1 |
+| Clear | CONTROL | `0x04` | `0x0A` | start=0, vbatt_ok=1, kern_ready=1 |
+| Read result | STATUS | `0x08` | — | `[8:6]`=class, `[1]`=error, `[0]`=done |
+
+### C.2 — Data history storage
+
+Per-beat `class_out` values captured from IRQ[0] pulses are held in the nRF52840's
+256 KB internal SRAM during classification. For long-term history that must survive
+power cycles, the MCU flushes each completed batch to external non-volatile storage.
+
+**External flash (recommended for wearable logging)**
+
+The nRF52840 QSPI interface connects to a NOR flash such as the MX25R6435F (4 MB,
+1.8 V, ultra-low standby ~4 µA). Each classification record is compact — 3-bit class
++ 32-bit timestamp = 5 bytes — so 4 MB holds ~800,000 beat records (~11 days at
+80 bpm continuous). The MCU buffers one batch in internal SRAM, then issues a single
+QSPI page-program on `done` IRQ before sleeping.
+
+**BLE streaming (recommended for real-time clinical offload)**
+
+The nRF52840 BLE stack can stream `class_out` records to a paired phone or gateway
+in real time. Each `sample_rdy` IRQ enqueues a 5-byte record into a BLE notification
+buffer; the phone application handles long-term storage and trend analysis. No
+external flash is required if connectivity is assumed.
+
+**Hybrid (wearable + clinic)**
+
+Buffer to flash during normal wear; bulk-transfer history to phone over BLE when
+within range. The nRF52840 supports concurrent QSPI and BLE without additional
+hardware.
+
+### B.10.1 NUM_SAMPLES reset default
+
+`reg_num_samples` resets to `10'd0` on power-on. Unlike `NUM_SV[0–4]` which reset
+to `8'd50` (a safe non-zero default), a zero `NUM_SAMPLES` causes the batch FSM to
+complete immediately with no classifications if the MCU forgets to write the register
+before asserting start — a silent failure with no error flag.
+
+**Recommended fix:** change the reset assignment in `top.sv`:
+
+```systemverilog
+// current
+reg_num_samples <= 0;
+
+// improved
+reg_num_samples <= 10'd1000;   // match nominal deployment batch size
+```
+
+This makes `NUM_SAMPLES` consistent with `NUM_SV` (sticky, sensible default) and
+eliminates a bringup gotcha where a forgotten register write produces a zero-beat
+batch that appears to succeed.
+
+### B.10.2 NUM_SAMPLES sticky behavior
+
+`NUM_SAMPLES` should retain its value across batches without being rewritten by the
+MCU each time. Currently the register holds its value (Wishbone registers are
+persistent by design), but the reset default of `10'd0` means the first batch after
+power-on will silently process zero beats unless the MCU writes the register before
+firing `start`.
+
+**Recommended fix:** in addition to the reset default change in B.10.1, document
+`NUM_SAMPLES` as a sticky configuration register in firmware — write it once at
+startup alongside `NUM_SV[0–4]`, `ALPHA_WR`, and `PARAM_WR`, and only rewrite if
+the batch size changes. This matches the behavior of all other configuration registers
+and avoids a class of firmware bugs where the register is written in the first batch
+but forgotten in subsequent batches after a partial reset.
+
