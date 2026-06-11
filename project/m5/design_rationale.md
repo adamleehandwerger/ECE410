@@ -280,6 +280,15 @@ Q6.10 was designed with the accumulator range in mind. The integer portion (6 bi
 code 0x4) rather than silently corrupting the kernel output. Q6.10 is also simpler to
 implement: no exponent handling, no NaN propagation, no subnormal-number cases.
 
+**Fixed-point multiplication and re-quantization.** Multiplying two Q6.10 values produces a
+32-bit raw product in Q12.20 format (integer bits double: 6+6=12; fractional bits double:
+10+10=20). To return to Q6.10, the product is arithmetic-right-shifted by 10 bits, discarding
+the lower 10 fractional bits and yielding a Q12.10 result. The upper bits are then truncated
+to the 16-bit Q6.10 range. This right-shift is applied after every multiply in the squared-
+difference and Horner stages. The distance accumulator itself is maintained wider than 16 bits
+(32-bit) across the 256 additions to prevent intermediate overflow; the final accumulated
+distance is re-quantized to Q6.10 before the Horner LUT lookup.
+
 ### 8.3 Horner LUT: Range Reduction Required
 
 The Horner polynomial for `exp(x)` converges in the range [−1, 0]. The kernel argument

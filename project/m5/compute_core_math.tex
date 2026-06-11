@@ -52,11 +52,22 @@ with the correspondence
     \text{LSB} = 2^{-10} \approx 0.001.
 \]
 Multiplication of two \(\mathbb{Q}_{6.10}\) values \(\hat{a}\) and \(\hat{b}\)
-produces a 32-bit intermediate result that is right-shifted by 10 bits to
-restore the \(\mathbb{Q}_{6.10}\) format:
+produces a raw 32-bit product in \(\mathbb{Q}_{12.20}\) format, because both the
+integer and fractional bit-widths double:
+\[
+    6 + 6 = 12 \text{ integer bits}, \qquad 10 + 10 = 20 \text{ fractional bits}.
+\]
+To restore \(\mathbb{Q}_{6.10}\), the 32-bit product is arithmetic-right-shifted by
+10 bits (dividing by \(2^{10}\)), yielding a \(\mathbb{Q}_{12.10}\) value:
 \[
     \widehat{a \cdot b} = \frac{\hat{a} \cdot \hat{b}}{2^{10}}.
 \]
+The upper bits are then truncated to the 16-bit \(\mathbb{Q}_{6.10}\) range
+\([-32768,\; 32767]\). This truncation discards the redundant sign-extension bits
+introduced by the wider product; it does \emph{not} lose precision beyond the
+10-bit right-shift already applied. The right-shift is arithmetic (sign-preserving)
+so that negative products are handled correctly.
+
 The parameter \(\gamma = 0.25\) is exactly representable:
 \(\hat{\gamma} = 0.25 \times 1024 = 256 = \texttt{0x0100}\).
 

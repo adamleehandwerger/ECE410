@@ -108,7 +108,7 @@ else if (drain_cnt != 2'd0)
 
 | Parameter | Value |
 |-----------|-------|
-| Accuracy (HW, 300 samples) | 97.67% (293/300) |
+| Accuracy (HW, 300 samples) | 97.67% (293/300) — same as sklearn; confusion matrices differ by 1 VT beat (sklearn: VT→PVC; ASIC: VT→AFib) |
 | Standard cell library | sky130_fd_sc_hd (high-density) |
 | Cell count | 157,991 |
 | Core utilization | 15.0% |

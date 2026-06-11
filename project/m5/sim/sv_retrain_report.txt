@@ -1,0 +1,19 @@
+SV Allocation Retrain Report — ECE410 m5
+==================================================
+Dataset: MIT-BIH+SVDB+INCART  Train=1200  Test=300
+gamma=0.25  C=1.0  random_state=42
+
+Baseline [100x5]  (SVs: [100 100 100 100 100]  total=500)
+  Float accuracy : 0.9833  (295/300)
+  Q6.10 accuracy : 0.9800  (294/300)
+  Quantization flips: 1
+    Sample  51: true=Normal  float=Normal  Q6.10=SVT
+
+VT-heavy [75,75,75,200,75]  (SVs: [ 75  75  75 200  75]  total=500)
+  Float accuracy : 0.8767  (263/300)
+  Q6.10 accuracy : 0.8800  (264/300)
+  Quantization flips: 1
+    Sample 134: true=Normal  float=SVT     Q6.10=Normal
+
+Note: Q6.10 inference uses pure Python hardware model (identical
+algorithm to svm_compute_core RTL). Not a cocotb simulation.
