@@ -544,6 +544,37 @@ theoretically LAT=1 works on a benchtop, but LAT=3 is used for field margin.
 
 ## Appendix C — MCU Task Sequence
 
+### C.0 — MCU Integration and Prototype Bringup
+
+The term "host" refers to whatever processor issues Wishbone register writes and reads GPIO
+results. The ASIC is agnostic to which processor plays this role.
+
+**On Caravel silicon (tape-out):** The on-chip RISC-V management core (PicoRV32) is the
+host. It runs compiled C firmware (`svm_wb_test.c`), issues all Wishbone writes, and
+monitors GPIO for `sample_rdy` and `class_out`. The RISC-V is also the host during the
+Caravel DV simulation (Level 6 testbench).
+
+**On a wearable PCB (production):** An external low-power MCU (e.g. STM32L4) becomes the
+host. It connects to the ASIC's Wishbone interface via SPI or I²C bridge and drives GPIO
+directly. The RISC-V management core is bypassed or unused.
+
+**For prototype bringup when silicon arrives:** The chain is PC → Caravel → ASIC:
+
+1. Connect a laptop to the Caravel chip via the **housekeeping SPI** port — a dedicated
+   SPI interface on the Caravel die for external firmware loading and GPIO monitoring.
+2. Use the Efabless `caravel_board` Python utility to flash `svm_wb_test.c` firmware onto
+   the management core's on-chip flash.
+3. The PicoRV32 boots, runs the firmware, and issues Wishbone writes to configure the SVM
+   (alpha coefficients, SV counts, gamma, NUM_SAMPLES).
+4. The RISC-V fires `start` via `CONTROL[0]`, monitors `sample_rdy` on GPIO, and echoes
+   results back to the laptop over UART.
+
+In all three cases the ASIC interface is identical — Wishbone registers at `0x3000_0000`,
+GPIO address bus on `GPIO[28:10]`, read data on `la_data_in[15:0]`. Switching from
+prototype to production only requires replacing the firmware host; no RTL changes.
+
+---
+
 The MCU drives every phase of the system. The ASIC is passive until `start` fires
 and runs autonomously until `done` pulses. The MCU must not assume `start` self-clears —
 if `start` remains asserted when the FSM returns to IDLE, the ASIC immediately begins
