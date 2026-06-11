@@ -237,90 +237,21 @@ def load_mitbih_beats(records=ALL_MITBIH, max_per_class=300):
     return beats
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 5.  Synthetic ECG generators (fill gaps when real data is scarce)
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _gauss(t, mu, sig, amp):
-    return amp * np.exp(-0.5 * ((t - mu) / sig) ** 2)
-
-def _rr_to_64(rr_samples):
-    rr_norm = np.clip(np.asarray(rr_samples, np.float32) / NORMAL_RR, 0.0, 2.0)
-    return np.interp(np.linspace(0, 1, 64),
-                     np.linspace(0, 1, len(rr_norm)), rr_norm).astype(np.float32)
-
-def _make_ms(beat_fn, rr_fn, n, noise1, noise2, rng):
-    t128 = np.linspace(-1, 1, 128); t64 = np.linspace(-1, 1, 64); out = []
-    for _ in range(n):
-        s1 = beat_fn(t128, rng) + rng.normal(0, noise1, 128)
-        s1 = (s1 / (np.max(np.abs(s1)) + 1e-9)).astype(np.float32)
-        s2 = beat_fn(t64,  rng) + rng.normal(0, noise2, 64)
-        s2 = (s2 / (np.max(np.abs(s2)) + 1e-9)).astype(np.float32)
-        s3 = _rr_to_64(rr_fn(99, rng))
-        out.append(np.concatenate([s1, s2, s3]))
-    return out
-
-def synth_normal(n, rng):
-    def beat(t, r): return (_gauss(t,-0.50,0.08,0.15)+_gauss(t,-0.05,0.03,-0.15)
-                            +_gauss(t, 0.00,0.04,1.00)+_gauss(t, 0.05,0.03,-0.10)
-                            +_gauss(t, 0.35,0.10,0.35))
-    def rr(nb, r):  return r.normal(NORMAL_RR, NORMAL_RR*0.05, nb)
-    return _make_ms(beat, rr, n, 0.03, 0.02, rng)
-
-def synth_pvc(n, rng):
-    def beat(t, r):
-        w = r.uniform(0.12, 0.18)
-        return (_gauss(t,-0.02,w,-0.8)+_gauss(t,0.12,w*0.8,0.5)+_gauss(t,0.45,0.15,-0.4))
-    def rr(nb, r):
-        rv = r.normal(NORMAL_RR, NORMAL_RR*0.05, nb)
-        for pos in r.choice(nb-1, max(1, int(nb*0.05)), replace=False):
-            rv[pos] = r.uniform(0.68, 0.82)*NORMAL_RR
-            rv[pos+1] = r.uniform(1.15, 1.35)*NORMAL_RR
-        return rv
-    return _make_ms(beat, rr, n, 0.04, 0.03, rng)
-
-def synth_afib(n, rng):
-    def beat(t, r):
-        bl = sum(r.uniform(0.03,0.08)*np.sin(2*np.pi*ff*t+r.uniform(0,6.28))
-                 for ff in r.uniform(4,10,6))
-        o = r.uniform(-0.05, 0.05)
-        return (_gauss(t,o-0.04,0.025,-0.12)+_gauss(t,o,0.035,0.90)
-                +_gauss(t,o+0.04,0.025,-0.08)+_gauss(t,o+0.30,0.09,0.25)+bl)
-    def rr(nb, r): return r.uniform(0.50*NORMAL_RR, 1.50*NORMAL_RR, nb)
-    return _make_ms(beat, rr, n, 0.06, 0.05, rng)
-
-def synth_vt(n, rng):
-    def beat(t, r):
-        w = r.uniform(0.10, 0.16); p = r.choice([-1, 1])
-        return (_gauss(t,0.00,w,p*0.95)+_gauss(t,0.08,w*0.9,p*0.30)
-                +_gauss(t,0.35,0.14,-p*0.35))
-    def rr(nb, r): return r.normal(144, 4, nb)
-    return _make_ms(beat, rr, n, 0.04, 0.03, rng)
-
-def synth_svt(n, rng):
-    def beat(t, r): return (_gauss(t,-0.02,0.030,-0.10)+_gauss(t, 0.00,0.035, 1.00)
-                            +_gauss(t, 0.04,0.025,-0.08)+_gauss(t, 0.22,0.070, 0.25)
-                            +_gauss(t, 0.18,0.040,-0.10))
-    def rr(nb, r): return r.normal(120, 3, nb)
-    return _make_ms(beat, rr, n, 0.03, 0.02, rng)
-
-SYNTH_FNS = [synth_normal, synth_pvc, synth_afib, synth_vt, synth_svt]
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 6.  Dataset builder
+# 5.  Dataset builder  (real data only — no synthetic fallback)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def build_dataset(n_per_class=300):
-    print("\n=== Loading MIT-BIH records (multi-scale features) ===")
+    print("\n=== Loading ECG databases: MIT-BIH (real data only) ===")
     real = load_mitbih_beats(max_per_class=n_per_class)
-    rng  = np.random.default_rng(42)
     X, y = [], []
     for cls in range(NUM_CLASSES):
-        rb = real.get(cls, []); n_real = len(rb)
-        n_syn = max(0, n_per_class - n_real)
-        for b in rb:          X.append(b); y.append(cls)
-        for b in SYNTH_FNS[cls](n_syn, rng): X.append(b); y.append(cls)
+        for b in real.get(cls, []):
+            X.append(b); y.append(cls)
+    if not X:
+        raise RuntimeError("No real MIT-BIH beats found — install wfdb and check network.")
+    for cls in range(NUM_CLASSES):
         print(f"  Class {cls} ({CLASS_NAMES[cls]:7s}): "
-              f"{n_real:3d} real + {n_syn:3d} synthetic")
+              f"{len(real.get(cls, [])):3d} real beats")
     return np.array(X, np.float32), np.array(y, np.int32)
 
 # ─────────────────────────────────────────────────────────────────────────────
