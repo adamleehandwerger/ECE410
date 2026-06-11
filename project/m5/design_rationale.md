@@ -324,6 +324,34 @@ added so that the MCU can read the full batch result after `done` asserts, with 
 constraint on when it reads. This also enables post-hoc logging over BLE and supports a
 rolling window mode for continuous online display.
 
+## 9. Clock Frequency: 40 MHz (not 50 MHz)
+
+The design targets 40 MHz (25 ns clock period). The critical path runs through the Horner
+polynomial evaluation — a chain of Q6.10 multiply-accumulate operations that approximate
+exp(−γD). Each step is `result = result × x + coefficient`; the 16×16-bit multiplier is
+the slowest element in the chain.
+
+At TT/25°C/1.80V, post-P&R STA gives WNS = +3.96 ns. The critical path therefore takes
+25 − 3.96 = **21.04 ns**. The maximum achievable clock frequency on sky130 at TT is
+1 / 21.04 ns ≈ **47.5 MHz**.
+
+At 50 MHz (20 ns period), the same path has slack of 20 − 21.04 = **−1.04 ns** — a setup
+violation in the TT corner. The design would fail at its nominal operating point if clocked
+at 50 MHz, not just in the SS extreme corner.
+
+**Why 40 MHz rather than 47.5 MHz:** The 3.96 ns margin provides headroom for process
+variation, PCB clock noise, and temperature excursion above 25°C without entering the SS
+failure regime. At 40 MHz the batch completes in ~9.87 ms per beat, well within the
+750 ms heartbeat window — throughput is not the bottleneck.
+
+**To reach 50 MHz the options are:**
+1. **Pipeline the Horner stages** — insert register cuts between multiply-add steps,
+   halving combinational depth at the cost of one extra latency cycle per kernel.
+2. **Switch to `sky130_fd_sc_hs`** — higher drive strength cells, faster paths, ~15–20%
+   larger area.
+3. **Reduce Horner polynomial degree** — shorter critical path, less accurate kernel
+   approximation near the fractional boundary.
+
 ---
 
 *ECE410 — Portland State University · Adam Handwerger · 2026-06-04*  
