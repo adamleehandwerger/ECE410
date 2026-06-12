@@ -655,9 +655,12 @@ registers are 8-bit (max 255 each), so any per-class allocation summing to ≤50
 valid without RTL changes. Implementation requires only retraining and reloading via
 `ALPHA_WR` and `NUM_SV` Wishbone registers at startup.
 
-If a future iteration requires exceeding 500 total SVs (e.g., to reach the 600-SV
-global optimum), a reharden with an enlarged `alpha_table[600]` and 10-bit
-`alpha_addr` would be required.
+**Further improvement — 600-SV reharden:** The sweep identifies N=120/class (600 total
+SVs) as the global accuracy optimum at 98.67% float and Q6.10, 0 flips — a 0.34 pp
+gain over the current hardware ceiling. Reaching it requires a reharden with
+`alpha_table[600]` (10-bit `alpha_addr`) and updated `NUM_SV` reset defaults.
+No other RTL changes are needed. This is the recommended target for the next
+tape-out iteration.
 
 ## Appendix B.12 — System-Level Improvements for Next Iteration
 
