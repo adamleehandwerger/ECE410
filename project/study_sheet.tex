@@ -1,0 +1,362 @@
+\documentclass[10pt]{article}
+
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{parskip}
+\usepackage{multicol}
+\usepackage{enumitem}
+\usepackage{tabularx}
+
+\geometry{margin=1.8cm, top=1.5cm, bottom=1.5cm}
+\setlength{\parskip}{3pt}
+\setlength{\columnsep}{1.2em}
+
+\definecolor{accent}{RGB}{30,90,160}
+\definecolor{note}{RGB}{140,30,30}
+\titleformat{\section}{\normalsize\bfseries\color{accent}}{}{0em}{}[\titlerule]
+\titleformat{\subsection}{\small\bfseries}{}{0em}{}
+\setlist[itemize]{noitemsep, topsep=2pt, leftmargin=1.2em}
+\setlist[enumerate]{noitemsep, topsep=2pt, leftmargin=1.4em}
+
+\title{\textbf{ECE410 Study Sheet --- RBF-SVM ASIC (m5/v10)}\\[-0.2em]
+       \normalsize Adam Handwerger \quad \texttt{handwerg@pdx.edu} \quad Portland State University}
+\date{2026-06-11}
+
+\begin{document}
+\maketitle
+\vspace{-1em}
+\noindent\rule{\linewidth}{0.5pt}
+\vspace{-0.5em}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Key Project Numbers (v10 / m5 Final)}
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{\hspace{2.5em}}ll@{}}
+\textbf{Technology} & sky130\_fd\_sc\_hd & \textbf{Feature dims} & 256 (128+64+64) \\
+\textbf{Clock} & 40\,MHz (25\,ns) & \textbf{SV allocation} & [95,95,95,120,95]=500 \\
+\textbf{Cell count} & 157,991 & \textbf{Q6.10 accuracy} & 98.33\% (295/300) \\
+\textbf{Core utilization} & 15.0\% & \textbf{Quant.\ flips} & 0 \\
+\textbf{TT WNS} & $+3.96$\,ns (0 viol) & \textbf{LAT / inference} & 3 / 9.87\,ms \\
+\textbf{Active power} & 55.25\,mW & \textbf{Classes} & Normal,PVC,AFib,VT,SVT \\
+\textbf{Avg power @ 80\,bpm} & 0.869\,mW & \textbf{$\gamma$} & $0.25\to$\texttt{0x0100} \\
+\end{tabular}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Fixed-Point Arithmetic (\(\mathbb{Q}_{6.10}\))}
+
+A 16-bit signed value: $\hat{v} = \lfloor v \cdot 2^{10} \rfloor \in [-32768, 32767]$,
+$v = \hat{v}/1024$, LSB $= 2^{-10}\approx 0.001$.
+
+\textbf{Multiplication} of two $\mathbb{Q}_{6.10}$ values produces a raw 32-bit
+$\mathbb{Q}_{12.20}$ product (integer bits $6{+}6=12$; fractional bits $10{+}10=20$).
+Arithmetic right-shift by 10 restores $\mathbb{Q}_{6.10}$:
+\[
+    \widehat{a \cdot b} = \frac{\hat{a}\cdot\hat{b}}{2^{10}} \quad\text{(truncate to 16-bit after shift)}
+\]
+Shift is arithmetic (sign-preserving); truncation discards only redundant sign-extension bits.
+
+\textbf{LUT maximum index:} $D_{\max} = 256 \times 64^2 = 1{,}048{,}576$;
+$\gamma D_{\max} = 262{,}144$; $e^{-8}\times 1024 < 1 \Rightarrow$
+effective LUT entries $= 8$ (indices 0--7); \texttt{lut[8]} $= 0$.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Distance Accumulator \& 2-Cycle Pipeline Drain}
+
+3-stage pipeline per dimension: subtract $\to$ square $\to$ accumulate.
+After dimension 255, stages 1 and 2 hold $\delta_{254},\,\delta_{255}$ in flight.
+\textbf{Two drain cycles} flush them before the result is valid:
+
+\[
+D = \sum_{i=0}^{255}(x_i - sv_i)^2,\qquad
+T_{\text{dist}} = 256\cdot\text{LAT} + 2 \text{ cycles}
+\]
+
+\textbf{Without the drain (v6 bug):} FSM exits ACCUMULATE at cycle $T{+}0$;
+$\delta_{254}$ and $\delta_{255}$ are never added $\Rightarrow$ accuracy collapse.
+
+\textbf{Fix} (\texttt{compute\_core.sv}):
+\begin{verbatim}
+logic [1:0] drain_cnt;
+if (drain_cnt == 2'd2) next_state = OUTPUT;
+\end{verbatim}
+Verified by \texttt{tb\_dist\_zero.sv}: all features $= sv$ features
+$= 1.0$ (Q6.10 \texttt{0x0400}) $\Rightarrow$ \texttt{kernel\_out = 1024}
+($e^{-\gamma\cdot 0} = 1$). Reading one cycle early gives \texttt{kernel\_out} $<$ 1024.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Kernel (Horner + Range-Reduction LUT)}
+
+\[
+K = e^{-\gamma d^2} = e^{-I}\cdot e^{-F}, \quad
+I = \lfloor\hat{p}/2^{10}\rfloor,\quad
+F = (\hat{p}\bmod 2^{10})/2^{10},\quad
+\hat{p} = \hat{\gamma}\cdot\hat{d}^2 / 2^{10}
+\]
+
+\textbf{LUT}: $\texttt{lut}[I] = \lfloor e^{-I}\cdot 1024\rfloor$, $I\in[0,7]$.
+
+\textbf{Horner polynomial} for $e^{-F}$, $F\in[0,1)$, effective degree 6:
+\[
+e^{-F}\approx 1 - F + \tfrac{F^2}{2} - \tfrac{F^3}{6} + \tfrac{F^4}{24} - \tfrac{F^5}{120} + \tfrac{F^6}{720}
+\]
+RTL defines 15 HORNER states (\texttt{HORNER\_14} down to \texttt{HORNER\_0}); coefficients
+$a_7$--$a_{14}$ truncate to zero in $\mathbb{Q}_{6.10}$. FSM runs all 15 steps regardless.
+Kernel FSM total: $T_{\text{kernel}} = 2 + 15 + 1 = 18$ cycles.
+
+\textbf{Output:} $\hat{K} = (\texttt{lut}[I]\cdot\hat{e}^{-F})\gg 10 \in [0,1024]$;
+$\hat{K}=1024 \Leftrightarrow K=1$ (when $\mathbf{x}=\mathbf{sv}$).
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{FSM Cycle Budget (LAT\,=\,3, 500 SVs)}
+
+\[
+T_{\text{beat}} = \underbrace{256\times3}_{\text{LOAD}}
++ 500\times\!\bigl(\underbrace{256\times3+2}_{\text{dist}}
++ \underbrace{18}_{\text{kernel}}\bigr) + 1
+= 768 + 500\times 788 + 1 = 394{,}769\;\text{cycles}
+\]
+At 40\,MHz: $394{,}769/40\times10^6 \approx \mathbf{9.87\,ms/beat}$.
+
+\begin{center}
+\small
+\begin{tabular}{lrrl}
+\toprule
+Phase & Cycles & What happens \\
+\midrule
+LOAD\_INPUT & 768 & 256 features $\times$ LAT=3; GPIO addr, \texttt{la\_data\_in[15:0]} \\
+COMPUTE\_DIST $\times$500 & 385,000 & SV rows 0--499; 2 drain cycles per SV \\
+COMPUTE\_KERNEL $\times$500 & 9,000 & Horner LUT; LAT-independent \\
+WRITE\_CLASS / argmax & $\sim$1 & 5-way comparator; \texttt{class\_out[2:0]}, IRQ[0] \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{OpenLane Physical Implementation Flow}
+
+\begin{center}
+\small
+\begin{tabular}{lll}
+\toprule
+Stage & Tool & Key output / note \\
+\midrule
+Synthesis & Yosys & RTL $\to$ 157,991-cell netlist (sky130\_fd\_sc\_hd) \\
+Floorplan & OpenROAD & Die area, IO pins, 15\% utilization target \\
+PDN & OpenROAD & VDD/VSS stripes and rings inserted before placement \\
+Placement & OpenROAD (RePlAce) & Global (min wire length) $\to$ detailed (legalize) \\
+CTS & TritonCTS & Clock buffer tree; \textbf{skipped in wrapper} (RUN\_CTS=0) \\
+Routing & TritonRoute & Global channels $\to$ detailed metal traces; antennas here \\
+STA & OpenSTA & WNS/TNS; RUN\_MCSTA=1: TT/FF/SS corners \\
+DRC & Magic / KLayout & Physical polygon rule checks \\
+LVS & Netgen & Extracted netlist vs.\ gate-level netlist \\
+GDSII export & Magic / KLayout & Final layout file \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Two-stage harden:} Core hardened first as black-box macro (job 92840);
+wrapper harden places macro and routes only SoC-to-macro interface (job 92861).
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{CTS --- Clock Tree Synthesis}
+
+CTS inserts buffers/inverters so every flip-flop receives the clock edge at
+nearly the same time. Without it, a long wire driving 157\,K flops would have
+large skew, eating setup and hold margins.
+
+\textbf{Why RUN\_CTS=0 in wrapper:} The clock tree already exists inside the
+hardened \texttt{svm\_compute\_core} macro. Re-running CTS on the wrapper would
+try to rebuild the tree from scratch while the tool cannot see inside the
+black-box macro. It would fight the existing internal tree, add skew on top,
+and likely violate core internal timing. The wrapper clock path is trivially
+simple: \texttt{wb\_clk\_i $\to$ ICG $\to$ svm\_gclk $\to$ one macro}. No tree needed.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Multi-Corner STA (v10, RUN\_MCSTA=1)}
+
+\begin{center}
+\small
+\begin{tabular}{llrrl}
+\toprule
+Corner & Conditions & WNS & Violations & Notes \\
+\midrule
+TT & 25°C, 1.80\,V & $+3.96$\,ns & 0 & Nominal \\
+FF & $-$40°C, 1.95\,V & $+11.24$\,ns & 0 & Fast cells = more slack \\
+SS & 100°C, 1.60\,V & $-14.56$\,ns & 163 & Expected for sky130 --- non-blocking \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Why SS fails setup (not hold):} Slow-slow $\to$ slow transistors at high
+temp/low voltage $\to$ combinational paths take longer $\to$ data arrives late
+(setup violation). Hold violations appear in FF (cells settle so quickly data may
+change before hold expires).
+
+\textbf{Why non-blocking:} sky130 SS at 100°C/1.60\,V is an unusually harsh corner
+that even well-designed commercial chips often fail at sky130's nominal clock period.
+Device operates at room temperature on a stable supply; TT and FF are both clean.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{ICG --- Integrated Clock Gate}
+
+A \textbf{latch + AND gate}: latch captures the clock-enable on the falling edge
+(glitch-free); AND combines it with the clock. This gates \texttt{svm\_gclk}
+from \texttt{wb\_clk\_i} while the core is idle.
+
+\textbf{Why not a plain AND:} A combinational AND on a clock line creates glitches ---
+if the enable changes while the clock is high, a partial pulse propagates.
+The latch ensures the enable is only sampled at the falling edge, so only complete
+clock cycles pass through.
+
+\textbf{Power impact:} Duty cycle $\approx 1.3\%$ at 80\,bpm (LAT=3).
+$P_{\text{tree}} = 55.25\times0.37 \approx 20.4\,\text{mW}$ (37\% of active power
+is clock tree). ICG eliminates this for 98.7\% of the time.
+Idle power $\approx 34.85\,\text{mW}$ (leakage only, clock stopped).
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{DRC vs.\ LVS}
+
+\begin{center}
+\small
+\begin{tabular}{llp{3.8cm}lp{4cm}}
+\toprule
+Check & Full Name & Verifies & Tool & m5 result \\
+\midrule
+DRC & Design Rule Check & Physical polygons obey foundry mfg.\ rules & Magic/KLayout & Core: 0; Wrapper: 554 antenna (advisory) \\
+LVS & Layout vs.\ Schematic & Extracted netlist = gate-level netlist & Netgen & Core: 0; Wrapper: 1,683 boundary artifacts \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Antenna violations (554 net / 808 pin):} Charge accumulation during plasma
+etching on long metal runs not yet connected to a gate. Advisory, not blocking.
+Mitigated by antenna diodes or metal jumpers in production.
+
+\textbf{LVS 1,683 errors on wrapper:} Macro interface boundary artifacts --- the
+extractor sees hardened core ports as unresolved black-box connections.
+Not logical errors. Core LVS is clean (0 errors).
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Caravel SoC Harness}
+
+Caravel is the fixed SoC frame for Google-sponsored sky130 shuttle runs.
+You design \texttt{user\_project\_wrapper}; Caravel provides:
+
+\begin{center}
+\small
+\begin{tabular}{lp{8.5cm}}
+\toprule
+Component & Details \\
+\midrule
+RISC-V (PicoRV32) & Management processor; runs C firmware from on-chip flash; issues Wishbone writes \\
+Wishbone B4 & Management core = master; user project = slave at base \texttt{0x3000\_0000} \\
+GPIO mux & 38 configurable pads; SRAM addr GPIO[28:10], read strobe GPIO[29] \\
+Logic Analyzer & 128 \texttt{la\_data\_in/out} wires; SRAM read data on \texttt{la\_data\_in[15:0]} \\
+Clock/reset & \texttt{wb\_clk\_i}, \texttt{wb\_rst\_i} routed to wrapper boundary \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Wishbone base address 0x3000\_0000:} Set by Caravel's hardwired address
+decoder, not your RTL. Your design only sees lower offset bits.
+Changing it requires modifying Caravel's management core --- not permitted.
+
+\textbf{wb\_ack\_o:} Slave handshake signal. The master stalls (\texttt{wbs\_stb\_i}
+held high) until \texttt{wb\_ack\_o} is asserted. If the slave never asserts it,
+the bus hangs permanently --- the master cannot time out, the MCU deadlocks,
+and no further Wishbone traffic is possible until reset.
+
+\begin{center}
+\small
+\begin{tabular}{llll}
+\toprule
+Offset & Register & Dir & Notes \\
+\midrule
+\texttt{+0x04} & CONTROL & RW & [0]=start, [1]=vbatt\_ok, [2]=vbatt\_warn \\
+\texttt{+0x08} & STATUS & RO & [8:6]=class, [9]=sample\_rdy, [0]=done \\
+\texttt{+0x0C} & NUM\_SAMPLES & RW & [9:0] beats (resets to 0; fix: default 1000) \\
+\texttt{+0x10--+0x20} & NUM\_SV[0--4] & RW & [7:0] SVs/class (8-bit, max 255; total $\leq$500) \\
+\texttt{+0x24} & PARAM\_WR & WO & [19]=en, [18:16]=addr, [15:0]=Q6.10 \\
+\texttt{+0x28} & ALPHA\_WR & WO & [24:16]=sv\_idx (9-bit), [15:0]=alpha Q6.10 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{RR Normalization \& Feature Vector}
+
+\textbf{Feature vector (256 dims):}
+128 single-beat morphology ($\pm$64 samples, amplitude-normalized) $+$
+64 10-beat mean template $+$
+64 RR-interval history (99 intervals $\to$ 64 pts).
+
+\textbf{RR normalization:} Raw RR intervals divided by \texttt{NORMAL\_RR}$=$308\,ms
+(median NSR, MIT-BIH+SVDB+INCART) expressed as a ratio, making rhythm features
+rate-independent across patients. The 64 RR dims are the rhythm-slice dimensionality.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Q6.10 Quantization \& Optimal SV Allocation}
+
+\textbf{3-way comparison} (\texttt{confusion\_3way.png}):
+sklearn joint OVR (97.67\%) $\to$ ASIC binary OVR float (98.33\%) $\to$ ASIC Q6.10.
+Separates \emph{model architecture} effect from \emph{quantization} effect.
+Binary OVR model \emph{outperforms} sklearn in float; equal final accuracy is coincidental.
+
+\textbf{Why low-$|\alpha|$ tail SVs hurt Q6.10:}
+Each kernel evaluation contributes a quantization error $\varepsilon_j$ to the score sum.
+High-$|\alpha_j|$ SVs: large signal, noise ratio good.
+Low-$|\alpha_j|$ tail SVs: near-zero signal, same $|\varepsilon_j|$ $\Rightarrow$
+noise-to-signal ratio inverts. Accumulated tail noise can flip boundary samples.
+
+\textbf{SV count sweep} (\texttt{sv\_sweep.py}), uniform $N$ per class:
+
+\begin{center}
+\small
+\begin{tabular}{rrrrll}
+\toprule
+$N$/class & Total & Float & Q6.10 & Flips & Note \\
+\midrule
+90 & 450 & 98.00\% & 98.00\% & 0 & \\
+100 & 500 & 98.33\% & 98.00\% & 1 & HW ceiling (equal split) \\
+\textbf{120} & \textbf{600} & \textbf{98.67\%} & \textbf{98.67\%} & \textbf{0} & global optimum \\
+150 & 750 & 98.00\% & 98.00\% & 0 & tail noise degrades \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Global optimum at $N=120$/class (600 total) exceeds hardware ceiling.
+Float accuracy peaks then \emph{falls} above $N=120$ --- low-$|\alpha|$ tail SVs
+corrupt the boundary in float too.
+
+\textbf{Recommended (within 500-SV hardware):}
+\textbf{[95, 95, 95, 120, 95]} --- VT at per-class optimum, total = 500.
+
+\begin{center}
+\small
+\begin{tabular}{lrrl}
+\toprule
+Allocation & Float & Q6.10 & Flips \\
+\midrule
+Baseline [100,100,100,100,100] & 98.33\% & 98.00\% & 1 (Normal$\to$SVT) \\
+\textbf{Optimal [95,95,95,120,95]} & \textbf{98.33\%} & \textbf{98.33\%} & \textbf{0} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Next iteration (v11 reharden):} \texttt{alpha\_table[500]$\to$[600]},
+\texttt{alpha\_addr} 9-bit$\to$10-bit, \texttt{NUM\_SAMPLES} reset default 0$\to$1000.
+Target: 98.67\% Q6.10, 0 flips. SRAM has room; only on-chip RTL changes required.
+
+\vspace{0.8em}
+\noindent\rule{\linewidth}{0.4pt}
+{\small\itshape ECE410 $\cdot$ Portland State University $\cdot$
+Adam Handwerger $\cdot$ sky130A $\cdot$ MIT-BIH\,+\,SVDB\,+\,INCART $\cdot$ 2026-06-11}
+
+\end{document}
