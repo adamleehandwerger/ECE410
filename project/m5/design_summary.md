@@ -52,18 +52,19 @@
 
 | Implementation | Accuracy | SVs | Notes |
 |---------------|----------|-----|-------|
-| sklearn OVR (float, joint) | 97.67% | 416 total (unlimited) | float precision, joint multiclass training |
-| ASIC binary OVR (float) | 98.33% | 500 total, [95,95,95,120,95] | 5 separate binary SVMs, float64 |
+| sklearn default OVR (float, joint) | 97.67% | 416 total (unlimited) | sklearn default multiclass; OVO internally |
+| sklearn binary OVR (float) | **98.33%** | 500 total, [95,95,95,120,95] | 5 independent binary SVMs, float64; matches ASIC |
 | ASIC binary OVR (Q6.10) | **98.33%** | 500 total, [95,95,95,120,95] | fixed-point hardware, 0 quantization flips |
 
 **Accuracy notes** (see `confusion_comparison_m5.png`, `confusion_3way.png`):
 
-The ASIC uses 5 separate binary OVR SVMs trained independently per class, which differs
-from sklearn's joint multiclass OVR. In float, the binary OVR model at 98.33% outperforms
-sklearn's 97.67% — the constrained model is not a downgrade. The SV allocation
-[95, 95, 95, 120, 95] (VT at the per-class Q6.10 optimum; total=500) eliminates all
-quantization-induced prediction differences. Float and Q6.10 produce identical confusion
-matrices. See Appendix B.11.2 for the full sweep analysis.
+The ASIC implements 5 independent binary OVR SVMs, one per class — a different
+architecture from sklearn's default joint multiclass OVR. Sklearn binary OVR (float)
+at 98.33% outperforms sklearn's default 97.67%. In the final simulation, sklearn binary
+OVR (float) and the ASIC Q6.10 produce identical results — same 295/300 samples
+classified correctly, 0 quantization flips. The SV allocation [95,95,95,120,95]
+eliminates all quantization-induced differences. See Appendix B.11.2 for the full
+sweep analysis.
 
 ---
 
