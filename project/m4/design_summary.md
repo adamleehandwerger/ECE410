@@ -51,10 +51,10 @@
 ## Functional Results
 
 | Implementation | Accuracy | SVs | Notes |
-|---------------|----------|-----|-------|
-| sklearn default OVR (float, joint) | 97.67% | 416 total (unlimited) | sklearn default multiclass; OVO internally |
-| sklearn binary OVR (float) | **98.33%** | 500 total, [95,95,95,120,95] | 5 independent binary SVMs, float64; matches ASIC |
-| ASIC binary OVR (Q6.10) | **98.33%** | 500 total, [95,95,95,120,95] | fixed-point hardware, 0 quantization flips |
+|---|---|---|---|
+| sklearn default OVR (float) | 97.67% | 416 (unlimited) | joint multiclass; OVO internally |
+| sklearn binary OVR (float) | **98.33%** | 500, [95,95,95,120,95] | 5 independent binary SVMs; matches ASIC |
+| ASIC binary OVR (Q6.10) | **98.33%** | 500, [95,95,95,120,95] | Q6.10 fixed-point; 0 quantization flips |
 
 **Accuracy notes** (see `confusion_comparison_m4.png`, `confusion_3way.png`):
 
