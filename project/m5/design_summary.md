@@ -662,6 +662,23 @@ gain over the current hardware ceiling. Reaching it requires a reharden with
 No other RTL changes are needed. This is the recommended target for the next
 tape-out iteration.
 
+**600-SV allocation sweep (`alloc_sweep_600.py`):** A sweep of non-uniform 600-SV
+splits confirms that the uniform allocation is optimal — no class benefits from
+a disproportionate share at the 600-SV level:
+
+| Allocation | Float | Q6.10 | Flips |
+|------------|-------|-------|-------|
+| [120,120,120,120,120] (uniform) | 98.67% | **98.67%** | 0 |
+| [140,115,115,115,115] (Normal boost) | 98.67% | 98.67% | 0 |
+| [115,115,115,140,115] (VT boost) | 98.67% | 98.67% | 0 |
+| [110,110,110,160,110] (VT +40) | 98.67% | 98.33% | 1 |
+| [115,115,115,115,140] (SVT boost) | 98.00% | 98.00% | 0 |
+
+This contrasts with the 500-SV case, where non-uniform [95,95,95,120,95] was
+required to eliminate a quantization flip. At 600 SVs each class already has
+enough high-|α| support vectors; concentrating more in one class introduces
+tail noise without improving any boundary. **Target for v11: [120,120,120,120,120].**
+
 ## Appendix B.12 — System-Level Improvements for Next Iteration
 
 ### B.12.1 Argmax confidence and OvR score calibration
