@@ -2,10 +2,12 @@
 confusion_comparison.py  —  ECE410_project_tb_netlist
 ======================================================
 Side-by-side confusion matrices: sklearn float64 vs HW Q6.10 LUT kernel.
+Uses Numba JIT (parallel prange) for the HW kernel matrix.
 
-HW kernel matrix is computed with Numba JIT (parallel prange).
-The hw_dist_nb model includes the 2-cycle pipeline drain (Fix #10) so
-all 256 feature dimensions contribute — matching the fixed RTL exactly.
+NOTE: The canonical best-sklearn vs best-ASIC-Q6.10 comparison is now in
+confusion_comparison_m5.py (binary OVR, optimal allocation [95,95,95,120,95],
+real data only).  This script retains the original Numba/OvO approach for
+reference; confusion_comparison.png is kept in sync with confusion_comparison_m5.png.
 
 Outputs:
   confusion_comparison.png  in the same directory as this script
