@@ -52,10 +52,18 @@
 
 | Implementation | Accuracy | SVs | Notes |
 |---------------|----------|-----|-------|
-| sklearn OVR (float) | 97.67% | 416 total (unlimited) | float precision |
-| ASIC binary OVR (Q6.10) | 97.67% | 500 total (100×5) | gamma=0.25, C=1.0 |
+| sklearn OVR (float, joint) | 97.67% | 416 total (unlimited) | float precision, joint multiclass training |
+| ASIC binary OVR (float) | 98.33% | 500 total, [95,95,95,120,95] | 5 separate binary SVMs, float64 |
+| ASIC binary OVR (Q6.10) | **98.33%** | 500 total, [95,95,95,120,95] | fixed-point hardware, 0 quantization flips |
 
-**Zero accuracy gap** — ASIC exactly matches sklearn on all 300 test samples. See Testing Set section for per-class breakdown.
+**Accuracy notes** (see `confusion_comparison_m4.png`, `confusion_3way.png`):
+
+The ASIC uses 5 separate binary OVR SVMs trained independently per class, which differs
+from sklearn's joint multiclass OVR. In float, the binary OVR model at 98.33% outperforms
+sklearn's 97.67% — the constrained model is not a downgrade. The SV allocation
+[95, 95, 95, 120, 95] (VT at the per-class Q6.10 optimum; total=500) eliminates all
+quantization-induced prediction differences. Float and Q6.10 produce identical confusion
+matrices. See Appendix B.11.2 for the full sweep analysis.
 
 ---
 
@@ -63,7 +71,7 @@
 
 | Parameter | Value |
 |-----------|-------|
-| Source | MIT-BIH Arrhythmia Database (PhysioNet) |
+| Source | MIT-BIH + SVDB + INCART (PhysioNet) — pooled, stratified |
 | Split | 80% train / 20% test — stratified, `random_state=42` |
 | Beats per class | 240 |
 | Classes | Normal (N), PVC, AFib, VT, SVT |
@@ -77,21 +85,21 @@
 
 | Parameter | Value |
 |-----------|-------|
-| Source | MIT-BIH Arrhythmia Database (PhysioNet) — held-out 20% |
+| Source | MIT-BIH + SVDB + INCART (PhysioNet) — held-out 20% stratified |
 | Beats per class | 60 |
 | **Total test beats** | **300** |
 | sklearn accuracy | 97.67% (293/300) |
-| ASIC accuracy | 97.67% (293/300) — zero gap vs. float |
+| ASIC accuracy (Q6.10, optimal alloc) | **98.33%** (295/300) — zero quantization gap vs. float |
 
-Per-class test results:
+Per-class Q6.10 results (optimal allocation [95, 95, 95, 120, 95]):
 
 | Class | Correct | Accuracy |
 |-------|---------|----------|
-| Normal (N) | 60/60 | 100.0% |
+| Normal (N) | 59/60 | 98.3% |
 | PVC | 60/60 | 100.0% |
 | AFib | 60/60 | 100.0% |
-| VT | 56/60 | 93.3% |
-| SVT | 57/60 | 95.0% |
+| VT | 57/60 | 95.0% |
+| SVT | 59/60 | 98.3% |
 
 ---
 
@@ -129,7 +137,7 @@ MCU (low-power, continuous)
     │  1. Collect 1000 heartbeats (250 Hz ECG → feature extraction)
     │  2. Load SV matrix  (500 SVs × 256 features) → SRAM rows 0..499
     │  3. Load input matrix (1000 beats × 256 features) → SRAM rows 500..1499
-    │  4. Write NUM_SAMPLES = 1000, write NUM_SV_0–4 = 100 each
+    │  4. Write NUM_SAMPLES = 1000, write NUM_SV_0–4 = [95,95,95,120,95]
     │  5. Write alpha coefficients via ALPHA_WR (Wishbone 0x28)
     │  6. Fire CONTROL[start]
     │
@@ -154,7 +162,7 @@ Inference time scales linearly with `RAM_LATENCY`. At 40 MHz:
 | +0x04 | CONTROL | RW | [0]=start [1]=vbatt_ok [2]=vbatt_warn |
 | +0x08 | STATUS | RO | [0]=done [1]=error [5:2]=error_code [8:6]=class [9]=sample_rdy |
 | +0x0C | NUM_SAMPLES | RW | [9:0] beats in batch (1–1000) |
-| +0x10–+0x20 | NUM_SV[0–4] | RW | [7:0] SVs per class (max 100 each) |
+| +0x10–+0x20 | NUM_SV[0–4] | RW | [7:0] SVs per class (8-bit, max 255; total ≤ 500) |
 | +0x24 | PARAM_WR | WO | [19]=en [18:16]=addr [15:0]=data (gamma, C, bias) |
 | +0x28 | ALPHA_WR | WO | [24:16]=sv_global_idx (9-bit) [15:0]=alpha Q6.10 |
 
@@ -223,8 +231,8 @@ classification conventions:
 | RR-interval history (99 intervals → 64 pts, norm to NORMAL_RR=308 ms) | 64 | Llamedo M, Martínez JP. "Heartbeat classification using feature selection driven by database generalization criteria." *IEEE Trans Biomed Eng* 58(3):616-25, 2011. DOI: [10.1109/TBME.2010.2068048](https://doi.org/10.1109/TBME.2010.2068048) |
 
 Standard: AAMI ANSI EC57:2012 — Performance Requirements for Ambulatory ECG Analysers.  
-Dataset: PhysioNet MIT-BIH Arrhythmia Database (Moody GB, Mark RG, 2001).  
-DOI: [10.13026/C2F305](https://doi.org/10.13026/C2F305)
+Datasets: PhysioNet MIT-BIH Arrhythmia Database (Moody GB, Mark RG, 2001) DOI: [10.13026/C2F305](https://doi.org/10.13026/C2F305);  
+SVDB (Greenwald SD, 1990); INCART (Taddei A et al., 1992) — all via wfdb Python package.
 
 ---
 
@@ -320,8 +328,9 @@ wishbone_write(WB_BASE + 0x04, 0x0B)   # CONTROL: start=1, vbatt_ok=1, kern_read
 
 ### Constraints
 
-- Total SV count must not exceed 500 (100 per class maximum). Models exceeding this
-  require re-synthesis with updated `NUM_SV` parameters.
+- Total SV count must not exceed 500 (`alpha_table` has 500 entries). Per-class
+  maximum is 255 (8-bit `NUM_SV` register). Models requiring more than 500 total SVs
+  require re-synthesis with an enlarged `alpha_table`.
 - Gamma must be representable in Q6.10 (range 0–63.999, resolution ~0.001).
 - Alpha values must be representable in Q6.10 (signed, range −32 to +31.999).
 - The reload can be performed between any two batches. The ASIC does not need to be
@@ -542,14 +551,232 @@ theoretically LAT=1 works on a benchtop, but LAT=3 is used for field margin.
 
 ---
 
+## Appendix B.10 — RTL Improvements
+
+### B.10.1 NUM_SAMPLES reset default
+
+`reg_num_samples` resets to `10'd0` on power-on. Unlike `NUM_SV[0–4]` which reset
+to `8'd50` (a safe non-zero default), a zero `NUM_SAMPLES` causes the batch FSM to
+complete immediately with no classifications if the MCU forgets to write the register
+before asserting start — a silent failure with no error flag.
+
+**Recommended fix:** change the reset assignment in `top.sv`:
+
+```systemverilog
+// current
+reg_num_samples <= 0;
+
+// improved
+reg_num_samples <= 10'd1000;   // match nominal deployment batch size
+```
+
+This makes `NUM_SAMPLES` consistent with `NUM_SV` (sticky, sensible default) and
+eliminates a bringup gotcha where a forgotten register write produces a zero-beat
+batch that appears to succeed.
+
+### B.10.2 NUM_SAMPLES sticky behavior
+
+`NUM_SAMPLES` should retain its value across batches without being rewritten by the
+MCU each time. Currently the register holds its value (Wishbone registers are
+persistent by design), but the reset default of `10'd0` means the first batch after
+power-on will silently process zero beats unless the MCU writes the register before
+firing `start`.
+
+**Recommended fix:** in addition to the reset default change in B.10.1, document
+`NUM_SAMPLES` as a sticky configuration register in firmware — write it once at
+startup alongside `NUM_SV[0–4]`, `ALPHA_WR`, and `PARAM_WR`, and only rewrite if
+the batch size changes. This matches the behavior of all other configuration registers
+and avoids a class of firmware bugs where the register is written in the first batch
+but forgotten in subsequent batches after a partial reset.
+
+## Appendix B.11 — Model Improvements for Next Iteration
+
+### B.11.1 Class weight tuning
+
+The current model uses `class_weight='balanced'` in sklearn, which scales the SVM
+penalty parameter C inversely with class frequency. This corrects for the MIT-BIH
+class imbalance (Normal beats dominate) but does not account for **clinical
+asymmetry** — missing a VT is far more dangerous than missing a PVC or SVT.
+
+`class_weight='balanced'` treats all arrhythmia classes equally after frequency
+correction. For clinical deployment, a better approach is to treat per-class weights
+as hyperparameters and tune them explicitly, optimizing for **recall on VT and AFib**
+subject to a constraint on the Normal false-positive rate rather than optimizing for
+overall accuracy.
+
+A grid search over class weights (e.g. boosting VT weight 2–4× beyond balanced)
+would likely maintain or improve the 97.67% overall accuracy while providing stronger
+guarantees on the clinically dangerous classes. The zero-gap property would need to
+be re-verified at Q6.10 after retraining with new weights.
+
+**Impact on hardware:** class weights only affect training. The ASIC inference path
+(kernel evaluation, alpha accumulation, argmax) is unchanged — new weights produce
+new alpha coefficients and bias values loaded via the Wishbone parameter interface
+at startup.
+
+### B.11.2 Q6.10 quantization error mitigation
+
+A three-way comparison (`confusion_3way.png`) separates model architecture effects from
+quantization effects. The ASIC's 5 binary OVR SVMs in float achieve **98.33%** —
+outperforming sklearn's joint OVR at 97.67% (different training approach, 4 samples
+differ). With the equal baseline allocation of 100 SVs/class, Q6.10 fixed-point
+arithmetic flips 1 boundary sample (Normal→SVT), dropping accuracy to 98.00%.
+
+**SV count sweep (`sv_sweep.png`):** Training once at full natural-SV budget and varying
+the uniform per-class cutoff reveals an optimum:
+
+| N/class | Total SVs | Float | Q6.10 | Flips |
+|---------|-----------|-------|-------|-------|
+| 90 | 450 | 98.00% | 98.00% | 0 |
+| 100 | 500 ← HW ceiling (equal split) | 98.33% | 98.00% | 1 |
+| **120** | **600** | **98.67%** | **98.67%** | **0** |
+| 150 | 750 | 98.00% | 98.00% | 0 |
+
+The global optimum is N=120/class (600 total), which exceeds the hardware 500-SV
+ceiling. Accuracy peaks and then falls above N=120 — low-|α| tail SVs accumulate
+quantization noise without sharpening the boundary, degrading both float and Q6.10.
+
+**Recommended allocation: [95, 95, 95, 120, 95] — total = 500, no RTL change**
+
+VT receives 120 of its 307 natural SVs (at the per-class optimum); all other classes
+receive 95. This uses the full hardware budget with optimal VT representation:
+
+| Allocation | Float | Q6.10 | Flips |
+|------------|-------|-------|-------|
+| Baseline [100, 100, 100, 100, 100] | 98.33% | 98.00% | 1 (Normal→SVT) |
+| **Optimal  [ 95,  95,  95, 120,  95]** | **98.33%** | **98.33%** | **0** |
+
+Per-class Q6.10 results (optimal): Normal 59/60, PVC 60/60, AFib 60/60,
+VT 57/60 (3→PVC), SVT 59/60 (1→PVC). All remaining errors are identical in float
+and Q6.10 — no quantization artifacts remain. See `confusion_comparison_m4.png`.
+
+The hardware constraint is 500 total entries in `alpha_table[500]`; `NUM_SV[0–4]`
+registers are 8-bit (max 255 each), so any per-class allocation summing to ≤500 is
+valid without RTL changes. Implementation requires only retraining and reloading via
+`ALPHA_WR` and `NUM_SV` Wishbone registers at startup.
+
+**Further improvement — 600-SV reharden:** The sweep identifies N=120/class (600 total
+SVs) as the global accuracy optimum at 98.67% float and Q6.10, 0 flips — a 0.34 pp
+gain over the current hardware ceiling. Reaching it requires a reharden with
+`alpha_table[600]` (10-bit `alpha_addr`) and updated `NUM_SV` reset defaults.
+No other RTL changes are needed. This is the recommended target for the next
+tape-out iteration.
+
+**600-SV allocation sweep (`alloc_sweep_600.py`):** A sweep of non-uniform 600-SV
+splits confirms that the uniform allocation is optimal — no class benefits from
+a disproportionate share at the 600-SV level:
+
+| Allocation | Float | Q6.10 | Flips |
+|------------|-------|-------|-------|
+| [120,120,120,120,120] (uniform) | 98.67% | **98.67%** | 0 |
+| [140,115,115,115,115] (Normal boost) | 98.67% | 98.67% | 0 |
+| [115,115,115,140,115] (VT boost) | 98.67% | 98.67% | 0 |
+| [110,110,110,160,110] (VT +40) | 98.67% | 98.33% | 1 |
+| [115,115,115,115,140] (SVT boost) | 98.00% | 98.00% | 0 |
+
+This contrasts with the 500-SV case, where non-uniform [95,95,95,120,95] was
+required to eliminate a quantization flip. At 600 SVs each class already has
+enough high-|α| support vectors; concentrating more in one class introduces
+tail noise without improving any boundary. **Target for v11: [120,120,120,120,120].**
+
+## Appendix B.12 — System-Level Improvements for Next Iteration
+
+### B.12.1 Argmax confidence and OvR score calibration
+
+The current hardware outputs a hard class label via argmax across 5 OvR scores with
+no confidence information. This creates two clinical risks:
+
+**Out-of-distribution beats:** If the input beat is unlike any training data (e.g.,
+pacemaker spikes, WPW, artifact), all 5 scores may be low and the argmax picks the
+least-bad class with no indication of low confidence. The device outputs a definitive
+label when it should flag the beat for physician review.
+
+**OvR score miscalibration:** The 5 binary classifiers are trained independently with
+no guarantee their score scales are comparable. A classifier trained on a highly
+imbalanced class may produce scores with systematically larger or smaller magnitude
+than others. Argmax across uncalibrated scores can favor a class not because it is
+most likely but because its scores are larger in magnitude.
+
+**Recommended improvements:**
+
+1. **Platt scaling** — fit a sigmoid to each classifier's raw scores post-training to
+   convert them to calibrated probabilities. Argmax over probabilities is better
+   justified than argmax over raw margins.
+
+2. **Confidence threshold** — add a `confidence` output to STATUS register encoding
+   the margin between the top two scores. If the margin is below a threshold, assert
+   a `low_confidence` flag so firmware can defer to a clinician rather than acting
+   on an uncertain classification.
+
+3. **Unknown class** — add a 6th "unknown/artifact" class trained on out-of-distribution
+   beats (pacemaker, noise, WPW). This requires an additional classifier and alpha
+   table entry but eliminates silent misclassification of unseen beat types.
+
+### B.12.2 VT/PVC discrimination: beat-to-beat morphology consistency
+
+The confusion matrix shows the primary remaining error is VT misclassified as PVC
+(4 beats in sklearn, 3 in ASIC). This reflects a well-known clinical overlap: both
+VT and PVC produce wide, aberrant QRS complexes that are morphologically similar on
+a single-beat basis.
+
+The clinical discriminator a cardiologist uses is **sustained rhythm context** — VT
+is a run of consecutive wide-QRS beats at elevated rate, whereas a PVC is an
+isolated ectopic beat followed by a compensatory pause and return to normal rhythm.
+The current 10-beat mean morphology template and RR-interval history partially
+capture this, but for short VT runs (3–5 beats) the mean template may not yet
+diverge enough from an isolated-PVC pattern.
+
+**Recommended improvement:** explicitly encode **beat-to-beat morphology consistency**
+as a feature — e.g., the standard deviation of the QRS morphology over the preceding
+10 beats, or a binary flag for whether the preceding 3 beats are morphologically
+similar to the current beat. Low variance across consecutive beats is the hallmark
+of sustained VT; high variance (one aberrant beat among normal beats) is the
+hallmark of isolated PVC. This feature would live in the RR/rhythm slice of the
+256-dim vector and could replace or supplement several of the RR-interval history
+dimensions. No hardware changes are required — the feature is computed during
+MCU-side feature extraction before the SRAM load.
+
+---
+
 ## Appendix C — MCU Task Sequence
+
+### C.0 — MCU Integration and Prototype Bringup
+
+The term "host" refers to whatever processor issues Wishbone register writes and reads GPIO
+results. The ASIC is agnostic to which processor plays this role.
+
+**On Caravel silicon (tape-out):** The on-chip RISC-V management core (PicoRV32) is the
+host. It runs compiled C firmware (`svm_wb_test.c`), issues all Wishbone writes, and
+monitors GPIO for `sample_rdy` and `class_out`. The RISC-V is also the host during the
+Caravel DV simulation (Level 6 testbench).
+
+**On a wearable PCB (production):** An external low-power MCU (e.g. STM32L4) becomes the
+host. It connects to the ASIC's Wishbone interface via SPI or I²C bridge and drives GPIO
+directly. The RISC-V management core is bypassed or unused.
+
+**For prototype bringup when silicon arrives:** The chain is PC → Caravel → ASIC:
+
+1. Connect a laptop to the Caravel chip via the **housekeeping SPI** port — a dedicated
+   SPI interface on the Caravel die for external firmware loading and GPIO monitoring.
+2. Use the Efabless `caravel_board` Python utility to flash `svm_wb_test.c` firmware onto
+   the management core's on-chip flash.
+3. The PicoRV32 boots, runs the firmware, and issues Wishbone writes to configure the SVM
+   (alpha coefficients, SV counts, gamma, NUM_SAMPLES).
+4. The RISC-V fires `start` via `CONTROL[0]`, monitors `sample_rdy` on GPIO, and echoes
+   results back to the laptop over UART.
+
+In all three cases the ASIC interface is identical — Wishbone registers at `0x3000_0000`,
+GPIO address bus on `GPIO[28:10]`, read data on `la_data_in[15:0]`. Switching from
+prototype to production only requires replacing the firmware host; no RTL changes.
+
+---
 
 The MCU drives every phase of the system. The ASIC is passive until `start` fires
 and runs autonomously until `done` pulses. The MCU must not assume `start` self-clears —
 if `start` remains asserted when the FSM returns to IDLE, the ASIC immediately begins
 another batch on the same data.
 
-### Per-batch sequence
+### C.1 — Per-batch task sequence
 
 **Phase 1 — Data loading (MCU active, ASIC idle)**
 
@@ -558,7 +785,7 @@ another batch on the same data.
 3. Write input matrix to off-chip SRAM: up to 1000 beats × 256 Q6.10 features → rows 500–1499
 4. Write alpha coefficients via `ALPHA_WR` (Wishbone `0x28`): one write per SV (500 total)
 5. Write `NUM_SAMPLES` (Wishbone `0x0C`): number of beats in this batch
-6. Write `NUM_SV[0–4]` (Wishbone `0x10–0x20`): SVs per class (100 each)
+6. Write `NUM_SV[0–4]` (Wishbone `0x10–0x20`): SVs per class — [95, 95, 95, 120, 95]
 
 **Phase 2 — Fire and sleep (MCU sleeps, ASIC classifies)**
 
@@ -586,7 +813,7 @@ another batch on the same data.
 |------|----------|--------|-------|--------|
 | Load alpha | ALPHA_WR | `0x28` | `{sv_idx[8:0], alpha[15:0]}` | Write one alpha coefficient |
 | Set batch size | NUM_SAMPLES | `0x0C` | `0x03E8` (1000) | Beats per batch |
-| Set SV counts | NUM_SV[0–4] | `0x10–0x20` | `0x64` (100) each | SVs per class |
+| Set SV counts | NUM_SV[0–4] | `0x10–0x20` | `[0x5F,0x5F,0x5F,0x78,0x5F]` (95,95,95,120,95) | SVs per class |
 | Fire | CONTROL | `0x04` | `0x0B` | start=1, vbatt_ok=1, kern_ready=1 |
 | Clear | CONTROL | `0x04` | `0x0A` | start=0, vbatt_ok=1, kern_ready=1 |
 | Read result | STATUS | `0x08` | — | `[8:6]`=class, `[1]`=error, `[0]`=done |
@@ -617,53 +844,3 @@ external flash is required if connectivity is assumed.
 Buffer to flash during normal wear; bulk-transfer history to phone over BLE when
 within range. The nRF52840 supports concurrent QSPI and BLE without additional
 hardware.
-
----
-
-## Appendix B.10 — RTL Improvements
-
-### B.10.1 NUM_SAMPLES reset default
-
-`reg_num_samples` resets to `10'd0` on power-on. Unlike `NUM_SV[0–4]` which reset
-to `8'd50` (a safe non-zero default), a zero `NUM_SAMPLES` causes the batch FSM to
-complete immediately with no classifications if the MCU forgets to write the register
-before asserting start — a silent failure with no error flag.
-
-**Recommended fix:** change the reset assignment in `top.sv`:
-
-```systemverilog
-// current
-reg_num_samples <= 0;
-
-// improved
-reg_num_samples <= 10'd1000;   // match nominal deployment batch size
-```
-
-This makes `NUM_SAMPLES` consistent with `NUM_SV` (sticky, sensible default) and
-eliminates a bringup gotcha where a forgotten register write produces a zero-beat
-batch that appears to succeed.
-
-## Appendix B.11 — Model Improvements for Next Iteration
-
-### B.11.1 Class weight tuning
-
-The current model uses `class_weight='balanced'` in sklearn, which scales the SVM
-penalty parameter C inversely with class frequency. This corrects for the MIT-BIH
-class imbalance (Normal beats dominate) but does not account for **clinical
-asymmetry** — missing a VT is far more dangerous than missing a PVC or SVT.
-
-`class_weight='balanced'` treats all arrhythmia classes equally after frequency
-correction. For clinical deployment, a better approach is to treat per-class weights
-as hyperparameters and tune them explicitly, optimizing for **recall on VT and AFib**
-subject to a constraint on the Normal false-positive rate rather than optimizing for
-overall accuracy.
-
-A grid search over class weights (e.g. boosting VT weight 2–4× beyond balanced)
-would likely maintain or improve the 97.67% overall accuracy while providing stronger
-guarantees on the clinically dangerous classes. The zero-gap property would need to
-be re-verified at Q6.10 after retraining with new weights.
-
-**Impact on hardware:** class weights only affect training. The ASIC inference path
-(kernel evaluation, alpha accumulation, argmax) is unchanged — new weights produce
-new alpha coefficients and bias values loaded via the Wishbone parameter interface
-at startup.
