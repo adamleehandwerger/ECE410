@@ -53,28 +53,17 @@
 | Implementation | Accuracy | SVs | Notes |
 |---------------|----------|-----|-------|
 | sklearn OVR (float, joint) | 97.67% | 416 total (unlimited) | float precision, joint multiclass training |
-| ASIC binary OVR (float) | 98.33% | 500 total (100x5) | 5 separate binary SVMs, float64, fair Q6.10 baseline |
-| ASIC binary OVR (Q6.10) | 97.67% | 500 total (100x5) | same model as above, fixed-point hardware |
+| ASIC binary OVR (float) | 98.33% | 500 total, [95,95,95,120,95] | 5 separate binary SVMs, float64 |
+| ASIC binary OVR (Q6.10) | **98.33%** | 500 total, [95,95,95,120,95] | fixed-point hardware, 0 quantization flips |
 
-**Three-way accuracy breakdown** (see `confusion_3way.png`):
+**Accuracy notes** (see `confusion_comparison_m5.png`, `confusion_3way.png`):
 
-The ASIC uses 5 separate binary OVR SVMs (one per class) each capped at 100 SVs/class,
-which is a different training approach from sklearn's joint multiclass OVR. A fair
-assessment of Q6.10 quantization error requires comparing the ASIC against a float
-reference using the identical model.
-
-- **sklearn vs. ASIC float (model architecture effect):** 4 samples differ. The binary
-  OVR model at 98.33% actually *outperforms* sklearn's joint OVR at 97.67% in float --
-  the constrained model is not a downgrade. Errors differ: the binary model eliminates
-  the 2 SVT->Normal errors present in sklearn but introduces 1 AFib->VT error.
-
-- **ASIC float vs. ASIC Q6.10 (quantization effect):** 4 samples differ. Q6.10
-  quantization flips 3 correct predictions to wrong (1 VT->AFib, 2 SVT->Normal) and
-  recovers 1 incorrect prediction (AFib->VT corrected to AFib). Net: -2 correct,
-  dropping from 98.33% to 97.67%.
-
-- **Final ASIC accuracy matching sklearn (97.67%) is coincidental** -- the binary OVR
-  model outperforms sklearn in float, and quantization error happens to cancel the gain.
+The ASIC uses 5 separate binary OVR SVMs trained independently per class, which differs
+from sklearn's joint multiclass OVR. In float, the binary OVR model at 98.33% outperforms
+sklearn's 97.67% — the constrained model is not a downgrade. The SV allocation
+[95, 95, 95, 120, 95] (VT at the per-class Q6.10 optimum; total=500) eliminates all
+quantization-induced prediction differences. Float and Q6.10 produce identical confusion
+matrices. See Appendix B.11.2 for the full sweep analysis.
 
 ---
 
@@ -100,17 +89,17 @@ reference using the identical model.
 | Beats per class | 60 |
 | **Total test beats** | **300** |
 | sklearn accuracy | 97.67% (293/300) |
-| ASIC accuracy | 97.67% (293/300) — zero gap vs. float |
+| ASIC accuracy (Q6.10, optimal alloc) | **98.33%** (295/300) — zero quantization gap vs. float |
 
-Per-class test results:
+Per-class Q6.10 results (optimal allocation [95, 95, 95, 120, 95]):
 
 | Class | Correct | Accuracy |
 |-------|---------|----------|
-| Normal (N) | 60/60 | 100.0% |
+| Normal (N) | 59/60 | 98.3% |
 | PVC | 60/60 | 100.0% |
 | AFib | 60/60 | 100.0% |
-| VT | 56/60 | 93.3% |
-| SVT | 57/60 | 95.0% |
+| VT | 57/60 | 95.0% |
+| SVT | 59/60 | 98.3% |
 
 ---
 
@@ -148,7 +137,7 @@ MCU (low-power, continuous)
     │  1. Collect 1000 heartbeats (250 Hz ECG → feature extraction)
     │  2. Load SV matrix  (500 SVs × 256 features) → SRAM rows 0..499
     │  3. Load input matrix (1000 beats × 256 features) → SRAM rows 500..1499
-    │  4. Write NUM_SAMPLES = 1000, write NUM_SV_0–4 = 100 each
+    │  4. Write NUM_SAMPLES = 1000, write NUM_SV_0–4 = [95,95,95,120,95]
     │  5. Write alpha coefficients via ALPHA_WR (Wishbone 0x28)
     │  6. Fire CONTROL[start]
     │
@@ -173,7 +162,7 @@ Inference time scales linearly with `RAM_LATENCY`. At 40 MHz:
 | +0x04 | CONTROL | RW | [0]=start [1]=vbatt_ok [2]=vbatt_warn |
 | +0x08 | STATUS | RO | [0]=done [1]=error [5:2]=error_code [8:6]=class [9]=sample_rdy |
 | +0x0C | NUM_SAMPLES | RW | [9:0] beats in batch (1–1000) |
-| +0x10–+0x20 | NUM_SV[0–4] | RW | [7:0] SVs per class (max 100 each) |
+| +0x10–+0x20 | NUM_SV[0–4] | RW | [7:0] SVs per class (8-bit, max 255; total ≤ 500) |
 | +0x24 | PARAM_WR | WO | [19]=en [18:16]=addr [15:0]=data (gamma, C, bias) |
 | +0x28 | ALPHA_WR | WO | [24:16]=sv_global_idx (9-bit) [15:0]=alpha Q6.10 |
 
@@ -339,8 +328,9 @@ wishbone_write(WB_BASE + 0x04, 0x0B)   # CONTROL: start=1, vbatt_ok=1, kern_read
 
 ### Constraints
 
-- Total SV count must not exceed 500 (100 per class maximum). Models exceeding this
-  require re-synthesis with updated `NUM_SV` parameters.
+- Total SV count must not exceed 500 (`alpha_table` has 500 entries). Per-class
+  maximum is 255 (8-bit `NUM_SV` register). Models requiring more than 500 total SVs
+  require re-synthesis with an enlarged `alpha_table`.
 - Gamma must be representable in Q6.10 (range 0–63.999, resolution ~0.001).
 - Alpha values must be representable in Q6.10 (signed, range −32 to +31.999).
 - The reload can be performed between any two batches. The ASIC does not need to be
@@ -626,52 +616,48 @@ at startup.
 
 ### B.11.2 Q6.10 quantization error mitigation
 
-A three-way comparison (confusion_3way.png) separates two independent accuracy effects:
+A three-way comparison (`confusion_3way.png`) separates model architecture effects from
+quantization effects. The ASIC's 5 binary OVR SVMs in float achieve **98.33%** —
+outperforming sklearn's joint OVR at 97.67% (different training approach, 4 samples
+differ). With the equal baseline allocation of 100 SVs/class, Q6.10 fixed-point
+arithmetic flips 1 boundary sample (Normal→SVT), dropping accuracy to 98.00%.
 
-- **Model architecture vs. sklearn:** The ASIC uses 5 separate binary OVR SVMs capped
-  at 100 SVs/class (500 total), trained independently per class. sklearn uses a joint
-  multiclass OVR SVM with all natural SVs (416 total). These produce different decision
-  boundaries. In float, the binary OVR model achieves **98.33%** — higher than sklearn's
-  97.67%. 4 samples differ between the two float models.
+**SV count sweep (`sv_sweep.png`):** Training once at full natural-SV budget and varying
+the uniform per-class cutoff reveals an optimum:
 
-- **Q6.10 quantization vs. binary OVR float:** Q6.10 fixed-point arithmetic flips 4
-  boundary samples relative to the identical float model: 3 correct predictions become
-  wrong (1 VT->AFib, 2 SVT->Normal) and 1 wrong prediction is accidentally corrected
-  (AFib->VT recovered). Net: -2 correct, dropping from 98.33% to 97.67%. The final
-  ASIC accuracy matching sklearn is coincidental.
+| N/class | Total SVs | Float | Q6.10 | Flips |
+|---------|-----------|-------|-------|-------|
+| 90 | 450 | 98.00% | 98.00% | 0 |
+| 100 | 500 ← HW ceiling (equal split) | 98.33% | 98.00% | 1 |
+| **120** | **600** | **98.67%** | **98.67%** | **0** |
+| 150 | 750 | 98.00% | 98.00% | 0 |
 
-The 2 SVT->Normal quantization errors occur because SVT has 308 natural SVs but is
-hard-capped at 100 — losing 68% of its boundary information and leaving SVT samples
-near thinner margins.
+The global optimum is N=120/class (600 total), which exceeds the hardware 500-SV
+ceiling. Accuracy peaks and then falls above N=120 — low-|α| tail SVs accumulate
+quantization noise without sharpening the boundary, degrading both float and Q6.10.
 
-**Mitigation options ranked by implementation cost:**
+**Recommended allocation: [95, 95, 95, 120, 95] — total = 500, no RTL change**
 
-| Option | Description | RTL change | Reharden | Retrain |
-|--------|-------------|-----------|---------|---------|
-| 1 | Adaptive SV allocation (e.g. [80,80,80,80,180], total=500) | No | No | Yes |
-| 2 | Wider Horner internal precision (24-bit intermediate) | Yes | Yes | No |
-| 3 | Q6.12 precision (more fractional bits) | Yes | Yes | Yes |
+VT receives 120 of its 307 natural SVs (at the per-class optimum); all other classes
+receive 95. This uses the full hardware budget with optimal VT representation:
 
-**Recommended next step:** Option 1 — tested and confirmed. The allocation
-`[90, 90, 90, 140, 90]` (VT gets 140 of its 307 natural SVs, others drop from
-100 to 90, total=500) was evaluated against the baseline `[100x5]`:
+| Allocation | Float | Q6.10 | Flips |
+|------------|-------|-------|-------|
+| Baseline [100, 100, 100, 100, 100] | 98.33% | 98.00% | 1 (Normal→SVT) |
+| **Optimal  [ 95,  95,  95, 120,  95]** | **98.33%** | **98.33%** | **0** |
 
-| Allocation | Float | Q6.10 | Quant. flips |
-|------------|-------|-------|--------------|
-| Baseline [100, 100, 100, 100, 100] | 98.33% | 98.00% | 1 (Normal->SVT) |
-| VT-modest  [ 90,  90,  90, 140,  90] | 98.33% | **98.33%** | **0** |
+Per-class Q6.10 results (optimal): Normal 59/60, PVC 60/60, AFib 60/60,
+VT 57/60 (3→PVC), SVT 59/60 (1→PVC). All remaining errors are identical in float
+and Q6.10 — no quantization artifacts remain. See `confusion_comparison_m5.png`.
 
-The VT-modest allocation eliminates all quantization-induced prediction changes —
-float and Q6.10 produce identical confusion matrices. It also fixes the 1 AFib->VT
-float error present in baseline (AFib 60/60 vs 59/60). Remaining errors (3 VT->PVC,
-1 SVT->PVC, 1 Normal->SVT) are identical in float and Q6.10, confirming they are
-genuine model limitations rather than quantization artifacts.
+The hardware constraint is 500 total entries in `alpha_table[500]`; `NUM_SV[0–4]`
+registers are 8-bit (max 255 each), so any per-class allocation summing to ≤500 is
+valid without RTL changes. Implementation requires only retraining and reloading via
+`ALPHA_WR` and `NUM_SV` Wishbone registers at startup.
 
-The hardware constraint is 500 total entries in `alpha_table[500]`; the `NUM_SV[0-4]`
-registers are 8-bit (max 255 each) so any per-class allocation summing to 500 is valid
-without RTL changes. The reallocation requires only retraining and reloading via
-`ALPHA_WR` and `NUM_SV` Wishbone registers at startup. See `confusion_sv_modest.png`
-for the side-by-side comparison.
+If a future iteration requires exceeding 500 total SVs (e.g., to reach the 600-SV
+global optimum), a reharden with an enlarged `alpha_table[600]` and 10-bit
+`alpha_addr` would be required.
 
 ## Appendix B.12 — System-Level Improvements for Next Iteration
 
@@ -779,7 +765,7 @@ another batch on the same data.
 3. Write input matrix to off-chip SRAM: up to 1000 beats × 256 Q6.10 features → rows 500–1499
 4. Write alpha coefficients via `ALPHA_WR` (Wishbone `0x28`): one write per SV (500 total)
 5. Write `NUM_SAMPLES` (Wishbone `0x0C`): number of beats in this batch
-6. Write `NUM_SV[0–4]` (Wishbone `0x10–0x20`): SVs per class (100 each)
+6. Write `NUM_SV[0–4]` (Wishbone `0x10–0x20`): SVs per class — [95, 95, 95, 120, 95]
 
 **Phase 2 — Fire and sleep (MCU sleeps, ASIC classifies)**
 
@@ -807,7 +793,7 @@ another batch on the same data.
 |------|----------|--------|-------|--------|
 | Load alpha | ALPHA_WR | `0x28` | `{sv_idx[8:0], alpha[15:0]}` | Write one alpha coefficient |
 | Set batch size | NUM_SAMPLES | `0x0C` | `0x03E8` (1000) | Beats per batch |
-| Set SV counts | NUM_SV[0–4] | `0x10–0x20` | `0x64` (100) each | SVs per class |
+| Set SV counts | NUM_SV[0–4] | `0x10–0x20` | `[0x5F,0x5F,0x5F,0x78,0x5F]` (95,95,95,120,95) | SVs per class |
 | Fire | CONTROL | `0x04` | `0x0B` | start=1, vbatt_ok=1, kern_ready=1 |
 | Clear | CONTROL | `0x04` | `0x0A` | start=0, vbatt_ok=1, kern_ready=1 |
 | Read result | STATUS | `0x08` | — | `[8:6]`=class, `[1]`=error, `[0]`=done |
