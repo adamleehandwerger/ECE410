@@ -85,12 +85,13 @@ sweep analysis.
 ## Testing Set
 
 | Parameter | Value |
-|-----------|-------|
+|---|---|
 | Source | MIT-BIH + SVDB + INCART (PhysioNet) — held-out 20% stratified |
 | Beats per class | 60 |
 | **Total test beats** | **300** |
-| sklearn accuracy | 97.67% (293/300) |
-| ASIC accuracy (Q6.10, optimal alloc) | **98.33%** (295/300) — zero quantization gap vs. float |
+| sklearn default OVR accuracy | 97.67% (293/300) |
+| sklearn binary OVR accuracy | **98.33%** (295/300) |
+| ASIC Q6.10 accuracy | **98.33%** (295/300) — 0 quantization flips |
 
 Per-class Q6.10 results (optimal allocation [95, 95, 95, 120, 95]):
 
@@ -811,13 +812,13 @@ another batch on the same data.
 ### Register writes summary
 
 | Step | Register | Offset | Value | Effect |
-|------|----------|--------|-------|--------|
-| Load alpha | ALPHA_WR | `0x28` | `{sv_idx[8:0], alpha[15:0]}` | Write one alpha coefficient |
-| Set batch size | NUM_SAMPLES | `0x0C` | `0x03E8` (1000) | Beats per batch |
-| Set SV counts | NUM_SV[0–4] | `0x10–0x20` | `[0x5F,0x5F,0x5F,0x78,0x5F]` (95,95,95,120,95) | SVs per class |
+|---|---|---|---|---|
+| Load alpha | ALPHA_WR | `0x28` | `{sv_idx[8:0], alpha[15:0]}` | Write one alpha |
+| Set batch size | NUM_SAMPLES | `0x0C` | `0x03E8` | 1000 beats per batch |
+| Set SV counts | NUM_SV[0–4] | `0x10–0x20` | `[0x5F,0x5F,0x5F,0x78,0x5F]` | [95,95,95,120,95] |
 | Fire | CONTROL | `0x04` | `0x0B` | start=1, vbatt_ok=1, kern_ready=1 |
-| Clear | CONTROL | `0x04` | `0x0A` | start=0, vbatt_ok=1, kern_ready=1 |
-| Read result | STATUS | `0x08` | — | `[8:6]`=class, `[1]`=error, `[0]`=done |
+| Clear | CONTROL | `0x04` | `0x0A` | start=0, keep enables |
+| Read result | STATUS | `0x08` | — | `[8:6]`=class, `[0]`=done |
 
 ### C.2 — Data history storage
 
