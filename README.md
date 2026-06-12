@@ -12,10 +12,11 @@
 
 | Metric | Value |
 |--------|-------|
-| Accuracy | 97.67% (293/300) — zero gap vs sklearn float |
+| Accuracy (Q6.10) | **98.33%** (295/300) — 0 quantization flips vs float |
+| SV allocation | [95, 95, 95, 120, 95] = 500 total (VT at Q6.10 optimum) |
 | Clock | 40 MHz, 0 timing violations (TT/FF corners) |
-| Active power | 55.25 mW → 0.727 mW avg at 80 bpm |
-| Core die | 2500 × 2500 µm, 15.0% utilization |
+| Active power | 55.25 mW → 0.869 mW avg at 80 bpm (LAT=3) |
+| Core die | 2500 × 2500 µm, 15.0% utilization, 157,991 cells |
 | DRC | 0 violations (KLayout) |
 | Caravel DV | PASSED (job 92867) |
 
@@ -46,4 +47,4 @@ Apache 2.0 — see [LICENSE](LICENSE). Attribution required for reuse.
 
 ---
 
-*ECE410 · Portland State University · Adam Handwerger · 2026-06-07*
+*ECE410 · Portland State University · Adam Handwerger · 2026-06-11*
