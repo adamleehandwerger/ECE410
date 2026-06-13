@@ -39,15 +39,15 @@ m4/
 │   ├── svm_ram_latency_tb.sv    ← unit test: RAM_LATENCY parameter (LAT=3 → PASS,
 │   │                                208 cycles/beat; FEAT=4, NSV=5, iverilog)
 │   ├── sky130_stubs.v           ← sky130 cell stubs for Icarus simulation
-│   ├── confusion_comparison_m4.py ← generates confusion matrix comparison plot
 │   ├── testbench_summary.md     ← summary of all m4 testbenches and pass/fail results
 │   └── dv_run.sh                ← Caravel DV RTL simulation run script
 │
 ├── sim/                         ← Simulation outputs
-│   ├── final_run.log            ← Wishbone cosim log (300 samples, 97.67% accuracy)
+│   ├── final_run.log            ← Wishbone cosim log (300 samples, 98.33% accuracy)
 │   ├── final_waveform.png       ← timing diagram: wb_stb, ram_ren, sample_rdy,
 │   │                                STATUS.done, class bus — 5 representative beats
-│   ├── confusion_comparison_m4.png ← sklearn vs ASIC confusion matrix comparison
+│   ├── confusion_comparison_m5.py ← generates sklearn vs ASIC confusion matrix plot
+│   ├── confusion_comparison_m4.png ← sklearn binary OVR (float) vs ASIC Q6.10
 │   ├── asic_preds.csv           ← 300 ASIC predictions (last cosim run)
 │   └── throughput_comparison.txt ← inference time and power summary
 │
@@ -56,7 +56,7 @@ m4/
 │   ├── openlane_run.log         ← P&R run log summary (SLURM job 92861)
 │   ├── timing_report.txt        ← STA: TT WNS +3.96 ns; FF +11.24 ns; SS -14.56 ns (expected)
 │   ├── area_report.txt          ← core 2500×2500 µm, 15.0% util; wrapper 2920×3520 µm
-│   ├── power_report.txt         ← 55.25 mW active, 0.727 mW avg @ 80 bpm (LAT=3)
+│   ├── power_report.txt         ← 55.25 mW active, 0.869 mW avg @ 80 bpm (LAT=3)
 │   ├── drc_report.txt           ← core 0 DRC/LVS; antenna 554 nets (advisory); wrapper boundary artifacts
 │   └── critical_path.md         ← critical path through dist_acc; wrapper paths trivial
 │
@@ -107,7 +107,7 @@ m4/
 | Parameter | Value |
 |-----------|-------|
 | Feature dimension | 256 (128 single-beat + 64 10-beat + 64 RR history) |
-| Support vectors | 500 total (100 per class, 5 classes) |
+| Support vectors | 500 total ([95,95,95,120,95] — VT gets 120, others 95) |
 | Fixed-point | Q6.10, 16-bit signed |
 | Gamma / C | 0.25 / 1.0 |
 | Clock | 40 MHz (25 ns) |
@@ -117,10 +117,10 @@ m4/
 | Core DRC | 0 violations ✅ |
 | Wrapper Magic DRC | 11,906 boundary artifacts (acceptable) |
 | Wrapper KLayout DRC | 0 violations ✅ |
-| Active power | 55.25 mW → 0.727 mW avg at 80 bpm (LAT=3) |
+| Active power | 55.25 mW → 0.869 mW avg at 80 bpm (LAT=3) |
 | Core die | 2500 × 2500 µm, 15.0% utilization, 157,991 cells |
 | Wrapper die | 2920 × 3520 µm (Caravel fixed), 234 MB GDS, 707 std cells |
-| ASIC accuracy | 97.67% (293/300) — exact match with sklearn, zero gap |
+| ASIC accuracy | 98.33% (295/300) — 0 quantization flips vs float |
 
 ## Quick Start
 
@@ -141,7 +141,7 @@ iverilog -g2012 -DSIMULATION -o /tmp/svm_lat_tb.out \
 python3 generate_block_diagram.py
 
 # Regenerate confusion matrix
-cd tb && python3 confusion_comparison_m4.py
+cd sim && python3 confusion_comparison_m5.py
 ```
 
 Requires: `pip install cocotb scikit-learn wfdb matplotlib numpy`  
