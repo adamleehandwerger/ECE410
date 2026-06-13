@@ -259,6 +259,12 @@ simply overwritten in place.
 | Bias[0--4] (per-class, Q6.10) | On-chip `bias_int[0--4]` (PARAM_WR addr=2--6) | 10 bytes |
 | SV counts per class (`NUM_SV[0--4]`) | On-chip Wishbone registers | 5 bytes |
 
+**Note on C:** The regularization parameter C is stored on-chip for reference and
+model documentation, but plays no role during inference. C only affects the SVM
+training (controlling the margin/slack trade-off); once training is complete the
+alpha coefficients and biases fully encode its effect. The kernel evaluation and
+argmax path do not read `c_int` at runtime.
+
 ### Reload sequence
 
 Perform these steps while the ASIC is idle (`STATUS[done]=1` or after reset).
