@@ -1,43 +1,50 @@
-# ECE410 m5 — cocotb Wishbone interface simulation
-# Exercises user_project_wrapper via its WB register interface.
-# Outputs: asic_preds.csv  (consumed by confusion_comparison_m5.py)
+# ECE410 m6 — cocotb SPI cosimulation (svm_top_ihp, IHP SG13G2 target)
+# Drives svm_top_ihp via SPI slave interface; outputs ../sim/asic_preds.csv
 #
 # Usage:
-#   make cosim          # run WB interface simulation → asic_preds.csv
-#   python3 confusion_comparison_m5.py   # generate 2-column confusion matrix plot
+#   make cosim              # full 300-sample SPI cosim → asic_preds.csv
+#   make cosim N=25         # quick subset (COSIM_N_EVAL=25)
+#   make latency            # RAM_LATENCY unit test (iverilog standalone, < 1 s)
+#   make plot               # regenerate confusion_comparison_m6.png
+#   make all                # cosim + plot
 
 SIM      = icarus
-TOPLEVEL = user_project_wrapper
-MODULE   = tb_wb_cosim
+TOPLEVEL = svm_top_ihp
+MODULE   = tb_spi_cosim
 
 RTL_DIR  = ../rt1
 
 VERILOG_SOURCES  = $(RTL_DIR)/top.sv
 VERILOG_SOURCES += $(RTL_DIR)/compute_core.sv
-VERILOG_SOURCES += sky130_stubs.v
+VERILOG_SOURCES += $(RTL_DIR)/interface.sv
 
-# SystemVerilog + macro definitions
+# SystemVerilog + simulation macro (skips sg13g2_dlclkp_1 ICG instantiation)
 COMPILE_ARGS += -g2012
-COMPILE_ARGS += -DMPRJ_IO_PADS=38
+COMPILE_ARGS += -DSIMULATION
 COMPILE_ARGS += -Wno-timescale
 
+# Pass N_EVAL override: make cosim N=25
+ifdef N
+    export COSIM_N_EVAL=$(N)
+endif
 
-# cocotb Python dependencies (must be installed in the active virtualenv)
-# pip install cocotb scikit-learn numba wfdb matplotlib numpy
-
+# pip install cocotb scikit-learn wfdb matplotlib numpy
 include $(shell cocotb-config --makefiles)/Makefile.sim
 
 .PHONY: cosim
 cosim:
 	$(MAKE) sim
 
-.PHONY: unit
-unit:
-	$(MAKE) sim MODULE=tb_wb_unit
+.PHONY: latency
+latency:
+	iverilog -g2012 -DSIMULATION \
+	    -o /tmp/svm_lat_tb_m6.out \
+	    $(RTL_DIR)/compute_core.sv svm_ram_latency_tb.sv && \
+	/tmp/svm_lat_tb_m6.out
 
 .PHONY: plot
-plot: asic_preds.csv
-	python3 confusion_comparison_m5.py
+plot:
+	python3 ../sim/confusion_comparison_m6.py
 
 .PHONY: all
 all: cosim plot
