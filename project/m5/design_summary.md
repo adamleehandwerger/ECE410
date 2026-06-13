@@ -115,6 +115,11 @@ Per-class Q6.10 results (optimal allocation [95, 95, 95, 120, 95]):
 | `ram_ren` | GPIO[29] | ASIC out | Read strobe |
 | `ram_rdata[15:0]` | LA[15:0] | Host in->ASIC | Data valid after `RAM_LATENCY` cycles |
 
+*SRAM pin mapping: `ram_addr[18:0]` connects to A[18:0], `ram_ren` to OE# (active low),
+and `ram_rdata[15:0]` to DQ[15:0] on the IS61WV51216. CE# is tied low (always selected).
+LA[15:0] is the Caravel internal bus name for `ram_rdata`; in a standalone deployment
+these are general-purpose I/O pins.*
+
 Address layout: rows 0..499 = SV matrix; rows 500..1499 = input matrix.
 
 **`RAM_LATENCY` parameter** --- configures the number of clock cycles between `ram_ren`
