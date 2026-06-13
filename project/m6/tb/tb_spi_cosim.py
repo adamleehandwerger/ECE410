@@ -50,6 +50,7 @@ FEAT_10BEAT  = 64
 FEAT_100RR   = 64
 NUM_CLASSES  = 5
 NUM_SV_ROWS  = 600                  # RTL NUM_SV — input matrix starts at this row
+RAM_LATENCY  = 3                    # must match .RAM_LATENCY in top.sv
 MAX_BATCH    = 1000
 CLASS_NAMES  = ["Normal", "PVC", "AFib", "VT", "SVT"]
 SV_ALLOC     = [120, 120, 120, 120, 120]   # uniform optimal at 600 SVs
@@ -432,8 +433,9 @@ async def run_spi_cosim(dut):
     # ── Batch classification loop ─────────────────────────────────────────────
     all_preds  = []
     batch_start = 0
-    cycles_per_sample = (FEATURE_DIM + 5 +
-                         sv_total * (FEATURE_DIM + 30) + 200)
+    # Each SRAM read takes (RAM_LATENCY+1) cycles; measured ~480k/sample at LAT=3,600SVs
+    cycles_per_sample = (FEATURE_DIM * (RAM_LATENCY + 1) +
+                         sv_total * (FEATURE_DIM * (RAM_LATENCY + 1) + 30) + 500)
 
     while batch_start < N_eval:
         batch_end = min(batch_start + MAX_BATCH, N_eval)

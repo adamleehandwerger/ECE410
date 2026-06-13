@@ -151,8 +151,8 @@ module svm_top_ihp (
     wire csn_r   = csn_s[1];
     wire sclk_r  = sclk_s[1];
     wire mosi_r  = mosi_s[1];
-    wire sclk_rise = (sclk_s[1] & ~sclk_s[0]) ? 1'b1 : 1'b0;  // rising edge
-    wire csn_rise  = (csn_s[1]  & ~csn_s[0])  ? 1'b1 : 1'b0;  // CS deassert
+    wire sclk_rise = (sclk_s[1] & ~sclk_s[0]) ? 1'b1 : 1'b0;  // sclk fell (samples MOSI 1 period late — stable, OK)
+    wire csn_rise  = (~csn_s[1] &  csn_s[0])  ? 1'b1 : 1'b0;  // CS deassert (csn: 0→1)
 
     reg [5:0]  spi_bit_cnt;   // counts 0..39 within a frame
     reg [7:0]  spi_addr;      // address byte
