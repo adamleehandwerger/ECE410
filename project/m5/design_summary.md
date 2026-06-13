@@ -627,8 +627,8 @@ at startup.
 A three-way comparison (`confusion_3way.png`) separates model architecture effects from
 quantization effects. The ASIC's 5 binary OVR SVMs in float achieve **98.33%** ---
 outperforming sklearn's joint OVR at 97.67% (different training approach, 4 samples
-differ). With the equal baseline allocation of 100 SVs/class, Q6.10 fixed-point
-arithmetic flips 1 boundary sample (Normal->SVT), dropping accuracy to 98.00%.
+differ). An initial equal allocation of 100 SVs/class caused Q6.10 to flip 1 boundary
+sample (Normal->SVT), dropping accuracy to 98.00%.
 
 **SV count sweep (`sv_sweep.png`):** Training once at full natural-SV budget and varying
 the uniform per-class cutoff reveals an optimum:
@@ -636,7 +636,7 @@ the uniform per-class cutoff reveals an optimum:
 | N/class | Total SVs | Float | Q6.10 | Flips |
 |---------|-----------|-------|-------|-------|
 | 90 | 450 | 98.00% | 98.00% | 0 |
-| 100 | 500 <- HW ceiling (equal split) | 98.33% | 98.00% | 1 |
+| 100 | 500 (equal split, initial) | 98.33% | 98.00% | 1 |
 | **120** | **600** | **98.67%** | **98.67%** | **0** |
 | 150 | 750 | 98.00% | 98.00% | 0 |
 
@@ -644,24 +644,25 @@ The global optimum is N=120/class (600 total), which exceeds the hardware 500-SV
 ceiling. Accuracy peaks and then falls above N=120 --- low-|alpha| tail SVs accumulate
 quantization noise without sharpening the boundary, degrading both float and Q6.10.
 
-**Recommended allocation: [95, 95, 95, 120, 95] --- total = 500, no RTL change**
+**Current allocation (implemented): [95, 95, 95, 120, 95] --- total = 500, no RTL change**
 
 VT receives 120 of its 307 natural SVs (at the per-class optimum); all other classes
-receive 95. This uses the full hardware budget with optimal VT representation:
+receive 95. This non-uniform split uses the full hardware budget while giving VT optimal
+representation within the 500-SV ceiling:
 
 | Allocation | Float | Q6.10 | Flips |
 |------------|-------|-------|-------|
-| Baseline [100, 100, 100, 100, 100] | 98.33% | 98.00% | 1 (Normal->SVT) |
-| **Optimal  [ 95,  95,  95, 120,  95]** | **98.33%** | **98.33%** | **0** |
+| Initial [100, 100, 100, 100, 100] | 98.33% | 98.00% | 1 (Normal->SVT) |
+| **Implemented [ 95,  95,  95, 120,  95]** | **98.33%** | **98.33%** | **0** |
 
-Per-class Q6.10 results (optimal): Normal 59/60, PVC 60/60, AFib 60/60,
+Per-class Q6.10 results: Normal 59/60, PVC 60/60, AFib 60/60,
 VT 57/60 (3->PVC), SVT 59/60 (1->PVC). All remaining errors are identical in float
 and Q6.10 --- no quantization artifacts remain. See `confusion_comparison_m5.png`.
 
 The hardware constraint is 500 total entries in `alpha_table[500]`; `NUM_SV[0--4]`
 registers are 8-bit (max 255 each), so any per-class allocation summing to <=500 is
-valid without RTL changes. Implementation requires only retraining and reloading via
-`ALPHA_WR` and `NUM_SV` Wishbone registers at startup.
+valid without RTL changes. The implemented allocation is loaded via `ALPHA_WR` and
+`NUM_SV` Wishbone registers at startup.
 
 **Further improvement --- 600-SV reharden:** The sweep identifies N=120/class (600 total
 SVs) as the global accuracy optimum at 98.67% float and Q6.10, 0 flips --- a 0.34 pp
