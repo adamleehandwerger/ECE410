@@ -1004,3 +1004,19 @@ the total pad count --- inputs plus outputs --- before committing to an
 off-chip memory interface. Alternatively, a narrower bus (8-bit data, two
 cycles per word) would fit within 38 pads and preserve the direct pad path
 for `ram_rdata`.
+
+**Upfront pin budget that should have been done before recommending Caravel:**
+
+| Signal group | Pins needed |
+|---|---|
+| `ram_addr[18:0]` | 19 |
+| `ram_ren` | 1 |
+| `ram_rdata[15:0]` | 16 |
+| `class_out[2:0]` | 3 |
+| `sample_rdy`, `done`, `error` | 3 |
+| `error_code[3:0]` | 4 |
+| **Total** | **46** |
+
+Caravel provides 38 `mprj_io` pads. 46 > 38 --- the design was over budget
+before a single line of RTL was written. This calculation takes two minutes
+and would have immediately surfaced the conflict.
