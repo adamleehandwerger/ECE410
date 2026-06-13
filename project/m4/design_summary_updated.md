@@ -858,3 +858,149 @@ external flash is required if connectivity is assumed.
 Buffer to flash during normal wear; bulk-transfer history to phone over BLE when
 within range. The nRF52840 supports concurrent QSPI and BLE without additional
 hardware.
+
+---
+
+## Appendix D --- Caravel Tapeout: VOIDED
+
+### D.1 --- Discovery
+
+After tapeout submission, a review of `top.sv` revealed a fundamental
+incompatibility between the Caravel wrapper architecture and the intended SRAM
+read path. The design cannot function as submitted at operational speed on real
+silicon. This appendix documents the root cause, why it arose, and what a
+corrected standalone ASIC would require.
+
+---
+
+### D.2 --- Root Cause: ram_rdata Routed Through la_data_in
+
+The off-chip RAM bus was assigned as follows in `top.sv`:
+
+```
+// GPIO[28:10] = ram_addr[18:0]   (output — compute core drives address)
+// GPIO[29]    = ram_ren           (output — compute core drives read strobe)
+// LA[15:0]    = ram_rdata[15:0]  (input  — driven by host)
+
+wire [15:0] ram_rdata_w = la_data_in[15:0];
+assign io_oeb = {{`MPRJ_IO_PADS-30{1'b1}}, 30'b0};  // all 30 low GPIO pins: outputs
+assign la_oenb = 128'h0000_0000_0000_0000_0000_0000_0000_FFFF;  // LA[15:0]: inputs
+```
+
+`la_data_in[15:0]` is an **internal Caravel bus** driven exclusively by the
+management SoC (PicoRV32). It does not appear on any package pin. The SRAM
+DQ[15:0] lines cannot connect to it directly. The only way SRAM read data
+reaches the compute core is if the management SoC firmware reads DQ from
+external pins, then writes the value onto `la_data_in[15:0]` --- placing
+the management SoC in the critical path of every single SRAM read during
+inference.
+
+On the SRAM (IS61WV51216), these signals map to:
+
+| ASIC signal | Caravel pin | SRAM pin | Note |
+|---|---|---|---|
+| `ram_addr[18:0]` | mprj_io[28:10] | A[18:0] | Direct pad connection, OK |
+| `ram_ren` | mprj_io[29] | OE# | Direct pad connection, OK |
+| `ram_rdata[15:0]` | la_data_in[15:0] | DQ[15:0] | **No pad path --- management SoC relay required** |
+
+---
+
+### D.3 --- Why It Happened: GPIO Pin Budget
+
+Caravel provides 38 `mprj_io` pads. The design already consumed 30 as outputs:
+
+| Pins | Signal |
+|---|---|
+| mprj_io[2:0] | class_out[2:0] |
+| mprj_io[3] | sample_rdy |
+| mprj_io[4] | done |
+| mprj_io[5] | error |
+| mprj_io[9:6] | error_code[3:0] |
+| mprj_io[28:10] | ram_addr[18:0] |
+| mprj_io[29] | ram_ren |
+
+Only 8 pads remained (mprj_io[37:30]) --- not enough for the 16-bit `ram_rdata`
+bus. `la_data_in[15:0]` was used to provide an additional 16-bit input channel,
+but this introduced the management SoC dependency described above.
+
+---
+
+### D.4 --- Why This Voids the Prototype
+
+At 40 MHz with LAT=3, the compute core allows **75 ns** (3 clock cycles) between
+asserting `ram_ren` and expecting valid data on `ram_rdata`. For the management
+SoC relay to meet this window, its firmware would need to:
+
+1. Detect `ram_ren` asserted on mprj_io[29]
+2. Latch the 19-bit address from mprj_io[28:10]
+3. Issue a read to the external SRAM
+4. Receive DQ[15:0] from the SRAM (10 ns access time + PCB delay)
+5. Write the 16-bit value to `la_data_in[15:0]`
+
+Each step alone requires many PicoRV32 clock cycles. 75 ns is impossible for
+firmware. The PicoRV32 has no hardware DMA capable of performing this relay
+autonomously.
+
+The management SoC also has no clean pin path for DQ[15:0]: only 15 dedicated
+management GPIO pins exist on the Caravel die, and the remaining 8 free
+`mprj_io` pads are insufficient for a 16-bit bus.
+
+**Net result:** the taped-out chip cannot perform inference at 40 MHz. Running
+LAT at a firmware-serviceable value would require hundreds of cycles per read,
+making a 1000-beat batch take seconds rather than milliseconds.
+
+---
+
+### D.5 --- What a Corrected Standalone ASIC Requires
+
+The fix is straightforward outside the Caravel pin-count constraint:
+
+**RTL changes (top.sv):**
+
+```systemverilog
+// Replace:
+wire [15:0] ram_rdata_w = la_data_in[15:0];
+assign io_oeb = {{`MPRJ_IO_PADS-30{1'b1}}, 30'b0};
+
+// With:
+wire [15:0] ram_rdata_w = io_in[15:0];
+assign io_oeb = {{`MPRJ_IO_PADS-30{1'b1}}, 14'b0, 16'hFFFF};
+// io_oeb[15:0] = 1 (inputs for ram_rdata)
+// io_oeb[29:16] = 0 (outputs for address, control, class signals)
+```
+
+**Pin reassignment:**
+
+| Signal | Pin | Direction |
+|---|---|---|
+| `ram_rdata[15:0]` | io[15:0] | Input (SRAM DQ[15:0]) |
+| `class_out[2:0]` | io[18:16] | Output |
+| `sample_rdy` | io[19] | Output |
+| `done` | io[20] | Output |
+| `error` | io[21] | Output |
+| `error_code[3:0]` | io[25:22] | Output |
+| `ram_addr[18:0]` | io[44:26] | Output |
+| `ram_ren` | io[45] | Output |
+
+This requires 46 I/O pads --- 8 more than Caravel's 38. A standalone ASIC on
+sky130A with a custom pad ring has no such constraint.
+
+**System behaviour (corrected):**
+
+The management SoC is completely removed from the inference data path. The
+external MCU (nRF52840) pre-loads SRAM before firing `start`; during inference
+the compute core drives `ram_addr` and `ram_ren` directly through pads, and
+DQ[15:0] returns through dedicated input pads to `ram_rdata` with no firmware
+relay. LAT=3 at 40 MHz remains valid.
+
+---
+
+### D.6 --- Lesson
+
+The Caravel GPIO pin budget (38 pads, heavily pre-allocated by the Caravel
+template) is insufficient for an ASIC that requires both a wide address output
+bus and a wide data input bus. Future designs targeting Caravel should audit
+the total pad count --- inputs plus outputs --- before committing to an
+off-chip memory interface. Alternatively, a narrower bus (8-bit data, two
+cycles per word) would fit within 38 pads and preserve the direct pad path
+for `ram_rdata`.
