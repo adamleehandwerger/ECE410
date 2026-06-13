@@ -1,0 +1,332 @@
+\documentclass[11pt]{article}
+
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{parskip}
+
+\geometry{margin=2.2cm}
+
+\definecolor{accent}{RGB}{30,90,160}
+\titleformat{\section}{\large\bfseries\color{accent}}{}{0em}{}[\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries}{}{0em}{}
+
+\title{\textbf{Compute Core --- Mathematical Description}\\[0.4em]
+       \large 5-Class Cardiac Arrhythmia Classifier, RBF-SVM ASIC}
+\author{Adam Handwerger \quad \texttt{handwerg@pdx.edu}\\
+        ECE410, Portland State University}
+\date{2026-06-05}
+
+\begin{document}
+\maketitle
+\noindent\rule{\linewidth}{0.5pt}
+
+\vspace{0.3em}
+The \texttt{svm\_compute\_core} implements two sequential subfunctions per support
+vector: a \textbf{distance function} (\texttt{dist}) that computes the squared
+Euclidean distance between an input feature vector and a support vector, and a
+\textbf{kernel function} (\texttt{horner}) that evaluates the RBF exponential.
+After all support vectors are processed, an \textbf{accumulation and classification}
+step produces the output class label.
+
+All arithmetic is performed in \(\mathbb{Q}_{6.10}\) 16-bit signed fixed-point
+unless otherwise noted.
+
+\vspace{0.5em}
+\noindent\rule{\linewidth}{0.3pt}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Fixed-Point Representation (\(\mathbb{Q}_{6.10}\))}
+
+A 16-bit signed value \(v\) is stored as the integer
+\[
+    \hat{v} = \left\lfloor v \cdot 2^{10} \right\rfloor \in [-32768,\; 32767]
+\]
+with the correspondence
+\[
+    v = \frac{\hat{v}}{1024}, \qquad
+    \text{range: } [-32,\; +31.999], \qquad
+    \text{LSB} = 2^{-10} \approx 0.001.
+\]
+Multiplication of two \(\mathbb{Q}_{6.10}\) values \(\hat{a}\) and \(\hat{b}\)
+produces a raw 32-bit product in \(\mathbb{Q}_{12.20}\) format, because both the
+integer and fractional bit-widths double:
+\[
+    6 + 6 = 12 \text{ integer bits}, \qquad 10 + 10 = 20 \text{ fractional bits}.
+\]
+To restore \(\mathbb{Q}_{6.10}\), the 32-bit product is arithmetic-right-shifted by
+10 bits (dividing by \(2^{10}\)), yielding a \(\mathbb{Q}_{12.10}\) value:
+\[
+    \widehat{a \cdot b} = \frac{\hat{a} \cdot \hat{b}}{2^{10}}.
+\]
+The upper bits are then truncated to the 16-bit \(\mathbb{Q}_{6.10}\) range
+\([-32768,\; 32767]\). This truncation discards the redundant sign-extension bits
+introduced by the wider product; it does \emph{not} lose precision beyond the
+10-bit right-shift already applied. The right-shift is arithmetic (sign-preserving)
+so that negative products are handled correctly.
+
+The parameter \(\gamma = 0.25\) is exactly representable:
+\(\hat{\gamma} = 0.25 \times 1024 = 256 = \texttt{0x0100}\).
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Distance Function (\texttt{dist})}
+
+\subsection{Definition}
+
+For input feature vector \(\mathbf{x} \in \mathbb{Q}_{6.10}^{N}\) and support
+vector \(\mathbf{sv} \in \mathbb{Q}_{6.10}^{N}\) with \(N = 256\) dimensions:
+\[
+    d^2(\mathbf{x},\, \mathbf{sv})
+    \;=\;
+    \sum_{i=0}^{N-1} \left( x_i - sv_i \right)^2.
+\]
+
+\subsection{Pipeline Implementation}
+
+The accumulator is a two-stage registered pipeline:
+\[
+    \delta_i = x_i - sv_i,
+    \qquad
+    s_i = \delta_i^2,
+    \qquad
+    D_k = \sum_{i=0}^{k} s_i.
+\]
+Stage 1 (cycle \(c\)): compute and register \(s_i = \delta_i^2\).\\
+Stage 2 (cycle \(c+1\)): add \(s_i\) to the running accumulator \(D\).
+
+After the \(N\)-th input pair is presented, \textbf{two drain cycles} are
+required before the result \(D_{N-1}\) is valid:
+\begin{itemize}
+    \item Drain cycle 1: \(s_{N-1}\) propagates from the multiplier register to
+          the adder input.
+    \item Drain cycle 2: \(s_{N-1}\) is added into \(D\) and the result is
+          registered.
+\end{itemize}
+Total cycles per SV distance: \(N + 2 = 258\) at \(\text{LAT}=1\);
+\quad \(N \cdot \text{LAT} + 2\) at general latency.
+
+\subsection{Saturation}
+
+The accumulator is 32-bit, with a hardware maximum of \(2^{32} - 1\).
+The theoretical worst-case accumulated value for \(N=256\) and maximum
+feature magnitude \(|x_i - sv_i| \leq 63.999\) is
+\[
+    D_{\max} = 256 \times (63.999)^2 \approx 1{,}048{,}544 \approx 2^{20},
+\]
+which is well within the 32-bit range. The fixed-point overflow boundary
+is determined by the gamma multiply: after right-shifting by \(2^{10}\),
+the maximum representable Q6.10 value from a 32-bit accumulator is
+\[
+    \frac{2^{32}}{2^{10}} = 2^{22}.
+\]
+With \(\hat{\gamma} = 2^8\), the accumulator would produce
+\(\hat{p} > 2^{18}\) only if \(D > 2^{20}\), which does not occur on
+real ECG data. The \texttt{ERR\_DIST\_OVERFLOW} flag is therefore a
+defensive sanity check rather than a condition expected in normal
+operation.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Kernel Function (\texttt{horner})}
+
+\subsection{Definition}
+
+The RBF (Gaussian) kernel is
+\[
+    K(\mathbf{x},\, \mathbf{sv})
+    \;=\;
+    e^{-\gamma \, d^2(\mathbf{x},\, \mathbf{sv})},
+    \qquad \gamma = 0.25.
+\]
+The argument \(p = \gamma d^2\) ranges over \([0,\; \gamma D_{\max}] \approx [0,\; 262{,}136 / 1024] \approx [0,\; 256]\)
+in floating-point. In \(\mathbb{Q}_{6.10}\) fixed-point, \(\hat{\gamma} = 256 = 2^8\)
+and \(\hat{d}^2\) reaches up to \(\sim 2^{20}\) (saturating accumulator), so after
+the \(\mathbb{Q}_{6.10}\) multiply (right-shift by \(2^{10}\)):
+\[
+    \hat{p} = \frac{\hat{\gamma} \cdot \hat{d}^2}{2^{10}}
+    \leq \frac{2^8 \cdot 2^{20}}{2^{10}} = 2^{18}.
+\]
+
+\subsection{Range Reduction}
+
+Direct Horner evaluation of \(e^{-p}\) over \([0, 256]\) requires degree
+\(\geq 8\) and overflows \(\mathbb{Q}_{6.10}\) intermediate products.
+Instead, \(p\) is split into integer and fractional parts:
+\[
+    I = \left\lfloor \frac{\hat{p}}{2^{10}} \right\rfloor \in [0,\; 255],
+    \qquad
+    F = \frac{\hat{p} \bmod 2^{10}}{2^{10}} \in [0,\; 1),
+\]
+so that
+\[
+    e^{-p} = e^{-I} \cdot e^{-F}.
+\]
+
+\subsubsection*{LUT term: \(e^{-I}\)}
+
+A 256-entry read-only table stores
+\[
+    \texttt{lut}[I] = \left\lfloor e^{-I} \cdot 2^{10} \right\rfloor
+    \in \mathbb{Q}_{6.10}, \qquad I = 0, 1, \ldots, 255.
+\]
+For \(I \geq 8\), \(e^{-I} < 0.00034\), which rounds to zero in
+\(\mathbb{Q}_{6.10}\), so the effective range is \(I \in [0,\; 7]\).
+The LUT occupies \(256 \times 16\) bits \(= 4\;\text{KB}\) of on-chip
+flip-flop registers.
+
+\subsubsection*{Polynomial term: \(e^{-F}\)}
+
+For \(F \in [0,\; 1)\), numerical analysis shows that degree 6 is the minimum
+Taylor polynomial that keeps the approximation error below the
+\(\mathbb{Q}_{6.10}\) LSB of \(2^{-10} \approx 0.001\) across the full range.
+The RTL defines up to 16 Taylor coefficients (\texttt{COEFF\_00}--\texttt{COEFF\_15})
+and evaluates them via Horner's method. Defining signed coefficients
+\(a_n = (-1)^n / n!\), the polynomial in standard form is:
+\[
+    e^{-F} \;\approx\; a_0 + a_1 F + a_2 F^2 + \cdots + a_d F^d,
+\]
+where:
+\[
+    a_0 = 1,\quad
+    a_1 = -1,\quad
+    a_2 = 0.5,\quad
+    a_3 = -0.1\overline{6},\quad
+    a_4 = 0.041\overline{6},\quad
+    a_5 = -0.008\overline{3},\quad
+    a_6 = 0.001\overline{388}.
+\]
+Rather than evaluating each power of \(F\) separately,
+Horner's method computes this as a recurrence starting from the innermost term:
+\[
+    h_d = a_d, \qquad h_k = a_k + F \cdot h_{k+1}, \qquad k = d-1,\; d-2,\; \ldots,\; 0.
+\]
+The result is \(h_0 = e^{-F}\). The alternating signs are carried in the
+\(a_n\) coefficients, so every step of the recurrence is a simple multiply-add
+with no separate sign logic. Each step is one multiply and one add,
+requiring \(d\) multiplications and \(d\) additions total.
+
+\subsection{Kernel Output}
+
+The two terms are combined by a \(\mathbb{Q}_{6.10}\) multiply:
+\[
+    \hat{K} = \frac{\texttt{lut}[I] \cdot \hat{e}^{-F}}{2^{10}}
+    \;\in\; [0,\; 1024],
+\]
+where \(\hat{K} = 1024\) corresponds to \(K = 1.0\) (achieved when
+\(d^2 = 0\), i.e.\ \(\mathbf{x} = \mathbf{sv}\)).
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Alpha Accumulation and OVR Decision}
+
+\subsection{Per-Class Accumulation}
+
+For each support vector \(j = 0, \ldots, M-1\) with class label
+\(\ell_j \in \{0,1,2,3,4\}\) and alpha coefficient
+\(\alpha_j \in \mathbb{Q}_{6.10}\), the kernel output is weighted and
+accumulated into the corresponding class score:
+\[
+    f_c(\mathbf{x}) \;=\;
+    \sum_{\substack{j=0 \\ \ell_j = c}}^{M-1}
+    \alpha_j \cdot K(\mathbf{x},\, \mathbf{sv}_j),
+    \qquad c = 0, 1, 2, 3, 4.
+\]
+The five accumulators \(f_0, \ldots, f_4\) are 32-bit registers, updated
+after each SV kernel evaluation. Alpha coefficients are stored on-chip in
+a 500-entry register file (\texttt{alpha\_table}[]), loaded via the
+Wishbone \texttt{ALPHA\_WR} register before classification begins.
+
+\subsection{Classification (Argmax)}
+
+After all \(M = 500\) support vectors are processed, the predicted class is
+\[
+    \hat{y} = \arg\max_{c \,\in\, \{0,1,2,3,4\}} f_c(\mathbf{x}).
+\]
+The argmax is implemented as a 5-way comparator tree and completes in one
+clock cycle. The result is registered on \texttt{class\_out[2:0]} and
+exposed on GPIO.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Operation Count Summary}
+
+\begin{center}
+\begin{tabular}{lrrr}
+\toprule
+\textbf{Stage} & \textbf{Operations per SV} & \textbf{SVs} & \textbf{Total} \\
+\midrule
+\texttt{dist}: subtractions & 256 & 500 & 128{,}000 \\
+\texttt{dist}: multiplications & 256 & 500 & 128{,}000 \\
+\texttt{dist}: accumulations & 256 & 500 & 128{,}000 \\
+\texttt{horner}: multiplications & 6 & 500 & 3{,}000 \\
+\texttt{horner}: additions & 6 & 500 & 3{,}000 \\
+Alpha multiply-accumulate & 1 & 500 & 500 \\
+\midrule
+\textbf{Total per beat} & & & \textbf{390{,}500} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\vspace{0.3em}
+At \(N = 256\) and \(M = 500\), the design is strongly
+\textbf{memory-bound}: arithmetic intensity \(AI \approx 1.5\)
+OPs/byte (LUT preloaded), placing the operating point well below
+the compute ceiling of the 40\;MHz fixed-point datapath.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{FSM Cycle Budget (LAT = 3)}
+
+\subsection*{Kernel FSM cycle count (\(T_{\text{kernel}} = 18\))}
+
+The \texttt{horner} FSM contains the following states, each consuming one
+clock cycle:
+
+\begin{center}
+\begin{tabular}{lrl}
+\toprule
+\textbf{States} & \textbf{Cycles} & \textbf{Operation} \\
+\midrule
+\texttt{SCALE}, \texttt{SCALE2} & 2 & compute \(\hat{p} = \hat{\gamma}\cdot\hat{d}^2 / 2^{10}\); split \(I\) and \(F\) \\
+\texttt{HORNER\_14}\,--\,\texttt{HORNER\_0} & 15 & Horner recurrence steps (degree-14 RTL polynomial) \\
+\texttt{OUTPUT} & 1 & multiply \(\texttt{lut}[I] \cdot \hat{e}^{-F}\) and register \(\hat{K}\) \\
+\midrule
+\textbf{Total} & \textbf{18} & \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The RTL defines 15 \texttt{HORNER} states (\texttt{HORNER\_14} down to
+\texttt{HORNER\_0}), corresponding to a degree-14 polynomial evaluation.
+Coefficients \(a_{7}\) through \(a_{14}\) truncate to zero in
+\(\mathbb{Q}_{6.10}\) (values \(< 2^{-10}\)), so the effective
+approximation is degree 6, but the FSM executes all 15 steps regardless.
+
+\subsection*{Total cycle budget}
+
+\[
+    T_{\text{beat}}
+    = T_{\text{load}} + M \cdot \left( T_{\text{dist}} + T_{\text{kernel}} \right)
+    + T_{\text{classify}}
+\]
+\[
+    = N \cdot \text{LAT}
+    + M \left( N \cdot \text{LAT} + 2 + 18 \right)
+    + 1
+\]
+\[
+    = 256 \times 3
+    + 500 \times \left( 256 \times 3 + 20 \right)
+    + 1
+    = 768 + 500 \times 788 + 1
+    = 394{,}769 \text{ cycles/beat}.
+\]
+At 40\;MHz: \(394{,}769 / 40 \times 10^{6} \approx 9.87\;\text{ms/beat}\),
+consistent with the measured \(9.7\;\text{ms}\) (the small difference
+reflects pipeline overlap between \textsc{load} and \textsc{compute}).
+
+\vspace{1em}
+\noindent\rule{\linewidth}{0.5pt}
+{\small\itshape ECE410 $\cdot$ Portland State University $\cdot$
+Adam Handwerger $\cdot$ sky130A $\cdot$ MIT-BIH Arrhythmia Database}
+
+\end{document}

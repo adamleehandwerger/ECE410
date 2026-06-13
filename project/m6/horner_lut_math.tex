@@ -1,0 +1,440 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage{amsmath,amssymb,booktabs,array,geometry,microtype}
+\usepackage[hidelinks]{hyperref}
+\usepackage{xcolor,needspace}
+\geometry{margin=2.5cm}
+
+\title{\textbf{Fixed-Point RBF Kernel Evaluation}\\
+       \large Range-Reduction LUT + Horner Approximation\\
+       \normalsize ECE 410 --- \texttt{svm\_compute\_core} (LUT variant, $\gamma = 0.25$)}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\bigskip
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Motivation and Problem Statement}
+
+The RBF (Gaussian) kernel between a feature vector $\mathbf{x}\in\mathbb{R}^{256}$
+and a support vector $\mathbf{s}\in\mathbb{R}^{256}$ is
+
+\begin{equation}
+  K(\mathbf{x},\mathbf{s}) = \exp\!\bigl(-\gamma\,\|\mathbf{x}-\mathbf{s}\|^2\bigr),
+  \qquad \gamma = 0.25.
+  \label{eq:rbf}
+\end{equation}
+
+All operands are stored in \textbf{Q6.10} fixed-point format: a 16-bit signed
+integer whose value represents a real number scaled by $2^{10}=1024$.  The
+squared Euclidean distance $D = \|\mathbf{x}-\mathbf{s}\|^2$ can reach
+approximately 60 in floating-point units, so the exponent argument
+$\gamma D \leq 0.25 \times 60 = 15$ spans the range $[0, 15]$.
+
+\subsection{Overflow in a Na\"{i}ve Single-Stage Horner}
+
+A na\"ive approach evaluates $e^{-\gamma D}$ directly by applying the Horner
+polynomial for $e^z$ at $z = -\gamma D \in (-15, 0]$.  In Q6.10 the
+intermediate product $\gamma_\text{int} \times D_\text{int}$ can reach
+$256 \times 64{,}000 \approx 1.6 \times 10^7$, which easily overflows a
+16-bit accumulator and wraps to a large positive value.  The Horner evaluator
+then returns $\approx 1.0$ instead of $e^{-15} \approx 3\times 10^{-7}$,
+collapsing classifier accuracy to near-random ($\approx 20\%$).
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Range-Reduction Decomposition}
+
+The fix exploits the multiplicative identity
+
+\begin{equation}
+  e^{-P} = e^{-I} \cdot e^{-F}, \qquad P = I + F,
+  \label{eq:decomp}
+\end{equation}
+
+where $I = \lfloor P \rfloor \in \mathbb{Z}_{\geq 0}$ is the integer part and
+$F = P - I \in [0,1)$ is the fractional part.  Only $e^{-F}$ is approximated
+by the Horner polynomial; its argument is always confined to $(-1, 0]$, which
+is well inside the polynomial's accurate range.  The factor $e^{-I}$ is
+retrieved from a small read-only LUT.
+
+\begin{quote}\itshape
+\textbf{Remark (field-programmable $\gamma$).}
+Because the decomposition $e^{-P} = e^{-I} \cdot e^{-F}$ holds for any
+value of $P$, and because $I$ and $F$ are simply the integer and fractional
+parts of $P = \gamma D$ regardless of how $\gamma$ was obtained, \textbf{neither
+the LUT entries nor the Horner coefficients depend on $\gamma$}.
+The LUT stores $e^{-i}$ for the non-negative integers $i = 0,1,\ldots,15$~---~a
+universal constant table.
+The Horner polynomial approximates $e^x$ for $x \in (-1,0]$~---~also
+independent of $\gamma$.
+Reprogramming $\gamma$ via the \texttt{param\_write\_en} interface at runtime
+only changes the product $P_\text{int} = \gamma_\text{int} \times D_\text{int}$
+computed in the \texttt{SCALE} stage; all downstream logic (LUT lookup, Horner
+recurrence, final multiply) is unaffected.
+The one practical limit is saturation: for $I \geq 8$ the LUT already
+returns zero (since $e^{-8} \cdot 1024 \approx 0.34$ rounds to zero in Q6.10),
+so any $\gamma$ large enough to push $I \geq 8$ for a given distance will
+yield $K_\text{out} = 0$, which is the mathematically correct saturated result.
+
+\medskip
+\textbf{Design note (recommended extension).}
+A silent all-zero kernel matrix is indistinguishable from a valid low-similarity
+result, so the MCU has no way of knowing the classifier has silently degraded.
+A lightweight on-chip guard can prevent this.  Define a programmable
+saturation threshold $\gamma_\text{max}$ such that
+
+\begin{equation}
+  \gamma_\text{int} > \gamma_\text{max,int}
+  \quad\Longrightarrow\quad
+  \texttt{error} \leftarrow 1
+  \label{eq:gamma_guard}
+\end{equation}
+
+latched in the \texttt{IDLE} $\to$ \texttt{LOAD\_FIFO} transition alongside
+the existing SV-count validation.
+A reasonable default is $\gamma_\text{max} = 8.0$
+($\gamma_\text{max,int} = 8192$ in Q6.10): at this value even the minimum
+non-zero distance $D = 2^{-10}$ (one Q6.10 LSB) gives
+$I = \lfloor 8.0 \times 2^{-10} \rfloor = 0$, so no legitimate distance is
+silently zeroed.
+Alternatively, a \emph{runtime} check can count how many kernel outputs in a
+batch equal zero and assert \texttt{error} if the fraction exceeds a
+configurable threshold (e.g.\ $> 50\%$ zero), which catches mis-programmed
+$\gamma$ without requiring a hard static limit.
+\end{quote}
+
+\subsection{Computing $P$, $I$, and $F$ in Q6.10}
+
+Let $\gamma_\text{int}$ and $D_\text{int}$ denote the Q6.10 integer
+representations of $\gamma$ and $D$ respectively (i.e.\
+$\gamma_\text{int} = \lfloor\gamma \cdot 1024\rfloor$,\
+$D_\text{int} = \lfloor D \cdot 1024\rfloor$).  The hardware computes:
+
+\begin{align}
+  P_\text{int} &= \gamma_\text{int} \times D_\text{int}
+                = \lfloor \gamma D \cdot 2^{20} \rfloor
+                \quad \text{(36-bit unsigned product)}, \label{eq:p_int}\\[4pt]
+  I &= P_\text{int} \gg 20
+     = \lfloor \gamma D \rfloor, \label{eq:I}\\[4pt]
+  F_\text{q} &= (P_\text{int} \gg 10)\;\&\;\texttt{0x3FF}
+              = \lfloor F \cdot 1024 \rfloor
+              \in [0, 1023]. \label{eq:Fq}
+\end{align}
+
+The Horner input is then set to
+
+\begin{equation}
+  x = -F_\text{q} \in [-1023,\; 0],
+  \label{eq:x}
+\end{equation}
+
+which represents the real value $x_\text{real} = -F \in (-1, 0]$ in Q6.10.
+If $I \geq 8$ (i.e.\ $\gamma D \geq 8$, meaning $e^{-I} < 2^{-11} < 1\,\text{LSB}$),
+the LUT returns zero and the entire kernel output is set to zero without
+computing the Horner polynomial.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Integer Part: EXP\_INT\_LUT}
+
+The 16-entry read-only LUT stores precomputed values
+
+\begin{equation}
+  \texttt{EXP\_INT\_LUT}[i] = \text{round}\!\left(e^{-i} \cdot 1024\right),
+  \qquad i = 0, 1, \ldots, 15.
+  \label{eq:lut_def}
+\end{equation}
+
+\begin{table}[h]
+\centering
+\caption{EXP\_INT\_LUT contents (16-bit Q6.10, 32 bytes total).}
+\label{tab:lut}
+\begin{tabular}{ccc}
+\toprule
+$i$ & $e^{-i}$ (float) & LUT value (integer, Q6.10) \\
+\midrule
+0  & 1.000000 & 1024 \\
+1  & 0.367879 & 377  \\
+2  & 0.135335 & 139  \\
+3  & 0.049787 & 51   \\
+4  & 0.018316 & 19   \\
+5  & 0.006738 & 7    \\
+6  & 0.002479 & 3    \\
+7  & 0.000912 & 1    \\
+8--15 & $< 3.4\times10^{-4}$ & 0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The LUT value at the selected index is latched into the 16-bit register
+\texttt{lut\_val} during the \texttt{SCALE2} pipeline stage.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Fractional Part: 15th-Order Horner Polynomial}
+
+The Taylor series for $e^x$ around $x=0$ is
+
+\begin{equation}
+  e^x = \sum_{n=0}^{N} \frac{x^n}{n!} + O(x^{N+1}).
+  \label{eq:taylor}
+\end{equation}
+
+For $x = -F \in (-1, 0]$ and $N = 15$ the truncation error is
+$|x|^{16}/16! < 10^{-13}$, far below the Q6.10 resolution of $2^{-10}$.
+The polynomial is evaluated in \textbf{Horner form} to minimise multiply-add
+operations:
+
+\begin{equation}
+  e^x \approx c_0 + x\!\left(c_1 + x\!\left(c_2 + x\!\left(\cdots
+              + x\!\left(c_{14} + x\cdot c_{15}\right)\cdots\right)\right)\right),
+  \qquad c_n = \frac{1}{n!}.
+  \label{eq:horner}
+\end{equation}
+
+\subsection{Q6.10 Coefficient Quantisation}
+
+Each coefficient $c_n = 1/n!$ is stored as the 16-bit integer
+$\hat{c}_n = \lfloor c_n \cdot 1024 \rfloor$.  Coefficients smaller than
+$1/1024 \approx 9.77\times10^{-4}$ are rounded to zero; the table below lists
+the stored values used in the RTL.
+
+\begin{table}[h]
+\centering
+\caption{Horner coefficients in Q6.10 (\texttt{COEFF\_00}--\texttt{COEFF\_15} in \texttt{svm\_compute\_core.sv}).}
+\label{tab:coeffs}
+\begin{tabular}{cccc}
+\toprule
+$n$ & $c_n = 1/n!$ (float) & $\hat{c}_n$ (integer) & RTL constant \\
+\midrule
+0  & 1.000000 & 1024 & \texttt{COEFF\_00} \\
+1  & 1.000000 & 1024 & \texttt{COEFF\_01} \\
+2  & 0.500000 & 512  & \texttt{COEFF\_02} \\
+3  & 0.166667 & 170  & \texttt{COEFF\_03} \\
+4  & 0.041667 & 42   & \texttt{COEFF\_04} \\
+5  & 0.008333 & 8    & \texttt{COEFF\_05} \\
+6  & 0.001389 & 1    & \texttt{COEFF\_06} \\
+7--12 & $< 9.77\times10^{-4}$ & 0 & \texttt{COEFF\_07--12} \\
+13--15 & $\approx 0$ & 1 & \texttt{COEFF\_13--15}\textsuperscript{*} \\
+\bottomrule
+\multicolumn{4}{l}{\footnotesize \textsuperscript{*}Set to 1 rather than 0 to prevent the multiply chain from dead-ending on a zero factor.}
+\end{tabular}
+\end{table}
+
+The dominant quantisation error occurs at $n=6$: the exact value $1/720 \approx
+0.001389$ is stored as $1/1024 \approx 0.000977$, introducing an error of
+$\approx 4.1\times10^{-4}$.  For $|x| \leq 1$ the propagated polynomial error
+stays well below the experimentally measured peak of $5.5\times10^{-4}$.
+
+\subsection{Hardware Horner Recurrence}
+
+Each Horner step computes one multiply-accumulate in a pipelined fashion.
+Letting $r_k$ denote the running result after processing coefficient $c_k$
+from the inside out:
+
+\begin{align}
+  r_{15} &= \hat{c}_{15}, \label{eq:rec_init}\\
+  r_k    &= \hat{c}_k + \left\lfloor \frac{x \cdot r_{k+1}}{1024} \right\rfloor,
+           \quad k = 14, 13, \ldots, 0. \label{eq:rec}
+\end{align}
+
+The division by 1024 (arithmetic right-shift by 10) is the Q6.10 renormalisation
+after each 16-bit $\times$ 16-bit $\rightarrow$ 32-bit multiply:
+
+\begin{equation}
+  \texttt{temp\_h} = x_\text{int} \times r_{k+1,\,\text{int}},
+  \qquad
+  \left\lfloor \frac{x \cdot r_{k+1}}{1024}\right\rfloor
+    = \texttt{temp\_h}[25\!:\!10].
+  \label{eq:shift}
+\end{equation}
+
+After the final step the result $r_0 \approx e^{-F} \cdot 1024$ is clamped to
+$[0,\;1024]$ to handle rounding artefacts:
+
+\begin{equation}
+  \texttt{horner\_clamp} = \text{clamp}(r_0,\; 0,\; 1024).
+  \label{eq:clamp}
+\end{equation}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Combined Kernel Output}
+
+The two factors are multiplied and renormalised:
+
+\begin{equation}
+  \boxed{
+    K_\text{out}
+    = \left\lfloor \frac{\texttt{lut\_val} \times \texttt{horner\_clamp}}{1024} \right\rfloor
+    = \left\lfloor e^{-I}\cdot 1024 \;\cdot\; e^{-F}\cdot 1024 \;\cdot\; 2^{-10} \right\rfloor
+    \approx e^{-\gamma D} \cdot 1024
+  }
+  \label{eq:kout}
+\end{equation}
+
+in Q6.10.  The maximum product is $1024 \times 1024 = 2^{20}$, which fits in a
+32-bit unsigned register; bits $[25:10]$ of the product deliver the Q6.10
+result.  The output is never clamped at this stage because both factors are
+already bounded to $[0,\;1024]$.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Pipeline Latency}
+
+The \texttt{horner\_engine} module executes the following sequential states,
+one per clock cycle at 50\,MHz:
+
+\begin{table}[h]
+\centering
+\caption{Pipeline stages and their operations (18 cycles total).}
+\label{tab:pipeline}
+\begin{tabular}{clp{8cm}}
+\toprule
+Cycle & State & Operation \\
+\midrule
+1  & \texttt{SCALE}        & $P_\text{int} \leftarrow \gamma_\text{int} \times D_\text{int}$ (36-bit product) \\
+2  & \texttt{SCALE2}       & Extract $I$, look up \texttt{lut\_val}; set $x \leftarrow -F_q$ \\
+3  & \texttt{HORNER\_14}   & $r \leftarrow c_{15}$; $\text{temp\_h} \leftarrow x \cdot c_{15}$ \\
+4  & \texttt{HORNER\_13}   & $r \leftarrow c_{14} + \text{temp\_h}[25\!:\!10]$ \\
+$\vdots$ & $\vdots$ & $\vdots$ \\
+17 & \texttt{HORNER\_0}    & $r \leftarrow c_1 + \text{temp\_h}[25\!:\!10]$ \\
+18 & \texttt{OUTPUT}       & $r_0 \leftarrow c_0 + \text{temp\_h}[25\!:\!10]$; clamp; multiply LUT; emit \texttt{kernel\_out} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Error Analysis}
+
+Define the absolute error as
+$\varepsilon = |K_\text{out}/1024 - e^{-\gamma D}|$.
+Three sources contribute:
+
+\begin{enumerate}
+  \item \textbf{LUT quantisation.}
+        The integer-part factor is rounded to the nearest integer in Q6.10.
+        Relative error $\leq 0.5/(e^{-i}\cdot 1024)$; largest for $i=7$
+        (stored as 1, exact $\approx 0.934$, relative error $\approx 7\%$).
+        Absolute contribution $\leq 7\times10^{-4}$ at the kernel output.
+
+  \item \textbf{Coefficient quantisation.}
+        The dominant term is $c_6$: stored as $1/1024$, exact $1/720$,
+        error $\approx 4.1\times10^{-4}$ per unit of $|x|^6$.  For
+        $|x|\leq 1$ the polynomial error $\leq 4.1\times10^{-4}$.
+
+  \item \textbf{Multiply-shift truncation.}
+        Each of the 15 Horner shifts truncates a half-LSB on average,
+        accumulating $\leq 15 \times 2^{-11} \approx 7\times10^{-3}$ in the
+        worst case; however cancellation across terms keeps the net effect
+        below $2\times10^{-4}$.
+\end{enumerate}
+
+The empirically measured maximum over $D^2 \in [0,\;60]$ is
+
+\begin{equation}
+  \max_{D^2 \in [0,60]} \varepsilon = 5.5 \times 10^{-4},
+  \label{eq:max_err}
+\end{equation}
+
+which is within the Q6.10 LSB width of $1/1024 \approx 9.77\times10^{-4}$.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\needspace{14\baselineskip}
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Diagnostic Error Codes}
+
+The \texttt{svm\_compute\_core} module exposes two error outputs to the host MCU:
+
+\begin{itemize}
+  \item \texttt{error} \textbf{[1-bit]} --- asserts high on the first fault and
+        \emph{holds} until \texttt{rst\_n} is de-asserted.  Backward-compatible
+        with the single-bit flag used in prior RTL versions.
+  \item \texttt{error\_code} \textbf{[3:0]} --- latches the code of the
+        \emph{first} fault detected and holds it until reset.  A value of
+        \texttt{4'h0} means no fault has occurred.
+\end{itemize}
+
+Codes are assigned by a combinational priority encoder; the highest-priority
+active condition wins.
+
+\begin{table}[h]
+\centering
+\caption{Error code definitions (\texttt{error\_code[3:0]}, priority
+         high $\to$ low).}
+\label{tab:errcodes}
+\begin{tabular}{cllp{5.8cm}}
+\toprule
+Code & Constant & Priority & Condition and MCU action \\
+\midrule
+\texttt{0x0} & \texttt{ERR\_NONE}          & ---    &
+  No fault.  Normal operation. \\[3pt]
+\texttt{0x1} & \texttt{ERR\_SV\_ZERO}      & High   &
+  $\sum\texttt{sv\_count} = 0$ when the FSM leaves \texttt{IDLE}.
+  No support vectors were programmed before \texttt{start}.
+  \emph{Action: re-program \texttt{num\_sv\_per\_class} and pulse \texttt{rst\_n}.} \\[3pt]
+\texttt{0x2} & \texttt{ERR\_SV\_OVERFLOW}  & $\uparrow$ &
+  $\sum\texttt{sv\_count} > \texttt{NUM\_SV}$ (hardware capacity exceeded).
+  \emph{Action: reduce per-class SV counts and reset.} \\[3pt]
+\texttt{0x3} & \texttt{ERR\_ILLEGAL\_STATE}& $\uparrow$ &
+  FSM reached the \texttt{default} (undefined) branch.  Indicates a
+  synthesis/simulation mismatch or glitch.
+  \emph{Action: assert \texttt{rst\_n}; inspect waveform.} \\[3pt]
+\texttt{0x4} & \texttt{ERR\_GAMMA\_SAT}    & $\downarrow$ &
+  $\gamma_\text{int} > 8192$ (i.e.\ $\gamma > 8.0$ in Q6.10).
+  All kernel outputs will be zero because $e^{-I} = 0$ for $I \geq 8$
+  in the LUT.  See Section~\ref{eq:gamma_guard}.
+  \emph{Action: reprogram \texttt{gamma\_reg} to a value $\leq$ \texttt{0x2000} and reset.} \\[3pt]
+\texttt{0x5} & \texttt{ERR\_FIFO\_OVERFLOW}& Low    &
+  The input FIFO was full while \texttt{qspi\_valid} was asserted during
+  \texttt{LOAD\_FIFO}.  One or more feature words were silently dropped,
+  corrupting the feature vector.
+  \emph{Action: reduce QSPI clock rate or increase \texttt{FIFO\_DEPTH}; reset.} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection*{Implementation notes}
+
+\begin{itemize}
+  \item \textbf{Sticky latch.}  Once \texttt{error\_code} $\neq$ \texttt{0x0},
+        it does not update even if a second fault of lower priority occurs.
+        This preserves the \emph{root cause} for the MCU to read after
+        \texttt{done} or after a watchdog timeout.
+  \item \textbf{Reset to clear.}  The only way to clear \texttt{error} and
+        \texttt{error\_code} is to assert \texttt{rst\_n} low for at least
+        four clock cycles.  A bare \texttt{start} pulse does not clear them.
+  \item \textbf{FIFO overflow detection.}  The \texttt{ERR\_FIFO\_OVERFLOW}
+        flag is a separate sticky register inside the core that asserts
+        whenever \texttt{fifo\_full \&\& qspi\_valid} during
+        \texttt{LOAD\_FIFO}.  It feeds into the priority encoder on every
+        cycle, so the error is reported even if the FSM subsequently
+        completes normally.
+  \item \textbf{Future codes \texttt{0x6}--\texttt{0xF}} are reserved for
+        extension (e.g.\ kernel-output watchdog, work-RAM address overflow).
+\end{itemize}
+
+\needspace{14\baselineskip}
+\section{Summary of Notation}
+
+\begin{table}[h]
+\centering
+\caption{Symbol definitions.}
+\begin{tabular}{cl}
+\toprule
+Symbol & Definition \\
+\midrule
+$\gamma$ & RBF bandwidth; $\gamma = 0.25$, stored as $\gamma_\text{int} = 256$ (Q6.10) \\
+$D$ & Squared Euclidean distance $\|\mathbf{x}-\mathbf{s}\|^2$, 20-bit Q6.10 \\
+$P$ & Exponent argument $\gamma D$; $P_\text{int} = \gamma_\text{int}\times D_\text{int}$ (36-bit) \\
+$I$ & Integer part of $P$; $I = P_\text{int} \gg 20 \in \{0,\ldots,15\}$ \\
+$F$ & Fractional part of $P$; $F \in [0,1)$ \\
+$F_q$ & Q6.10 representation of $F$; $F_q = (P_\text{int}\gg 10)\,\&\,\texttt{0x3FF}$ \\
+$x$ & Horner argument; $x = -F_q \in [-1023,\;0]$ (integer), $-F \in (-1,\;0]$ (real) \\
+$\hat{c}_n$ & Q6.10 coefficient $\lfloor n!^{-1}\cdot 1024\rfloor$ \\
+\texttt{lut\_val} & $\text{round}(e^{-I}\cdot 1024)$, 16-bit \\
+\texttt{horner\_clamp} & $\text{clamp}(r_0,\;0,\;1024) \approx e^{-F}\cdot 1024$, 16-bit \\
+$K_\text{out}$ & Final kernel output; $\lfloor\texttt{lut\_val}\times\texttt{horner\_clamp}/1024\rfloor$, 16-bit Q6.10 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\end{document}

@@ -1,0 +1,6 @@
+implementation,platform,throughput_inf_s,accuracy_pct,active_power_mW,energy_eff_inf_per_J,op_intensity_ops_per_byte,perf_MOPS,inference_time_ms,ram_latency_cycles,notes
+ASIC_sky130A_LAT1,sky130A 40MHz,309,97.67,66,4682,2.00,158.2,3.23,1,measured — svm_compute_core RTL cosim 300 samples LAT=1 (ideal RAM)
+ASIC_sky130A_LAT3,sky130A 40MHz,103,97.67,66,1561,2.00,52.7,9.70,3,measured — svm_ram_latency_tb LAT=3 IS61WV51216 10ns SRAM
+sklearn_OVR,Orca Xeon 1-core,4200,97.67,15000,280,2.00,2150,,, estimated — libsvm C kernel sequential
+Numba_parallel,Orca Xeon 8-core,95000,97.67,80000,1188,2.00,48640,,,estimated — Numba prange parallel data in L3
+sklearn_float_unlimited,Orca Xeon 1-core,4200,97.67,15000,280,2.00,2150,,,sklearn float precision 416 SVs (unlimited)
