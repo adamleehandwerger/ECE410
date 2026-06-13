@@ -349,7 +349,6 @@ async def run_spi_cosim(dut):
         X, y, test_size=0.2, stratify=y, random_state=42)
 
     print("[cosim] Training 5 binary OVR SVMs with SV_ALLOC =", SV_ALLOC, "...")
-    from sklearn.metrics.pairwise import rbf_kernel as sk_rbf
     sv_vecs_per_class   = []
     sv_alphas_per_class = []
     sv_biases           = []
@@ -365,10 +364,7 @@ async def run_spi_cosim(dut):
         idx    = (np.argsort(-np.abs(alphas))[:budget]
                   if len(alphas) > budget else np.arange(len(alphas)))
         sel_sv = svs[idx]; sel_a = alphas[idx]
-        K_tr      = sk_rbf(X_tr, sel_sv, gamma=DEFAULT_GAMMA)
-        partial   = (K_tr * sel_a).sum(axis=1)
-        full_tr   = svm_c.decision_function(X_tr)
-        bias_hw   = float(np.mean(full_tr - partial))
+        bias_hw   = float(svm_c.intercept_[0])
         sv_vecs_per_class.append(sel_sv)
         sv_alphas_per_class.append(sel_a)
         sv_biases.append(bias_hw)
