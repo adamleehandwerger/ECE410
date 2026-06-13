@@ -1,0 +1,22 @@
+% latex_header.tex — pandoc include for design_summary PDF
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{hyperref}
+
+% Keep tables from overflowing columns
+\setlength{\LTleft}{0pt}
+\setlength{\LTright}{0pt}
+\renewcommand{\arraystretch}{1.15}
+
+% Shrink font inside tables so wide tables fit
+\AtBeginEnvironment{longtable}{\small}
+
+% Code blocks
+\usepackage{fancyvrb}
+\usepackage{listings}
+\lstset{basicstyle=\ttfamily\small, breaklines=true, breakatwhitespace=true}
+
+% Page geometry handled via pandoc -V geometry
