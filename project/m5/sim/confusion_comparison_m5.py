@@ -1,18 +1,14 @@
 """
 confusion_comparison_m5.py — ECE410 Milestone 5
 ================================================
-Side-by-side confusion matrix: best sklearn vs best ASIC Q6.10.
+Side-by-side confusion matrix: sklearn binary OVR float vs ASIC Q6.10.
 
-  Col 1: Best sklearn  — binary OVR, VT-modest SV allocation [90,90,90,140,90],
-                         float64.  Same model architecture as the ASIC.
-  Col 2: Best ASIC Q6.10 — same 5 binary OVR SVMs, VT-modest allocation,
-                            pure-Python Q6.10 hardware model (identical
-                            algorithm to svm_compute_core RTL).
+  Col 1: sklearn binary OVR (float64) — same model architecture as ASIC.
+  Col 2: ASIC Q6.10 — same 5 binary OVR SVMs, pure-Python Q6.10 hardware
+                       model (identical algorithm to svm_compute_core RTL).
 
-The VT-modest allocation is the recommended next-iteration configuration:
-  total SVs = 500  (unchanged, no RTL change required)
-  VT gets 140 SVs instead of 100; all other classes 90 instead of 100.
-  Result: 0 quantization flips, 98.33% Q6.10 accuracy.
+SV allocation: [95,95,95,120,95] = 500 total (VT gets 120, others 95).
+Result: 98.33% float and Q6.10, 0 quantization flips.
 
 Real data only — raises RuntimeError if wfdb / PhysioNet unavailable.
 
@@ -45,8 +41,7 @@ CLASS_NAMES   = ["Normal", "PVC", "AFib", "VT", "SVT"]
 DEFAULT_GAMMA = 0.25
 NORMAL_RR     = 308
 
-# VT-modest SV allocation — recommended next-iteration config
-ALLOC_VT_MODEST = [90, 90, 90, 140, 90]   # total = 500
+SV_ALLOC = [95, 95, 95, 120, 95]   # submitted m5 allocation, total = 500
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -278,10 +273,10 @@ def plot_cm(ax, cm, title, acc, n_flips, fig):
 # Main
 # ─────────────────────────────────────────────────────────────────────────────
 def main():
-    alloc_str = str(ALLOC_VT_MODEST)
+    alloc_str = str(SV_ALLOC)
     print(f"\n{'='*60}")
-    print(f"confusion_comparison_m5.py — best sklearn vs best ASIC Q6.10")
-    print(f"SV allocation: {alloc_str}  total={sum(ALLOC_VT_MODEST)}")
+    print(f"confusion_comparison_m5.py — sklearn OVR float vs ASIC Q6.10")
+    print(f"SV allocation: {alloc_str}  total={sum(SV_ALLOC)}")
     print(f"{'='*60}")
 
     X, y = build_dataset(n_per_class=300)
@@ -290,20 +285,20 @@ def main():
     N_eval = len(X_te)
     print(f"\n  Train: {len(X_tr)}  Test: {N_eval}")
 
-    # Train binary OVR SVMs with VT-modest allocation
-    print(f"\n=== Training 5 binary OVR SVMs — VT-modest {alloc_str} ===")
+    # Train binary OVR SVMs
+    print(f"\n=== Training 5 binary OVR SVMs — {alloc_str} ===")
     sv_vecs, sv_alphas, biases, sv_counts = train_binary_ovr(
-        X_tr, y_tr, ALLOC_VT_MODEST)
+        X_tr, y_tr, SV_ALLOC)
     print(f"  SV counts: {sv_counts}  total: {sv_counts.sum()}")
 
-    # Col 1 — float64 (best sklearn)
-    print(f"\n=== Col 1: float64 reference (best sklearn, binary OVR) ===")
+    # Col 1 — sklearn binary OVR float64
+    print(f"\n=== Col 1: sklearn binary OVR (float64) ===")
     y_float = ovr_predict_float(X_te, sv_vecs, sv_alphas, biases)
     acc_float = accuracy_score(y_te, y_float)
     print(f"  Accuracy: {acc_float:.4f}")
 
-    # Col 2 — Q6.10 (best ASIC)
-    print(f"\n=== Col 2: Q6.10 hardware model (best ASIC) ===")
+    # Col 2 — ASIC Q6.10
+    print(f"\n=== Col 2: ASIC Q6.10 hardware model ===")
     t0 = time.perf_counter()
     y_q10 = ovr_predict_q10(X_te, sv_vecs, sv_alphas, biases)
     acc_q10   = accuracy_score(y_te, y_q10)
@@ -323,22 +318,22 @@ def main():
     print(f"\n{'='*55}")
     print(f"{'':30} {'Float':>10} {'Q6.10':>10} {'Flips':>6}")
     print(f"{'-'*55}")
-    print(f"{'VT-modest '+alloc_str:<30} {acc_float:>10.4f} {acc_q10:>10.4f} {n_flips:>6}")
+    print(f"{'Binary OVR '+alloc_str:<30} {acc_float:>10.4f} {acc_q10:>10.4f} {n_flips:>6}")
 
     # Figure
     fig, axes = plt.subplots(1, 2, figsize=(14, 5.5))
     plot_cm(axes[0], cm_float,
-            f"Best sklearn  (binary OVR, float64)\n"
-            f"VT-modest SV allocation {alloc_str}",
+            f"sklearn binary OVR (float64)\n"
+            f"SV allocation {alloc_str}",
             acc_float, None, fig)
     plot_cm(axes[1], cm_q10,
-            f"Best ASIC  (binary OVR, Q6.10)\n"
-            f"VT-modest SV allocation {alloc_str}",
+            f"ASIC (binary OVR, Q6.10)\n"
+            f"SV allocation {alloc_str}",
             acc_q10, n_flips, fig)
 
     fig.suptitle(
-        "RBF-SVM — Best sklearn (float) vs Best ASIC Q6.10\n"
-        f"SV allocation: {alloc_str}  (total={sum(ALLOC_VT_MODEST)}, VT gets 140)\n"
+        "RBF-SVM — sklearn binary OVR (float) vs ASIC Q6.10\n"
+        f"SV allocation: {alloc_str}  (total={sum(SV_ALLOC)}, VT gets 120)\n"
         "gamma=0.25  ·  256-dim features (128+64+64)  ·  "
         "MIT-BIH + SVDB + INCART  ·  ECE410 PSU",
         fontsize=11, fontweight="bold", y=1.02)
