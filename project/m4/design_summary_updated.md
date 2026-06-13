@@ -818,14 +818,14 @@ another batch on the same data.
 
 ### Register writes summary
 
-| Step | Register | Offset | Value | Effect |
-|---|---|---|---|---|
-| Load alpha | ALPHA_WR | `0x28` | `{sv_idx[8:0], alpha[15:0]}` | Write one alpha |
-| Set batch size | NUM_SAMPLES | `0x0C` | `0x03E8` | 1000 beats per batch |
-| Set SV counts | NUM_SV[0--4] | `0x10--0x20` | `[0x5F,0x5F,0x5F,0x78,0x5F]` | [95,95,95,120,95] |
-| Fire | CONTROL | `0x04` | `0x0B` | start=1, vbatt_ok=1, kern_ready=1 |
-| Clear | CONTROL | `0x04` | `0x0A` | start=0, keep enables |
-| Read result | STATUS | `0x08` | --- | `[8:6]`=class, `[0]`=done |
+| Step | Register | Offset | Effect |
+|---|---|---|---|
+| Load alpha | ALPHA_WR | `0x28` | Write `{sv_idx[8:0], alpha[15:0]}` — one alpha per SV |
+| Set batch size | NUM_SAMPLES | `0x0C` | Write `0x03E8` — 1000 beats per batch |
+| Set SV counts | NUM_SV[0--4] | `0x10--0x20` | Write `[95,95,95,120,95]` (hex `5F,5F,5F,78,5F`) |
+| Fire | CONTROL | `0x04` | Write `0x0B` — start=1, vbatt_ok=1, kern_ready=1 |
+| Clear | CONTROL | `0x04` | Write `0x0A` — start=0, keep enables |
+| Read result | STATUS | `0x08` | Read `[8:6]`=class, `[0]`=done |
 
 ### C.2 --- Data history storage
 
