@@ -1,0 +1,47 @@
+{
+    "DESIGN_NAME": "svm_top_ihp",
+    "VERILOG_FILES": [
+        "dir::../../rt1/top.sv"
+    ],
+    "CLOCK_PORT": "clk",
+    "CLOCK_NET": "clk",
+    "CLOCK_PERIOD": 25,
+
+    "FP_SIZING": "absolute",
+    "DIE_AREA": "0 0 2400 2400",
+    "PL_TARGET_DENSITY_PCT": 30,
+
+    "SYNTH_STRATEGY": "AREA 0",
+    "MAX_FANOUT_CONSTRAINT": 8,
+    "MAX_TRANSITION_CONSTRAINT": 1.5,
+
+    "MACRO_PLACEMENT_CFG": "dir::macro.cfg",
+
+    "VERILOG_FILES_BLACKBOX": [
+        "dir::../../rt1/compute_core_bb.v"
+    ],
+    "EXTRA_LEFS": [
+        "dir::../../pnr/gds/svm_compute_core.lef"
+    ],
+    "EXTRA_GDS_FILES": [
+        "dir::../../pnr/gds/svm_compute_core.gds"
+    ],
+
+    "RUN_CTS": 1,
+    "RUN_FILL_INSERTION": 1,
+    "GRT_REPAIR_ANTENNAS": 1,
+    "FP_PDN_CORE_RING": 1,
+
+    "RUN_KLAYOUT_DRC": 1,
+    "RUN_KLAYOUT_XOR": 0,
+    "RUN_MCSTA": 1,
+
+    "PNR_SDC_FILE": "dir::svm_top_ihp.sdc",
+    "SIGNOFF_SDC_FILE": "dir::svm_top_ihp.sdc",
+
+    "pdk::sg13g2": {
+        "STD_CELL_LIBRARY": "sg13g2_stdcell",
+        "RT_MAX_LAYER": "Metal5",
+        "CLOCK_PERIOD": 25
+    }
+}

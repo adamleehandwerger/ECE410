@@ -1,0 +1,36 @@
+{
+    "DESIGN_NAME": "svm_compute_core",
+    "VERILOG_FILES": [
+        "dir::../../rt1/compute_core.sv",
+        "dir::../../rt1/interface.sv"
+    ],
+    "CLOCK_PORT": "clk",
+    "CLOCK_NET": "clk",
+    "CLOCK_PERIOD": 25,
+
+    "FP_SIZING": "absolute",
+    "DIE_AREA": "0 0 2200 2200",
+    "PL_TARGET_DENSITY_PCT": 50,
+
+    "SYNTH_STRATEGY": "AREA 0",
+    "SYNTH_TOP_LEVEL_PARAMETERS": "NUM_SV=600 RAM_LATENCY=3",
+    "MAX_FANOUT_CONSTRAINT": 8,
+    "MAX_TRANSITION_CONSTRAINT": 1.5,
+
+    "RUN_CTS": 1,
+    "RUN_FILL_INSERTION": 1,
+    "GRT_REPAIR_ANTENNAS": 1,
+
+    "RUN_KLAYOUT_DRC": 1,
+    "RUN_KLAYOUT_XOR": 0,
+    "RUN_MCSTA": 1,
+
+    "PNR_SDC_FILE": "dir::svm_compute_core.sdc",
+    "SIGNOFF_SDC_FILE": "dir::svm_compute_core.sdc",
+
+    "pdk::sg13g2": {
+        "STD_CELL_LIBRARY": "sg13g2_stdcell",
+        "RT_MAX_LAYER": "Metal5",
+        "CLOCK_PERIOD": 25
+    }
+}
