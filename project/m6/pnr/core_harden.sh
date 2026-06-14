@@ -47,41 +47,16 @@ fi
 echo "--- git pull svm_m6 ---"
 git -C $SVM_M6 pull --ff-only || echo "WARNING: git pull failed, using local state"
 
-# --- Activate OL2 venv (reused from m5) ---
-OL2_VENV=$SCRATCH/ol2_venv_mf
-source $OL2_VENV/bin/activate
-echo "LibreLane: $(librelane --version 2>/dev/null || echo 'version check failed')"
-
-# --- EDA tool wrappers (same as m5) ---
+# --- LibreLane SIF (ships its own Yosys/OpenROAD/KLayout) ---
 module load apptainer/1.4.1-gcc-13.4.0
 
-OL2_SIF=$SCRATCH/openlane2.sif
-OR_SIF=$SCRATCH/openroad_latest.sif
-echo "OL2 SIF:  $(ls -lh $OL2_SIF 2>/dev/null || echo 'NOT FOUND')"
-echo "OR  SIF:  $(ls -lh $OR_SIF  2>/dev/null || echo 'NOT FOUND')"
-
-TOOL_WRAPPERS=$SCRATCH/eda-wrappers
-mkdir -p $TOOL_WRAPPERS
-
-for TOOL in openroad magic klayout netgen verilator iverilog opensta sta; do
-    cat > $TOOL_WRAPPERS/$TOOL << WRAP
-#!/bin/bash
-exec apptainer exec --bind /scratch,/tmp $OL2_SIF $TOOL "\$@"
-WRAP
-    chmod +x $TOOL_WRAPPERS/$TOOL
-done
-
-# yosys needs Python scripting (-y flag) — use openroad_latest.sif which has it
-cat > $TOOL_WRAPPERS/yosys << WRAP
-#!/bin/bash
-exec apptainer exec --bind /scratch,/tmp $OR_SIF yosys "\$@"
-WRAP
-chmod +x $TOOL_WRAPPERS/yosys
-
-export PATH=$TOOL_WRAPPERS:$PATH
-echo "yosys:    $(yosys --version 2>&1 | grep 'Yosys' | head -1)"
-echo "openroad: $(openroad --version 2>&1 | head -1)"
-echo "klayout:  $(klayout --version 2>&1 | head -1 || echo n/a)"
+LIBRELANE_SIF=$SCRATCH/librelane_3.0.4.sif
+if [ ! -f "$LIBRELANE_SIF" ]; then
+    echo "ERROR: $LIBRELANE_SIF not found. Run pull_librelane job first."
+    exit 1
+fi
+echo "LibreLane SIF: $(ls -lh $LIBRELANE_SIF)"
+apptainer exec --bind /scratch,/tmp $LIBRELANE_SIF librelane --version 2>/dev/null
 
 # --- Verify inputs ---
 echo "--- Design inputs ---"
@@ -96,10 +71,10 @@ echo "--- Removing old run dir ---"
 rm -rf $RUN_DIR
 
 # --- Run OpenLane 2 ---
-echo "--- Running librelane (IHP SG13G2, NUM_SV=600, RAM_LATENCY=3) ---"
-librelane \
+echo "--- Running librelane inside SIF (IHP SG13G2, NUM_SV=600, RAM_LATENCY=3) ---"
+apptainer exec --bind /scratch,/tmp $LIBRELANE_SIF \
+    librelane \
     --pdk ihp-sg13g2 \
-    --pdk-root $IHP_PDK_ROOT \
     --run-tag core_harden \
     --jobs $SLURM_CPUS_PER_TASK \
     $DESIGN_DIR/core_config.json 2>&1
