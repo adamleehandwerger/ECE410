@@ -98,7 +98,7 @@ rm -rf $RUN_DIR
 # --- Run OpenLane 2 ---
 echo "--- Running openlane (IHP SG13G2, NUM_SV=600, RAM_LATENCY=3) ---"
 openlane \
-    --pdk sg13g2 \
+    --pdk ihp-sg13g2 \
     --pdk-root $IHP_PDK_ROOT \
     --run-tag core_harden \
     --jobs $SLURM_CPUS_PER_TASK \
