@@ -50,7 +50,7 @@ git -C $SVM_M6 pull --ff-only || echo "WARNING: git pull failed, using local sta
 # --- Activate OL2 venv (reused from m5) ---
 OL2_VENV=$SCRATCH/ol2_venv_mf
 source $OL2_VENV/bin/activate
-echo "OpenLane2: $(openlane --version 2>/dev/null || echo 'version check failed')"
+echo "LibreLane: $(librelane --version 2>/dev/null || echo 'version check failed')"
 
 # --- EDA tool wrappers (same as m5) ---
 module load apptainer/1.4.1-gcc-13.4.0
@@ -97,10 +97,10 @@ echo "--- Removing old run dir ---"
 rm -rf $RUN_DIR
 
 # --- Run OpenLane 2 ---
-echo "--- Running openlane (IHP SG13G2, NUM_SV=600, RAM_LATENCY=3) ---"
-openlane \
+echo "--- Running librelane (IHP SG13G2, NUM_SV=600, RAM_LATENCY=3) ---"
+librelane \
     --pdk ihp-sg13g2 \
-    --pdk-root $VOLARE_PDK_ROOT \
+    --pdk-root $IHP_PDK_ROOT \
     --run-tag core_harden \
     --jobs $SLURM_CPUS_PER_TASK \
     $DESIGN_DIR/core_config.json 2>&1
