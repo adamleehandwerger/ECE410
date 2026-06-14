@@ -69,13 +69,9 @@ WRAP
     chmod +x $TOOL_WRAPPERS/$TOOL
 done
 
-PROOT=$SCRATCH/.nix/.nix-portable/bin/proot
-NIX_STORE=$SCRATCH/.nix/.nix-portable/nix
-NIX_YOSYS=$(ls -d $SCRATCH/.nix/.nix-portable/nix/store/*-yosys-with-plugins/bin/yosys 2>/dev/null | head -1)
 cat > $TOOL_WRAPPERS/yosys << WRAP
 #!/bin/bash
-export PYTHONPATH=$OL2_VENV/lib/python3.13/site-packages\${PYTHONPATH:+:\$PYTHONPATH}
-exec $PROOT -b $NIX_STORE:/nix $NIX_YOSYS "\$@"
+exec apptainer exec --bind /scratch,/tmp $OL2_SIF yosys "\$@"
 WRAP
 chmod +x $TOOL_WRAPPERS/yosys
 
