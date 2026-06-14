@@ -41,7 +41,7 @@ module svm_compute_core #(
     parameter int  FEATURE_DIM    = 256,
     parameter int  NUM_SV         = 600,
     parameter int  MAX_BATCH_SIZE = 1000,
-    parameter int  RAM_LATENCY    = 1,     // cycles from ram_ren assert to ram_rdata valid
+    parameter int  RAM_LATENCY    = 3,     // cycles from ram_ren assert to ram_rdata valid
     parameter real DEFAULT_GAMMA  = 0.25,
     parameter real DEFAULT_C      = 1.0,
     parameter real DEFAULT_BIAS_0 = 0.0,
