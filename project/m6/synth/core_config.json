@@ -24,6 +24,9 @@
     "RUN_KLAYOUT_XOR": 0,
     "RUN_MCSTA": 1,
 
+    "GRT_ALLOW_CONGESTION": true,
+    "GRT_OVERFLOW_ITERS": 100,
+
     "PNR_SDC_FILE": "dir::svm_compute_core.sdc",
     "SIGNOFF_SDC_FILE": "dir::svm_compute_core.sdc",
 
