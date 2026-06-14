@@ -56,7 +56,9 @@ echo "LibreLane: $(librelane --version 2>/dev/null || echo 'version check failed
 module load apptainer/1.4.1-gcc-13.4.0
 
 OL2_SIF=$SCRATCH/openlane2.sif
-echo "SIF: $(ls -lh $OL2_SIF 2>/dev/null || echo 'SIF NOT FOUND')"
+OR_SIF=$SCRATCH/openroad_latest.sif
+echo "OL2 SIF:  $(ls -lh $OL2_SIF 2>/dev/null || echo 'NOT FOUND')"
+echo "OR  SIF:  $(ls -lh $OR_SIF  2>/dev/null || echo 'NOT FOUND')"
 
 TOOL_WRAPPERS=$SCRATCH/eda-wrappers
 mkdir -p $TOOL_WRAPPERS
@@ -69,9 +71,10 @@ WRAP
     chmod +x $TOOL_WRAPPERS/$TOOL
 done
 
+# yosys needs Python scripting (-y flag) — use openroad_latest.sif which has it
 cat > $TOOL_WRAPPERS/yosys << WRAP
 #!/bin/bash
-exec apptainer exec --bind /scratch,/tmp $OL2_SIF yosys "\$@"
+exec apptainer exec --bind /scratch,/tmp $OR_SIF yosys "\$@"
 WRAP
 chmod +x $TOOL_WRAPPERS/yosys
 
