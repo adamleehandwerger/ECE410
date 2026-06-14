@@ -181,7 +181,7 @@ interface svm_host_if #(
         input  kernel_ready
     );
 
-endinterface : svm_host_if
+endinterface
 
 
 // ---------------------------------------------------------------------------
@@ -215,7 +215,7 @@ interface svm_sv_ram_if #(
         output rdata
     );
 
-endinterface : svm_sv_ram_if
+endinterface
 
 
 // ---------------------------------------------------------------------------
@@ -253,7 +253,7 @@ interface svm_work_ram_if #(
         input  ren
     );
 
-endinterface : svm_work_ram_if
+endinterface
 
 
 // ===========================================================================
