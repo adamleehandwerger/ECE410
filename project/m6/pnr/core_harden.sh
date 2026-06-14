@@ -26,6 +26,7 @@ set -e
 
 SCRATCH=$(ws_find openlane_svm)
 IHP_PDK_ROOT=$SCRATCH/ihp-open-pdk
+VOLARE_PDK_ROOT=$SCRATCH/pdk
 SVM_M6=$SCRATCH/svm_m6
 DESIGN_DIR=$SVM_M6/project/m6/synth
 ARTIFACTS=$SCRATCH/svm_m6_artifacts
@@ -99,7 +100,7 @@ rm -rf $RUN_DIR
 echo "--- Running openlane (IHP SG13G2, NUM_SV=600, RAM_LATENCY=3) ---"
 openlane \
     --pdk ihp-sg13g2 \
-    --pdk-root $IHP_PDK_ROOT \
+    --pdk-root $VOLARE_PDK_ROOT \
     --run-tag core_harden \
     --jobs $SLURM_CPUS_PER_TASK \
     $DESIGN_DIR/core_config.json 2>&1
