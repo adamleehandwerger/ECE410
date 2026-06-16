@@ -32,19 +32,19 @@
 //
 // Off-chip RAM pin assignment (46 pads):
 //   ram_rdata_in[15:0]  — 16 dedicated input pads (SRAM DQ[15:0])
-//   ram_addr_out[18:0]  — 19 output pads  (SRAM A[18:0])
+//   ram_addr_out[17:0]  — 18 output pads  (SRAM A[17:0])
 //   ram_ren_out         —  1 output pad   (SRAM OE#, active-low, inverted here)
 //   class_out[2:0]      —  3 output pads
 //   sample_rdy          —  1 output pad
 //   done                —  1 output pad
 //   error               —  1 output pad
 //   error_code[3:0]     —  4 output pads
-//   Total: 46 pads (16 in + 30 out)
+//   Total: 45 pads (16 in + 29 out)
 //
-// Address map (SV allocation [120,120,120,120,120]):
-//   Rows 0..599   SV matrix     (600 x 256 x 2 B = 307.2 KB)
-//   Rows 600..1599 input matrix (1000 x 256 x 2 B = 512 KB)
-//   SRAM required: >= 819.2 KB (IS62WV51216 1MB async SRAM recommended)
+// Address map (SV allocation [120,120,120,120,120], FEATURE_DIM=128):
+//   Rows 0..599   SV matrix     (600 x 128 x 2 B = 153.6 KB)
+//   Rows 600..1599 input matrix (1000 x 128 x 2 B = 256 KB)
+//   SRAM required: >= 409.6 KB (IS62WV51216 1MB async SRAM recommended)
 // ============================================================================
 
 `default_nettype none
@@ -63,7 +63,7 @@ module svm_top_ihp (
     input  logic [15:0] ram_rdata_in,
 
     // Off-chip SRAM — output pads
-    output logic [18:0] ram_addr_out,
+    output logic [17:0] ram_addr_out,
     output logic        ram_ren_out,    // active-high to core; invert for SRAM OE#
 
     // Per-sample result GPIO
@@ -256,7 +256,7 @@ module svm_top_ihp (
     // Off-chip RAM interface — direct pad path, no management SoC relay
     // ram_rdata sourced from dedicated input pads (SRAM DQ[15:0])
     // =========================================================================
-    wire [18:0] ram_addr_w;
+    wire [17:0] ram_addr_w;
     wire        ram_ren_w;
 
     // =========================================================================

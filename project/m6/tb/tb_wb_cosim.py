@@ -41,20 +41,20 @@ warnings.filterwarnings("ignore")
 # ─────────────────────────────────────────────────────────────────────────────
 FRAC_BITS        = 10
 SCALE            = 1 << FRAC_BITS        # 1024
-FEATURE_DIM      = 256
-FEAT_SINGLE      = 128
-FEAT_10BEAT      = 64
-FEAT_100RR       = 64
+FEATURE_DIM      = 128                # v12: 32-32-64 split (was 256)
+FEAT_SINGLE      = 32                 # center 32 of single-beat window (was 128)
+FEAT_10BEAT      = 32                 # center 32 of 10-beat avg window (was 64)
+FEAT_100RR       = 64                 # full 64 RR intervals — unchanged
 NUM_CLASSES      = 5
-MAX_SV_PER_CLASS = 100
-NUM_SV_ROWS      = 500   # RTL NUM_SV — input matrix starts at this row index
+MAX_SV_PER_CLASS = 120
+NUM_SV_ROWS      = 600   # RTL NUM_SV — input matrix starts at this row index
 MAX_BATCH_SIZE   = 1000  # RTL MAX_BATCH_SIZE
 CLASS_NAMES      = ["Normal", "PVC", "AFib", "VT", "SVT"]
 DEFAULT_GAMMA    = float(os.environ.get("COSIM_GAMMA",  "0.25"))
 N_EVAL_OVERRIDE  = int(os.environ.get("COSIM_N_EVAL",  "0"))    # 0 = use full dataset
 NORMAL_RR        = 308
-HALF_SINGLE      = FEAT_SINGLE // 2   # 64
-HALF_10BEAT      = FEAT_10BEAT // 2   # 32
+HALF_SINGLE      = FEAT_SINGLE // 2   # 16
+HALF_10BEAT      = FEAT_10BEAT // 2   # 16
 N_BEATS_10       = 10
 N_BEATS_100      = 100
 _BEAT_SYMS       = set("NLReEjJAaSVF/fQ")

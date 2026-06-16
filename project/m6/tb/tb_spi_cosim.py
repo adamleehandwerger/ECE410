@@ -44,10 +44,10 @@ warnings.filterwarnings("ignore")
 # ─────────────────────────────────────────────────────────────────────────────
 FRAC_BITS    = 10
 SCALE        = 1 << FRAC_BITS       # 1024
-FEATURE_DIM  = 256
-FEAT_SINGLE  = 128
-FEAT_10BEAT  = 64
-FEAT_100RR   = 64
+FEATURE_DIM  = 128                # v12: 32-32-64 split (was 256)
+FEAT_SINGLE  = 32                 # center 32 of single-beat window (was 128)
+FEAT_10BEAT  = 32                 # center 32 of 10-beat avg window (was 64)
+FEAT_100RR   = 64                 # full 64 RR intervals — unchanged
 NUM_CLASSES  = 5
 NUM_SV_ROWS  = 600                  # RTL NUM_SV — input matrix starts at this row
 RAM_LATENCY  = 3                    # must match .RAM_LATENCY in top.sv
