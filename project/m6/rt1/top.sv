@@ -8,8 +8,8 @@
 //   - No Caravel Wishbone bus; MCU configuration via SPI slave (CPOL=0, CPHA=0)
 //   - ram_rdata[15:0] sourced from ram_rdata_in[15:0] (dedicated input pads)
 //     — eliminates the m5 la_data_in relay through the management SoC
-//   - 600-SV alpha_table: alpha_addr 10-bit, ALPHA_WR sv_idx field [25:16]
-//   - NUM_SV reset defaults 8'd120 (uniform optimal allocation)
+//   - 500-SV alpha_table: alpha_addr 10-bit, ALPHA_WR sv_idx field [25:16]
+//   - NUM_SV reset defaults [95,95,95,120,95] (VT-boosted 500-SV)
 //   - NUM_SAMPLES reset default 10'd1000 (sticky — write once at startup)
 //   - IHP SG13G2 ICG cell: sg13g2_dlclkp_1 (replaces sky130 dlclkp)
 //
@@ -17,11 +17,11 @@
 //   0x01 RW  CONTROL      [0]=start(auto-clear) [1]=vbatt_ok [2]=vbatt_warn
 //   0x02 RO  STATUS       [0]=done [1]=error [5:2]=error_code [8:6]=class [9]=sample_rdy
 //   0x03 RW  NUM_SAMPLES  [9:0]  default=1000  (sticky — write once at startup)
-//   0x04 RW  NUM_SV[0]    [7:0]  default=120
-//   0x05 RW  NUM_SV[1]    [7:0]  default=120
-//   0x06 RW  NUM_SV[2]    [7:0]  default=120
-//   0x07 RW  NUM_SV[3]    [7:0]  default=120
-//   0x08 RW  NUM_SV[4]    [7:0]  default=120
+//   0x04 RW  NUM_SV[0]    [7:0]  default=95   (Normal)
+//   0x05 RW  NUM_SV[1]    [7:0]  default=95   (PVC)
+//   0x06 RW  NUM_SV[2]    [7:0]  default=95   (AFib)
+//   0x07 RW  NUM_SV[3]    [7:0]  default=120  (VT — boosted)
+//   0x08 RW  NUM_SV[4]    [7:0]  default=95   (SVT)
 //   0x09 WO  PARAM_WR     [19]=en [18:16]=addr [15:0]=data
 //   0x0A WO  ALPHA_WR     [25:16]=sv_global_idx(10-bit) [15:0]=alpha Q6.10
 //
@@ -32,19 +32,19 @@
 //
 // Off-chip RAM pin assignment (46 pads):
 //   ram_rdata_in[15:0]  — 16 dedicated input pads (SRAM DQ[15:0])
-//   ram_addr_out[17:0]  — 18 output pads  (SRAM A[17:0])
+//   ram_addr_out[18:0]  — 19 output pads  (SRAM A[18:0])
 //   ram_ren_out         —  1 output pad   (SRAM OE#, active-low, inverted here)
 //   class_out[2:0]      —  3 output pads
 //   sample_rdy          —  1 output pad
 //   done                —  1 output pad
 //   error               —  1 output pad
 //   error_code[3:0]     —  4 output pads
-//   Total: 45 pads (16 in + 29 out)
+//   Total: 46 pads (16 in + 30 out)
 //
-// Address map (SV allocation [120,120,120,120,120], FEATURE_DIM=128):
-//   Rows 0..599   SV matrix     (600 x 128 x 2 B = 153.6 KB)
-//   Rows 600..1599 input matrix (1000 x 128 x 2 B = 256 KB)
-//   SRAM required: >= 409.6 KB (IS62WV51216 1MB async SRAM recommended)
+// Address map (SV allocation [95,95,95,120,95], FEATURE_DIM=256):
+//   Rows 0..499   SV matrix     (500 x 256 x 2 B = 256 KB)
+//   Rows 500..1499 input matrix (1000 x 256 x 2 B = 512 KB)
+//   SRAM required: >= 768 KB (IS62WV51216 1MB async SRAM recommended)
 // ============================================================================
 
 `default_nettype none
@@ -63,7 +63,7 @@ module svm_top_ihp (
     input  logic [15:0] ram_rdata_in,
 
     // Off-chip SRAM — output pads
-    output logic [17:0] ram_addr_out,
+    output logic [18:0] ram_addr_out,
     output logic        ram_ren_out,    // active-high to core; invert for SRAM OE#
 
     // Per-sample result GPIO
@@ -225,8 +225,11 @@ module svm_top_ihp (
             reg_param_wr    <= 20'd0;
             reg_alpha_wr    <= 26'd0;
             alpha_wr_en_r   <= 1'b0;
-            for (c = 0; c < 5; c = c+1)
-                reg_num_sv[c] <= 8'd120;   // [120,120,120,120,120] uniform optimal
+            reg_num_sv[0] <= 8'd95;    // [95,95,95,120,95] VT-boosted 500-SV
+            reg_num_sv[1] <= 8'd95;
+            reg_num_sv[2] <= 8'd95;
+            reg_num_sv[3] <= 8'd120;   // VT class gets extra SVs
+            reg_num_sv[4] <= 8'd95;
         end else begin
             reg_control[0]   <= 1'b0;       // start auto-clears
             reg_param_wr[19] <= 1'b0;       // param_write_en auto-clears
@@ -256,7 +259,7 @@ module svm_top_ihp (
     // Off-chip RAM interface — direct pad path, no management SoC relay
     // ram_rdata sourced from dedicated input pads (SRAM DQ[15:0])
     // =========================================================================
-    wire [17:0] ram_addr_w;
+    wire [18:0] ram_addr_w;
     wire        ram_ren_w;
 
     // =========================================================================
@@ -266,7 +269,7 @@ module svm_top_ihp (
     wire [15:0] svm_kernel_out;
 
     svm_compute_core #(
-        .NUM_SV      (600),
+        .NUM_SV      (500),
         .RAM_LATENCY (3)
     ) u_svm (
         .clk             (svm_gclk),

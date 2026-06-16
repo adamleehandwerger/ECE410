@@ -5,19 +5,20 @@
 // ECE 410 Project  |  Milestone: m6
 //
 // Batch architecture:
-//   Host collects 1000 heartbeats at low power, extracts 128-dim features,
+//   Host collects 1000 heartbeats at low power, extracts 256-dim features,
 //   pre-loads both the input matrix and the SV matrix into off-chip SRAM,
 //   then fires start.  The ASIC drives the outer sample loop autonomously.
 //
 // v12 changes vs v11:
-//   - FEATURE_DIM 256 -> 128 (32-32-64 split: 32 morphology + 32 avg + 64 RR)
-//   - RAM address bus 19-bit -> 18-bit ({row[10:0], col[6:0]})
-//   - All other parameters unchanged; Q6.10 accuracy preserved at ~99%
+//   - FEATURE_DIM unchanged at 256; feature split back to original 128-64-64
+//     (128 single-beat morphology + 64 10-beat avg + 64 RR intervals)
+//   - NUM_SV reduced 600 -> 500; allocation [95,95,95,120,95] (VT-boosted)
+//   - Q6.10 accuracy: 97.67% (146/150)
 //
-// Off-chip address map  (row x FEATURE_DIM layout, FEATURE_DIM = 128 = 2^7):
-//   Rows  0 .. NUM_SV-1              SV matrix      (600 x 128 =  76 800 words)
-//   Rows  NUM_SV .. NUM_SV+batch-1   input matrix   (1000 x 128 = 128 000 words)
-//   Maximum address: (600 + 1000) x 128 - 1 = 204 799  ->  18-bit address bus
+// Off-chip address map  (row x FEATURE_DIM layout, FEATURE_DIM = 256 = 2^8):
+//   Rows  0 .. NUM_SV-1              SV matrix      (500 x 256 = 128 000 words)
+//   Rows  NUM_SV .. NUM_SV+batch-1   input matrix   (1000 x 256 = 256 000 words)
+//   Maximum address: (500 + 1000) x 256 - 1 = 384 000  ->  19-bit address bus
 //
 // Per-sample output:
 //   sample_rdy pulses one cycle per WRITE_CLASS.
@@ -37,8 +38,8 @@ module svm_compute_core #(
     parameter int  DATA_WIDTH     = 16,
     parameter int  FRAC_BITS      = 10,
     parameter int  DIST_WIDTH     = 20,
-    parameter int  FEATURE_DIM    = 128,
-    parameter int  NUM_SV         = 600,
+    parameter int  FEATURE_DIM    = 256,
+    parameter int  NUM_SV         = 500,
     parameter int  MAX_BATCH_SIZE = 1000,
     parameter int  RAM_LATENCY    = 3,     // cycles from ram_ren assert to ram_rdata valid
     parameter real DEFAULT_GAMMA  = 0.25,
@@ -63,7 +64,7 @@ module svm_compute_core #(
     input  logic [39:0]             num_sv_per_class_flat,
 
     // Unified off-chip RAM  (input matrix + SV matrix, host serves from SRAM)
-    output logic [17:0]             ram_addr,
+    output logic [18:0]             ram_addr,
     input  logic [DATA_WIDTH-1:0]   ram_rdata,
     output logic                    ram_ren,
 
@@ -160,7 +161,7 @@ module svm_compute_core #(
     logic vbatt_ok_s;
     logic vbatt_warn_s;
 
-    // Feature bank  (holds current sample's 128-dim input vector)
+    // Feature bank  (holds current sample's 256-dim input vector)
     (* ram_style = "registers" *) logic [DATA_WIDTH-1:0] feature_bank [FEATURE_DIM];
 
     // Alpha dual coefficients (signed Q6.10, one per SV; reset to 1.0 = unweighted)
@@ -335,23 +336,23 @@ module svm_compute_core #(
     // =========================================================================
     // Off-chip RAM address mux
     //
-    // Address layout: {row[10:0], col[6:0]} = 18 bits
+    // Address layout: {row[10:0], col[7:0]} = 19 bits
     //   LOAD_INPUT:   row = NUM_SV + sample_counter  (input matrix region)
     //   COMPUTE_DIST: row = sv_base                  (SV matrix region)
     //
-    // 9-bit addr counters prevent wrapping at FEATURE_DIM = 128 = 2^7,
-    // ensuring no spurious reads after the 128th word.
+    // 9-bit addr counters prevent wrapping at FEATURE_DIM = 256 = 2^8,
+    // ensuring no spurious reads after the 256th word.
     // =========================================================================
     logic [10:0] row_idx;
-    logic [6:0]  col_idx;
+    logic [7:0]  col_idx;
 
     always_comb begin
         if (state == LOAD_INPUT) begin
             row_idx = 11'(NUM_SV) + 11'(sample_counter);
-            col_idx = feat_wr_addr[6:0];
+            col_idx = feat_wr_addr[7:0];
         end else begin
             row_idx = {1'b0, sv_base};
-            col_idx = feat_rd_addr[6:0];
+            col_idx = feat_rd_addr[7:0];
         end
     end
 
@@ -399,7 +400,7 @@ module svm_compute_core #(
 
     always_ff @(posedge clk) begin
         if (feat_wr_en_r)
-            feature_bank[feat_wr_addr_r[6:0]] <= ram_rdata;
+            feature_bank[feat_wr_addr_r[7:0]] <= ram_rdata;
     end
 
     // =========================================================================
@@ -425,7 +426,7 @@ module svm_compute_core #(
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) feat_rd_data <= '0;
         else if (feat_rd_en && ram_beat)
-            feat_rd_data <= feature_bank[feat_rd_addr[6:0]];
+            feat_rd_data <= feature_bank[feat_rd_addr[7:0]];
     end
 
     // =========================================================================
@@ -646,7 +647,7 @@ module distance_matrix #(
     parameter int DATA_WIDTH = 16,
     parameter int FRAC_BITS  = 10,
     parameter int DIST_WIDTH = 20,
-    parameter int FEATURE_DIM = 128
+    parameter int FEATURE_DIM = 256
 ) (
     input  logic                    clk,
     input  logic                    rst_n,

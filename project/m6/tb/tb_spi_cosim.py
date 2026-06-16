@@ -19,8 +19,8 @@ SPI register map:
   0x0A WO  ALPHA_WR     [25:16]=sv_idx(10-bit) [15:0]=alpha Q6.10
 
 SRAM address map (word-addressed, 16 bits per word):
-  Words 0 .. 600*256-1    SV matrix     (600 SVs x 256 features)
-  Words 600*256 .. end    Input matrix  (N_batch x 256 features)
+  Words 0 .. 500*256-1    SV matrix     (500 SVs x 256 features)
+  Words 500*256 .. end    Input matrix  (N_batch x 256 features)
 
 Outputs:
   ../sim/asic_preds.csv — one integer class (0-4) per test sample
@@ -44,21 +44,21 @@ warnings.filterwarnings("ignore")
 # ─────────────────────────────────────────────────────────────────────────────
 FRAC_BITS    = 10
 SCALE        = 1 << FRAC_BITS       # 1024
-FEATURE_DIM  = 128                # v12: 32-32-64 split (was 256)
-FEAT_SINGLE  = 32                 # center 32 of single-beat window (was 128)
-FEAT_10BEAT  = 32                 # center 32 of 10-beat avg window (was 64)
-FEAT_100RR   = 64                 # full 64 RR intervals — unchanged
+FEATURE_DIM  = 256                # 128-64-64 split: 128 beat + 64 mean10 + 64 RR
+FEAT_SINGLE  = 128                # full 128-sample single-beat window
+FEAT_10BEAT  = 64                 # 64-sample 10-beat average window
+FEAT_100RR   = 64                 # 64 RR interval samples
 NUM_CLASSES  = 5
-NUM_SV_ROWS  = 600                  # RTL NUM_SV — input matrix starts at this row
+NUM_SV_ROWS  = 500                  # RTL NUM_SV — input matrix starts at this row
 RAM_LATENCY  = 3                    # must match .RAM_LATENCY in top.sv
 MAX_BATCH    = 1000
 CLASS_NAMES  = ["Normal", "PVC", "AFib", "VT", "SVT"]
-SV_ALLOC     = [120, 120, 120, 120, 120]   # uniform optimal at 600 SVs
+SV_ALLOC     = [95, 95, 95, 120, 95]   # VT-boosted 500-SV allocation
 DEFAULT_GAMMA = float(os.environ.get("COSIM_GAMMA", "0.25"))
 N_EVAL_OVERRIDE = int(os.environ.get("COSIM_N_EVAL", "0"))   # 0 = full test set
 NORMAL_RR    = 308
-HALF_SINGLE  = FEAT_SINGLE // 2
-HALF_10BEAT  = FEAT_10BEAT // 2
+HALF_SINGLE  = FEAT_SINGLE // 2   # 64
+HALF_10BEAT  = FEAT_10BEAT // 2   # 32
 _BEAT_SYMS   = set("NLReEjJAaSVF/fQ")
 
 # SPI register addresses
