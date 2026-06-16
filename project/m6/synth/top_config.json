@@ -39,7 +39,7 @@
     "PNR_SDC_FILE": "dir::svm_top_ihp.sdc",
     "SIGNOFF_SDC_FILE": "dir::svm_top_ihp.sdc",
 
-    "pdk::sg13g2": {
+    "pdk::ihp-sg13g2": {
         "STD_CELL_LIBRARY": "sg13g2_stdcell",
         "RT_MAX_LAYER": "Metal5",
         "CLOCK_PERIOD": 25
