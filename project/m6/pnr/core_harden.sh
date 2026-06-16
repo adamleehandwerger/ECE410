@@ -71,7 +71,7 @@ echo "--- Removing old run dir ---"
 rm -rf $RUN_DIR
 
 # --- Run OpenLane 2 ---
-echo "--- Running librelane inside SIF (IHP SG13G2, NUM_SV=600, RAM_LATENCY=3) ---"
+echo "--- Running librelane inside SIF (IHP SG13G2, NUM_SV=500, FEATURE_DIM=256, RAM_LATENCY=3) ---"
 apptainer exec --bind /scratch,/tmp $LIBRELANE_SIF \
     librelane \
     --pdk ihp-sg13g2 \
