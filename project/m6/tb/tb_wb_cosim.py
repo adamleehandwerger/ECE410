@@ -189,7 +189,7 @@ def load_mitbih_beats(max_per_class=300):
 
 def build_dataset(n_per_class=300):
     import os, hashlib, tempfile
-    cache_key = f"ecg_n{n_per_class}_d256"
+    cache_key = f"ecg_n{n_per_class}_d{FEATURE_DIM}"
     cache_path = os.path.join(tempfile.gettempdir(), f"cosim_cache_{cache_key}.npz")
     if os.path.exists(cache_path):
         data = np.load(cache_path)
