@@ -129,9 +129,11 @@ module svm_top_ihp (
     assign svm_gclk = clk & svm_clk_en;
 `else
     // IHP SG13G2 integrated clock gating cell (replaces sky130 dlclkp)
+    /* verilator lint_off MODMISSING */
     sg13g2_dlclkp_1 u_icg (
         .CLK(clk), .GATE(svm_clk_en), .GCLK(svm_gclk)
     );
+    /* verilator lint_on MODMISSING */
 `endif
 
     // =========================================================================
