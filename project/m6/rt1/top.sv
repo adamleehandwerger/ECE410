@@ -268,10 +268,7 @@ module svm_top_ihp (
     wire        svm_kernel_valid;
     wire [15:0] svm_kernel_out;
 
-    svm_compute_core #(
-        .NUM_SV      (500),
-        .RAM_LATENCY (3)
-    ) u_svm (
+    svm_compute_core u_svm (
         .clk             (svm_gclk),
         .rst_n           (rst_n),
         .param_write_en  (reg_param_wr[19]),
