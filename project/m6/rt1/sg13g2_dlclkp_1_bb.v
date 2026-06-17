@@ -1,3 +1,4 @@
+/// sta-blackbox
 // Black-box stub for IHP SG13G2 ICG cell — Yosys treats as opaque;
 // real implementation comes from PDK liberty during P&R.
 (* blackbox *)

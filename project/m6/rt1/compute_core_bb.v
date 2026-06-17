@@ -1,3 +1,4 @@
+/// sta-blackbox
 // Black-box stub for svm_compute_core — used by top-level synthesis.
 // Ports match compute_core.sv exactly; widths are concrete (DATA_WIDTH=16).
 module svm_compute_core #(
