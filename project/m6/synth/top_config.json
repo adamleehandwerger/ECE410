@@ -1,7 +1,10 @@
 {
     "DESIGN_NAME": "svm_top_ihp",
     "VERILOG_FILES": [
-        "dir::../../rt1/top.sv"
+        "dir::../rt1/top.sv"
+    ],
+    "EXTRA_VERILOG_MODELS": [
+        "dir::../rt1/compute_core_bb.v"
     ],
     "CLOCK_PORT": "clk",
     "CLOCK_NET": "clk",
@@ -17,20 +20,17 @@
 
     "MACRO_PLACEMENT_CFG": "dir::macro.cfg",
 
-    "VERILOG_FILES_BLACKBOX": [
-        "dir::../../rt1/compute_core_bb.v"
-    ],
     "EXTRA_LEFS": [
-        "dir::../../pnr/gds/svm_compute_core.lef"
+        "dir::../pnr/gds/svm_compute_core.lef"
     ],
-    "EXTRA_GDS_FILES": [
-        "dir::../../pnr/gds/svm_compute_core.gds"
+    "EXTRA_GDS": [
+        "dir::../pnr/gds/svm_compute_core.gds"
     ],
 
     "RUN_CTS": 1,
     "RUN_FILL_INSERTION": 1,
-    "GRT_REPAIR_ANTENNAS": 1,
-    "FP_PDN_CORE_RING": 1,
+    "RUN_ANTENNA_REPAIR": 1,
+    "PDN_CORE_RING": 1,
 
     "RUN_KLAYOUT_DRC": 1,
     "RUN_KLAYOUT_XOR": 0,
