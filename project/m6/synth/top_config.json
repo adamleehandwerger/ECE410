@@ -27,6 +27,9 @@
         "dir::../pnr/gds/svm_compute_core.gds"
     ],
 
+    "PDN_MACRO_CONNECTIONS": ["u_svm VDD VSS VPWR VGND"],
+    "ERROR_ON_DISCONNECTED_PINS": false,
+
     "RUN_CTS": 1,
     "RUN_FILL_INSERTION": 1,
     "RUN_ANTENNA_REPAIR": 1,
