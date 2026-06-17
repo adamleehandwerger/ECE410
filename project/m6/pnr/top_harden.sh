@@ -53,24 +53,12 @@ cp $ARTIFACTS/svm_compute_core.gds $GDS_STAGE/
 cp $ARTIFACTS/svm_compute_core.lef $GDS_STAGE/
 cp $ARTIFACTS/svm_compute_core.v   $GDS_STAGE/
 
-# --- Generate black-box stub for top-level synthesis ---
-python3 - "$GDS_STAGE" << 'PYEOF'
-import re, sys, shutil
-dest = sys.argv[1]
-with open(f"{dest}/svm_compute_core.v") as f:
-    src = f.read()
-m = re.search(r'(module\s+svm_compute_core\s*\(.*?\)\s*;)', src, re.DOTALL)
-if m:
-    with open(f"{dest}/svm_compute_core_bb.v", "w") as out:
-        out.write("// Black-box stub for top-level synthesis\n")
-        out.write(m.group(1) + "\nendmodule\n")
-    print("Black-box stub written")
-else:
-    print("WARNING: could not extract module header — copying full GL netlist")
-    shutil.copy(f"{dest}/svm_compute_core.v", f"{dest}/svm_compute_core_bb.v")
-PYEOF
-
-cp $GDS_STAGE/svm_compute_core_bb.v $SVM_M6/project/m6/rt1/compute_core_bb.v
+# --- Black-box stub is committed in rt1/ — just verify it exists ---
+if [ ! -f "$SVM_M6/project/m6/rt1/compute_core_bb.v" ]; then
+    echo "ERROR: compute_core_bb.v not found in rt1/ — check repo"
+    exit 1
+fi
+echo "Black-box stub: $(ls -lh $SVM_M6/project/m6/rt1/compute_core_bb.v)"
 
 # --- Pull latest m6 RTL ---
 echo "--- git pull svm_m6 ---"
