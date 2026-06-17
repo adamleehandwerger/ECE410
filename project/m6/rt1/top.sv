@@ -195,24 +195,17 @@ module svm_top_ihp (
                     spi_addr <= {spi_addr[6:0], mosi_r};
                     if (spi_bit_cnt == 7) begin
                         spi_addr_done <= 1'b1;
-                        // Pre-load TX for read transactions
-                        spi_tx <= spi_rdata;
+                        spi_tx <= spi_rdata;    // pre-load TX for read transactions
                     end
                 end else begin
-                    // Data phase — shift in MOSI
+                    // Data phase — shift in MOSI, shift out MISO
                     spi_rx <= {spi_rx[30:0], mosi_r};
+                    if (spi_addr_done)
+                        spi_tx <= {spi_tx[30:0], 1'b0};
                 end
                 spi_bit_cnt <= spi_bit_cnt + 6'd1;
             end
         end
-    end
-
-    // MISO: drive TX MSB (shift on each rising sclk during data phase)
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n)
-            spi_tx <= 32'd0;
-        else if (spi_addr_done && sclk_rise && spi_bit_cnt >= 8)
-            spi_tx <= {spi_tx[30:0], 1'b0};
     end
     assign spi_miso = spi_tx[31];
 
