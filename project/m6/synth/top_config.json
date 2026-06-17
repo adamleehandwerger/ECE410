@@ -4,7 +4,8 @@
         "dir::../rt1/top.sv"
     ],
     "EXTRA_VERILOG_MODELS": [
-        "dir::../rt1/compute_core_bb.v"
+        "dir::../rt1/compute_core_bb.v",
+        "dir::../rt1/sg13g2_dlclkp_1_bb.v"
     ],
     "CLOCK_PORT": "clk",
     "CLOCK_NET": "clk",
