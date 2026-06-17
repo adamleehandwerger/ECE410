@@ -35,6 +35,10 @@ include $(shell cocotb-config --makefiles)/Makefile.sim
 cosim:
 	$(MAKE) sim
 
+.PHONY: spi_unit
+spi_unit:
+	MODULE=tb_spi_unit $(MAKE) sim
+
 .PHONY: latency
 latency:
 	iverilog -g2012 -DSIMULATION \
