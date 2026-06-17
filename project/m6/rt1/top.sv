@@ -11,7 +11,7 @@
 //   - 500-SV alpha_table: alpha_addr 10-bit, ALPHA_WR sv_idx field [25:16]
 //   - NUM_SV reset defaults [95,95,95,120,95] (VT-boosted 500-SV)
 //   - NUM_SAMPLES reset default 10'd1000 (sticky — write once at startup)
-//   - IHP SG13G2 ICG cell: sg13g2_dlclkp_1 (replaces sky130 dlclkp)
+//   - Clock gating: combinational AND (IHP SG13G2 stdcell has no dedicated ICG cell)
 //
 // SPI register map (address byte [6:0]; bit[7]=0 write, bit[7]=1 read):
 //   0x01 RW  CONTROL      [0]=start(auto-clear) [1]=vbatt_ok [2]=vbatt_warn
@@ -98,7 +98,7 @@ module svm_top_ihp (
     wire [2:0] class_out_w;
 
     // =========================================================================
-    // Clock gate (IHP SG13G2 ICG cell)
+    // Clock gate (combinational AND — IHP SG13G2 stdcell has no ICG cell)
     // =========================================================================
     wire core_warming = (svm_error_code == 4'h8);
 
@@ -124,17 +124,7 @@ module svm_top_ihp (
     wire svm_clk_en = !rst_n | batch_active | reg_control[0] | core_warming
                     | (drain_cnt > 0) | reg_param_wr[19] | alpha_wr_en_r;
 
-    wire svm_gclk;
-`ifdef SIMULATION
-    assign svm_gclk = clk & svm_clk_en;
-`else
-    // IHP SG13G2 integrated clock gating cell (replaces sky130 dlclkp)
-    /* verilator lint_off MODMISSING */
-    sg13g2_dlclkp_1 u_icg (
-        .CLK(clk), .GATE(svm_clk_en), .GCLK(svm_gclk)
-    );
-    /* verilator lint_on MODMISSING */
-`endif
+    wire svm_gclk = clk & svm_clk_en;
 
     // =========================================================================
     // SPI slave — CPOL=0, CPHA=0, 8-bit address + 32-bit data = 40-bit frame
