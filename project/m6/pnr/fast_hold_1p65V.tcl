@@ -25,14 +25,12 @@ puts "OUT : $outdir"
 
 read_lef $tech_lef
 read_lef $cell_lef
+
+# Define corner then read liberty — create_timing_corner does not exist in OpenROAD
+define_corners fast_1p65V_m40C
+read_liberty -corner fast_1p65V_m40C $lib_1p65
+
 read_db  $odb_file
-
-# Add the fast_1p65V_m40C timing corner (higher voltage → faster → tighter hold)
-create_timing_corner -name fast_1p65V_m40C \
-    -lib_files       [list $lib_1p65] \
-    -early_lib_files [list $lib_1p65] \
-    -late_lib_files  [list $lib_1p65]
-
 read_sdc $sdc_file
 
 file mkdir $outdir

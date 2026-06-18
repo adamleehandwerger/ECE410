@@ -1,7 +1,8 @@
 {
     "DESIGN_NAME": "svm_top_ihp",
     "VERILOG_FILES": [
-        "dir::../rt1/top.sv"
+        "dir::../rt1/top.sv",
+        "dir::../rt1/compute_core_bb.v"
     ],
     "EXTRA_VERILOG_MODELS": [
         "dir::../rt1/compute_core_bb.v"

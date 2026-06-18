@@ -82,8 +82,8 @@ MAGIC_EOF
 
     echo "  [1/2] Magic: $GDS → $SPICE"
     apptainer exec --bind /scratch,/tmp $LIBRELANE_SIF \
-        magic -T $MAGIC_TECH -noconsole -dnull \
-        < /tmp/magic_extract_${DESIGN}.tcl 2>&1 \
+        magic -noconsole -dnull -T $MAGIC_TECH \
+        /tmp/magic_extract_${DESIGN}.tcl 2>&1 \
         | tee $LVS_DIR/${DESIGN}_magic.log
 
     if [ ! -s "$SPICE" ]; then
