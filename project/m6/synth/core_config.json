@@ -29,12 +29,10 @@
     "GRT_ALLOW_CONGESTION": true,
     "GRT_OVERFLOW_ITERS": 100,
 
-    "EXTRA_EXCLUDED_CELLS": "dir::../pnr/pnr_dlygate_restrict.cells",
-
-    "VSRC_LOC_FILES": [
-        "dir::../pnr/vsrc_VPWR.txt",
-        "dir::../pnr/vsrc_VGND.txt"
-    ],
+    "VSRC_LOC_FILES": {
+        "VPWR": "dir::../pnr/vsrc_VPWR.txt",
+        "VGND": "dir::../pnr/vsrc_VGND.txt"
+    },
 
     "PNR_SDC_FILE": "dir::svm_compute_core.sdc",
     "SIGNOFF_SDC_FILE": "dir::svm_compute_core.sdc",

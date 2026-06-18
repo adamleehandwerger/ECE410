@@ -36,10 +36,10 @@
     "RUN_ANTENNA_REPAIR": 1,
     "PDN_CORE_RING": 1,
 
-    "VSRC_LOC_FILES": [
-        "dir::../pnr/vsrc_VDD.txt",
-        "dir::../pnr/vsrc_VSS.txt"
-    ],
+    "VSRC_LOC_FILES": {
+        "VDD": "dir::../pnr/vsrc_VDD.txt",
+        "VSS": "dir::../pnr/vsrc_VSS.txt"
+    },
 
     "RUN_LVS": 1,
 
