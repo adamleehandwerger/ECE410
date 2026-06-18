@@ -37,7 +37,7 @@ cosim:
 
 .PHONY: spi_unit
 spi_unit:
-	MODULE=tb_spi_unit $(MAKE) sim
+	COCOTB_TEST_MODULES=tb_spi_unit $(MAKE) sim
 
 .PHONY: latency
 latency:
