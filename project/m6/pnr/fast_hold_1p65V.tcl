@@ -1,0 +1,63 @@
+# fast_hold_1p65V.tcl — Hold analysis at fast_1p65V_m40C corner
+# Invoked by fast_hold_1p65V.sh inside the LibreLane SIF via:
+#   openroad -no_splash -exit fast_hold_1p65V.tcl
+#
+# Required env vars (set by wrapper):
+#   LIB_FAST_1P65  — path to sg13g2_stdcell_fast_1p65V_m40C.lib
+#   TECH_LEF       — sg13g2_tech.lef
+#   CELL_LEF       — sg13g2_stdcell.lef
+#   ODB_FILE       — post-PnR .odb from core_harden run
+#   SDC_FILE       — svm_compute_core.sdc
+#   OUTDIR         — output directory for reports
+
+set lib_1p65 $::env(LIB_FAST_1P65)
+set tech_lef $::env(TECH_LEF)
+set cell_lef $::env(CELL_LEF)
+set odb_file $::env(ODB_FILE)
+set sdc_file $::env(SDC_FILE)
+set outdir   $::env(OUTDIR)
+
+puts "=== fast_1p65V_m40C Hold Check ==="
+puts "LIB : $lib_1p65"
+puts "ODB : $odb_file"
+puts "SDC : $sdc_file"
+puts "OUT : $outdir"
+
+read_lef $tech_lef
+read_lef $cell_lef
+read_db  $odb_file
+
+# Add the fast_1p65V_m40C timing corner (higher voltage → faster → tighter hold)
+create_timing_corner -name fast_1p65V_m40C \
+    -lib_files       [list $lib_1p65] \
+    -early_lib_files [list $lib_1p65] \
+    -late_lib_files  [list $lib_1p65]
+
+read_sdc $sdc_file
+
+file mkdir $outdir
+
+# Worst hold path
+set f [open $outdir/hold_min.rpt w]
+puts $f "============================================================"
+puts $f "fast_1p65V_m40C Corner — Hold (min path) Analysis"
+puts $f "============================================================"
+close $f
+
+redirect -append $outdir/hold_min.rpt {
+    report_checks -path_delay min -sort_by_slack -corner fast_1p65V_m40C
+}
+
+# Worst slack and TNS
+redirect $outdir/ws_min.rpt {
+    report_worst_slack -min -corner fast_1p65V_m40C
+}
+
+redirect $outdir/tns_min.rpt {
+    report_tns -corner fast_1p65V_m40C
+}
+
+puts ""
+puts "=== Hold Summary (fast_1p65V_m40C) ==="
+report_worst_slack -min -corner fast_1p65V_m40C
+report_tns -corner fast_1p65V_m40C
