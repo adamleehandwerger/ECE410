@@ -46,20 +46,30 @@ git pull origin main
 echo "HEAD = $(git log --oneline -1)"
 
 # 4. Submit jobs
+#
+# Chain: core_harden → top_harden (afterok) → lvs_run (afterok top)
+#        core_harden → fast_hold_1p65V (afterok)
+#
+# svm_compute_core.sdc now has hold uncertainty 0.50 ns (was 0.25).
+# With post-PnR WNS = +0.089 ns at 1p32V and 0.25 ns uncertainty,
+# the intrinsic hold slack was only ~0.34 ns — not enough margin for
+# the 1p65V corner where cells run 15-20% faster.  Targeting 0.50 ns
+# forces OpenROAD to insert enough dlygate cells so WNS stays positive
+# even at higher voltage.  Requires a fresh core_harden.
 echo ""
 echo "--- Submitting jobs ---"
 
-# top_harden (Verilator BB stub fix applied in top_config.json)
-TOP_JID=$(sbatch --parsable project/m6/pnr/top_harden.sh)
-echo "top_harden       job $TOP_JID"
+CORE_JID=$(sbatch --parsable project/m6/pnr/core_harden.sh)
+echo "core_harden      job $CORE_JID"
 
-# lvs_run depends on top_harden (needs top GDS) AND core harden (already done)
+TOP_JID=$(sbatch --parsable --dependency=afterok:$CORE_JID project/m6/pnr/top_harden.sh)
+echo "top_harden       job $TOP_JID (afterok:$CORE_JID)"
+
 LVS_JID=$(sbatch --parsable --dependency=afterok:$TOP_JID project/m6/pnr/lvs_run.sh)
 echo "lvs_run          job $LVS_JID (afterok:$TOP_JID)"
 
-# fast_hold is independent — uses existing core_harden ODB
-HOLD_JID=$(sbatch --parsable project/m6/pnr/fast_hold_1p65V.sh)
-echo "fast_hold_1p65V  job $HOLD_JID"
+HOLD_JID=$(sbatch --parsable --dependency=afterok:$CORE_JID project/m6/pnr/fast_hold_1p65V.sh)
+echo "fast_hold_1p65V  job $HOLD_JID (afterok:$CORE_JID)"
 
 echo ""
 echo "=== Submitted at $(date) ==="
