@@ -29,7 +29,7 @@
     "GRT_ALLOW_CONGESTION": true,
     "GRT_OVERFLOW_ITERS": 100,
 
-    "EXTRA_EXCLUDED_CELLS": ["sg13g2_dlygate4sd2_1", "sg13g2_dlygate4sd3_1"],
+    "EXTRA_EXCLUDED_CELLS": "dir::../pnr/pnr_dlygate_restrict.cells",
 
     "VSRC_LOC_FILES": [
         "dir::../pnr/vsrc_VPWR.txt",
