@@ -41,7 +41,7 @@ for the physical IS62WV51216 asynchronous SRAM. Levels 4 and 5 drive the complet
 The Caravel Wishbone interface and management SoC (Levels 4--6 in milestone m5) are
 replaced by a standalone SPI slave compatible with the nRF52840 MCU
 (CPOL$=0$, CPHA$=0$, 40-bit frames: 8-bit address $\|$ 32-bit data, MSB first).
-Of 29 tests, 22 pass and 7 (Level 4) are pending.
+Of 30 tests, 23 pass and 7 (Level 4) are pending.
 
 ---
 
@@ -50,7 +50,7 @@ Of 29 tests, 22 pass and 7 (Level 4) are pending.
 **Location:** `m6/tb/` $\cdot$ **Simulator:** Icarus Verilog 13.0 $\cdot$
 **Invocation:** `cd m6/tb && make all`
 
-Thirteen testbenches exercise individual FSM paths, error conditions, and datapath corner
+Fourteen testbenches exercise individual FSM paths, error conditions, and datapath corner
 cases in isolation. Each test drives `svm_compute_core` RTL ports directly — no SPI bus,
 no top-level wrapper — so a failure localises immediately to the logic under test.
 All tests use reduced parameterisations ($\text{FEATURE\_DIM}=16$, $N_k \in [1,2]$)
@@ -170,6 +170,22 @@ the normal 100-beat warmup sequence; mid-warmup reset; real-fault override
 clearance at beat 100; and the re-warming condition after a reset that fires
 at count $= 100$.
 
+## tb\_num\_samples.sv --- num\_samples Parameter Coverage
+
+Dedicated coverage for the `num\_samples` input across five sub-tests.
+(T1) `num\_samples`$=1$: baseline --- `done` fires once, `sample\_rdy` fires once,
+kernel count $= N_{\mathrm{SV}} = 5$.
+(T2) `num\_samples`$=4$: `sample\_rdy` fires four times; `class\_out` is in $[0,4]$ on
+every pulse.
+(T3) `num\_samples`$= \text{MAX\_BATCH}=8$: boundary case --- kernel count $= 8 \times N_{\mathrm{SV}} = 40$.
+(T4) `num\_samples`$=0$ triggers $\texttt{ERR\_NUM\_SAMPLES\_ZERO}=\texttt{0x7}$;
+the testbench verifies the sticky-latch property by holding 50 idle cycles and
+confirming that both `error` and `error\_code` are unchanged, then pulses `rst\_n`
+and asserts both return to zero.
+(T5) Changes `num\_samples` from 2 to 3 between consecutive batches without an
+intervening reset; each batch produces the correct per-batch `sample\_rdy` count
+and kernel total.
+
 ---
 
 # Level 2 --- Integration Tests (cocotb, Direct RTL Port)
@@ -194,38 +210,43 @@ Writes $\hat{\gamma} = \texttt{0x0100}$ and $\hat{C} = \texttt{0x0400}$ via the
 `gamma_reg` and `c_reg` output ports. Confirms that the $Q_{6.10}$ encoding
 round-trips correctly: $\lfloor 0.25 \cdot 2^{10}\rceil = 256 = \texttt{0x0100}$.
 
-## test\_sv\_counts\_set
+## test\_sv\_counts\_flat
 
-Programs the SV distribution $\mathbf{N} = [60, 45, 55, 50, 40]$ and reads it back,
-confirming each class entry stores independently and $\sum_k N_k = 250$
-does not trigger $\texttt{ERR\_SV\_OVERFLOW}$.
+Two-part test of the `num\_sv\_per\_class\_flat` encoding.
+First, $\mathbf{N} = [2, 2, 2, 2, 2]$ (sum $= 10 \ll N_{\mathrm{SV}}=500$) is applied
+and the core is pulsed; confirms no $\texttt{ERR\_SV\_ZERO}$ or
+$\texttt{ERR\_SV\_OVERFLOW}$ fires.
+Second, $\mathbf{N} = [200, 200, 200, 200, 200]$ (sum $= 1000 > 500$) is applied
+and confirms $\texttt{ERR\_SV\_OVERFLOW}=\texttt{0x2}$ asserts on the next start pulse.
 
-## test\_sv\_counts\_unequal\_stress
-
-Applies an extreme asymmetric distribution
-$\mathbf{N} = [100, 10, 80, 40, 20]$ and confirms that the SV counter loop handles
-non-uniform class sizes without mis-indexing the alpha table.
-
-## test\_default\_gamma\_fixed\_point
+## test\_default\_gamma
 
 Reads `gamma_reg` immediately after reset and confirms it holds
 $\texttt{0x0100}$ ($= 0.25$ in $Q_{6.10}$), verifying that the RTL reset value
 is correctly encoded.
 
-## test\_full\_pipeline\_small\_batch
+## test\_full\_pipeline
 
-Executes a complete single-sample pipeline: programs parameters, sets $N_k = 2$
-for all $k$ (10 support vectors total), streams a feature vector, services all SV
-RAM read requests, and waits for `done`. Pass criteria: `done` fires exactly once
-within $100{,}000$ clock cycles; `error` does not assert. This is a pipeline liveness
-check, not a numerical accuracy check.
+Executes a complete single-sample pipeline with a constant SRAM model
+(all words $= \texttt{0x0400}$, so $\mathbf{x} = \mathbf{sv} = 1.0$,
+$\|\mathbf{x}-\mathbf{sv}\|^2 = 0$, $K = 1.0$).
+Sets $N_k = 2$ for all $k$ (10 SVs total) and waits for `done`.
+Pass criteria: `done` fires exactly once; no real fault asserted; all 10 kernel
+outputs equal $1024$.
 
-## test\_kernel\_output\_range
+## test\_kernel\_range
 
-Identical to `test_full_pipeline_small_batch` but additionally asserts that every
-kernel output satisfies $0 \leq \hat{K} \leq 1024$ in $Q_{6.10}$.
+Drives a sine-wave SRAM ($\widehat{sv}_{j} = 0.3\sin(r \cdot 0.3 + j \cdot 0.05)$
+for SV rows; input rows $= 0$), producing non-trivial distances.
+Asserts that every kernel output satisfies $0 \leq \hat{K} \leq 1024$ in $Q_{6.10}$.
 Values outside this interval indicate fixed-point overflow, a sign error in the
 Horner polynomial, or an incorrect LUT entry.
+
+## test\_multi\_sample
+
+Sets `num_samples`$= 3$ and classifies three identical beats with the constant SRAM
+model. Verifies that `done` fires exactly once (not once per beat) and that the
+total kernel count equals $30 = 3 \times 10$.
 
 ---
 
@@ -426,12 +447,12 @@ both float and $Q_{6.10}$ agree the samples are ambiguous.
 
 | Level | Testbench(es) | Interface | Framework | $n$ | Result |
 |-------|---------------|-----------|-----------|-----|--------|
-| 1 --- Unit | tb\_top, tb\_error\_codes, tb\_backpressure, tb\_consecutive, tb\_dist\_boundary, tb\_dist\_zero, tb\_gamma\_zero, tb\_interface, tb\_min\_sv, tb\_multi\_heartbeat, tb\_param\_write, tb\_power, tb\_warmup | Direct RTL | iverilog | 13 | 13/13 PASS |
-| 2 --- Integration | test\_reset\_outputs, test\_param\_programming, test\_sv\_counts\_set, test\_sv\_counts\_unequal\_stress, test\_default\_gamma\_fixed\_point, test\_full\_pipeline\_small\_batch, test\_kernel\_output\_range | Direct RTL | cocotb | 7 | 7/7 PASS |
+| 1 --- Unit | tb\_top, tb\_error\_codes, tb\_backpressure, tb\_consecutive, tb\_dist\_boundary, tb\_dist\_zero, tb\_gamma\_zero, tb\_interface, tb\_min\_sv, tb\_multi\_heartbeat, tb\_num\_samples, tb\_param\_write, tb\_power, tb\_warmup | Direct RTL | iverilog | 14 | 14/14 PASS |
+| 2 --- Integration | test\_reset\_outputs, test\_param\_programming, test\_sv\_counts\_flat, test\_default\_gamma, test\_full\_pipeline, test\_kernel\_range, test\_multi\_sample | Direct RTL | cocotb | 7 | 7/7 PASS |
 | 3 --- Feature | svm\_ram\_latency\_tb | Direct RTL | iverilog | 1 | 1/1 PASS |
 | 4 --- SPI Unit | tb\_spi\_unit (7 tests) | SPI + svm\_top\_ihp | cocotb | 7 | pending |
 | 5 --- SPI System | tb\_spi\_cosim | SPI + svm\_top\_ihp | cocotb | 1 | PASS --- 98.33\% |
-| **Total** | | | | **29** | **22/22 PASS + 7 pending** |
+| **Total** | | | | **30** | **23/23 PASS + 7 pending** |
 
 Level 6 (Caravel management SoC DV) from m5 is not applicable to m6: the IHP SG13G2
 target is a standalone design with no management SoC. The nRF52840 MCU role is
