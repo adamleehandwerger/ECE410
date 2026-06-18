@@ -1,0 +1,13 @@
+# vsrc_VDD.txt — svm_top_ihp, VDD power ring
+# Die: 2400 x 2400 µm  |  IHP SG13G2  |  PDN_CORE_RING=1
+# VDD ring: Metal5, offset=13.5 µm, width=3.1 µm → centerline at 15.05 µm ≈ 15.0 µm
+# 8 sources: 4 corners + 4 edge midpoints
+# Format: x(µm)  y(µm)  size(µm)
+  15.0   15.0   1.5
+1200.0   15.0   1.5
+2385.0   15.0   1.5
+2385.0 1200.0   1.5
+2385.0 2385.0   1.5
+1200.0 2385.0   1.5
+  15.0 2385.0   1.5
+  15.0 1200.0   1.5

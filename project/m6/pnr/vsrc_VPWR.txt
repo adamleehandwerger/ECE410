@@ -1,0 +1,21 @@
+# vsrc_VPWR.txt — svm_compute_core, VPWR (standard-cell supply)
+# Die: 1400 x 1400 µm  |  IHP SG13G2  |  no core ring, 70% density
+# Sources placed at die boundary where vertical M4/M5 straps exit the macro;
+# ~350 µm spacing gives 16 sources covering all four edges.
+# Format: x(µm)  y(µm)  size(µm)
+    5.0     5.0   0.5
+  350.0     5.0   0.5
+  700.0     5.0   0.5
+ 1050.0     5.0   0.5
+ 1395.0     5.0   0.5
+    5.0   350.0   0.5
+ 1395.0   350.0   0.5
+    5.0   700.0   0.5
+ 1395.0   700.0   0.5
+    5.0  1050.0   0.5
+ 1395.0  1050.0   0.5
+    5.0  1395.0   0.5
+  350.0  1395.0   0.5
+  700.0  1395.0   0.5
+ 1050.0  1395.0   0.5
+ 1395.0  1395.0   0.5

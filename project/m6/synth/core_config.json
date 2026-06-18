@@ -27,6 +27,11 @@
     "GRT_ALLOW_CONGESTION": true,
     "GRT_OVERFLOW_ITERS": 100,
 
+    "VSRC_LOC_FILES": [
+        "dir::../pnr/vsrc_VPWR.txt",
+        "dir::../pnr/vsrc_VGND.txt"
+    ],
+
     "PNR_SDC_FILE": "dir::svm_compute_core.sdc",
     "SIGNOFF_SDC_FILE": "dir::svm_compute_core.sdc",
 
