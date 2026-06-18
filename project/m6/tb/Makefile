@@ -39,6 +39,14 @@ cosim:
 spi_unit:
 	COCOTB_TEST_MODULES=tb_spi_unit $(MAKE) sim
 
+.PHONY: level2
+level2:
+	$(MAKE) sim \
+	    TOPLEVEL=svm_compute_core \
+	    MODULE=test_svm_compute_core \
+	    VERILOG_SOURCES="$(RTL_DIR)/compute_core.sv" \
+	    SIM_BUILD=sim_build_l2
+
 .PHONY: latency
 latency:
 	iverilog -g2012 -DSIMULATION \
