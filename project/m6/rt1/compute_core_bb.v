@@ -45,6 +45,10 @@ module svm_compute_core #(
 
     input  wire                alpha_write_en,
     input  wire [9:0]          alpha_addr,
-    input  wire [15:0]         alpha_data
+    input  wire [15:0]         alpha_data,
+
+    // Power ports — must match LEF (TopMetal1 VPWR/VGND pins)
+    inout  wire                VPWR,
+    inout  wire                VGND
 );
 endmodule
