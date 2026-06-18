@@ -20,6 +20,8 @@
     "RUN_FILL_INSERTION": 1,
     "RUN_ANTENNA_REPAIR": 1,
 
+    "RUN_LVS": 1,
+
     "RUN_KLAYOUT_DRC": 1,
     "RUN_KLAYOUT_XOR": 0,
     "RUN_MCSTA": 1,

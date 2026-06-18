@@ -40,6 +40,8 @@
         "dir::../pnr/vsrc_VSS.txt"
     ],
 
+    "RUN_LVS": 1,
+
     "RUN_KLAYOUT_DRC": 1,
     "RUN_KLAYOUT_XOR": 0,
     "RUN_MCSTA": 1,

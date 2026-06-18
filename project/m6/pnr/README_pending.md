@@ -24,7 +24,7 @@ pnr/
 - [ ] Synthesis clean (0 unresolved instances)
 - [ ] P&R complete (routing 100%, 0 DRC)
 - [ ] KLayout DRC: 0 violations with IHP `sg13g2.lydrc` ruleset
-- [ ] Magic LVS: CLEAN
+- [ ] Magic LVS: CLEAN  (`sbatch lvs_run.sh` — Magic+Netgen inside LibreLane SIF)
 - [ ] SPI cosim testbench passing (300 samples, ≥98.67% accuracy)
 - [ ] IHP shuttle registration submitted
 - [ ] GDS + design manifest uploaded to IHP shuttle portal
