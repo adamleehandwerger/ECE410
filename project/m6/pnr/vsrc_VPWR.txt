@@ -1,8 +1,3 @@
-# vsrc_VPWR.txt — svm_compute_core, VPWR
-# Die: 1400 x 1400 µm  |  IHP SG13G2  |  TopMetal1 full-mesh PDN
-# 19 vertical straps at 75.6 µm pitch (centerlines from svm_compute_core.lef)
-# Sources at top and bottom of each strap = 38 points
-# Format: x(µm)  y(µm)  size(µm)
    19.36   14.90   2.2
    94.96   14.90   2.2
   170.56   14.90   2.2
