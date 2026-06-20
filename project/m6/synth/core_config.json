@@ -30,6 +30,11 @@
     "GRT_OVERFLOW_ITERS": 100,
     "DRT_OPT_ITERS": 128,
 
+    "VSRC_LOC_FILES": {
+        "VPWR": "dir::../pnr/vsrc_VPWR.txt",
+        "VGND": "dir::../pnr/vsrc_VGND.txt"
+    },
+
     "PNR_SDC_FILE": "dir::svm_compute_core.sdc",
     "SIGNOFF_SDC_FILE": "dir::svm_compute_core.sdc",
 
