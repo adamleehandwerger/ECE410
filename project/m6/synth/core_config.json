@@ -10,7 +10,7 @@
 
     "FP_SIZING": "absolute",
     "DIE_AREA": "0 0 1400 1400",
-    "PL_TARGET_DENSITY_PCT": 58,
+    "PL_TARGET_DENSITY_PCT": 65,
 
     "SYNTH_STRATEGY": "AREA 0",
     "MAX_FANOUT_CONSTRAINT": 8,
