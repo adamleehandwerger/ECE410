@@ -1,0 +1,6 @@
+<testsuites name="results">
+  <testsuite name="all" package="all">
+    <property name="random_seed" value="1779744095" />
+    <testcase name="run_batch_cosim" classname="tb_wb_cosim" file="/Users/user/Desktop/Indently/project/m5/sim/tb_wb_cosim.py" lineno="325" time="5425.248875617981" sim_time_ns="1063206050.0" ratio_time="195973.69159933552" />
+  </testsuite>
+</testsuites>

@@ -1,0 +1,6 @@
+<testsuites name="results">
+  <testsuite name="all" package="all">
+    <property name="random_seed" value="1781743880" />
+    <testcase name="run_spi_cosim" classname="tb_spi_cosim" file="/Users/user/Desktop/Indently/project/m6/tb/tb_spi_cosim.py" lineno="321" time="46253.33482384682" sim_time_ns="2997554875.0" ratio_time="64807.32441057529" />
+  </testsuite>
+</testsuites>

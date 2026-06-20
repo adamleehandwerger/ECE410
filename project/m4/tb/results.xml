@@ -1,0 +1,12 @@
+<testsuites name="results">
+  <testsuite name="all" package="all">
+    <property name="random_seed" value="1780772692" />
+    <testcase name="test_wb_reset_outputs" classname="tb_wb_unit" file="/Users/user/Desktop/Indently/project/m5/tb/tb_wb_unit.py" lineno="150" time="0.007085084915161133" sim_time_ns="550.0" ratio_time="77627.86283945217" />
+    <testcase name="test_wb_gamma_register" classname="tb_wb_unit" file="/Users/user/Desktop/Indently/project/m5/tb/tb_wb_unit.py" lineno="162" time="0.006265163421630859" sim_time_ns="600.0" ratio_time="95767.65355049852" />
+    <testcase name="test_wb_num_sv_registers" classname="tb_wb_unit" file="/Users/user/Desktop/Indently/project/m5/tb/tb_wb_unit.py" lineno="184" time="0.007412910461425781" sim_time_ns="700.0" ratio_time="94429.84690595651" />
+    <testcase name="test_wb_alpha_load" classname="tb_wb_unit" file="/Users/user/Desktop/Indently/project/m5/tb/tb_wb_unit.py" lineno="210" time="0.010124921798706055" sim_time_ns="1425.0000000000002" ratio_time="140741.82777215252" />
+    <testcase name="test_wb_sram_load" classname="tb_wb_unit" file="/Users/user/Desktop/Indently/project/m5/tb/tb_wb_unit.py" lineno="230" time="1.0592679977416992" sim_time_ns="185075.0" ratio_time="174719.7124755677" />
+    <testcase name="test_wb_ram_latency" classname="tb_wb_unit" file="/Users/user/Desktop/Indently/project/m5/tb/tb_wb_unit.py" lineno="266" time="1.0636332035064697" sim_time_ns="185075.0" ratio_time="174002.6537248602" />
+    <testcase name="test_wb_start_clear" classname="tb_wb_unit" file="/Users/user/Desktop/Indently/project/m5/tb/tb_wb_unit.py" lineno="300" time="1.081482172012329" sim_time_ns="188075.00000000006" ratio_time="173904.85471438355" />
+  </testsuite>
+</testsuites>
