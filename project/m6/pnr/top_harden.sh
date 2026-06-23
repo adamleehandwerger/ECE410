@@ -84,10 +84,17 @@ ls -lh $SVM_M6/project/m6/rt1/compute_core_bb.v
 ls -lh $GDS_STAGE/svm_compute_core.lef
 ls -lh $GDS_STAGE/svm_compute_core.gds
 
-# --- Clean previous run ---
+# --- DRT checkpoint resume (preserve routing if it exists) ---
 RUN_DIR=$DESIGN_DIR/runs/top_harden
-echo "--- Removing old run dir ---"
-rm -rf $RUN_DIR
+DRT_ODB=$(find $RUN_DIR/44-openroad-detailedrouting -name "*.odb" 2>/dev/null | head -1)
+if [ -n "$DRT_ODB" ]; then
+    echo "--- DRT checkpoint found: $DRT_ODB — resuming from OpenROAD.FillInsertion ---"
+    RESUME_FROM="--from OpenROAD.FillInsertion"
+else
+    echo "--- No DRT checkpoint — running from scratch ---"
+    rm -rf $RUN_DIR
+    RESUME_FROM=""
+fi
 
 # --- Run LibreLane ---
 echo "--- Running librelane (svm_top_ihp, IHP SG13G2, macro=svm_compute_core) ---"
@@ -96,6 +103,7 @@ apptainer exec --bind /scratch,/tmp $LIBRELANE_SIF \
     --pdk ihp-sg13g2 \
     --run-tag top_harden \
     --jobs $SLURM_CPUS_PER_TASK \
+    $RESUME_FROM \
     $DESIGN_DIR/top_config.json 2>&1
 
 echo "=== Top harden done at $(date) ==="

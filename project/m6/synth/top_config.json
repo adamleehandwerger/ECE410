@@ -44,7 +44,7 @@
     "RUN_LVS": 1,
 
     "RUN_KLAYOUT_DRC": 1,
-    "RUN_KLAYOUT_XOR": 0,
+    "RUN_KLAYOUT_XOR": 1,
     "RUN_MCSTA": 1,
 
     "PNR_SDC_FILE": "dir::svm_top_ihp.sdc",
