@@ -35,16 +35,10 @@ read_sdc $sdc_file
 
 file mkdir $outdir
 
-# Worst hold path
-report_checks -path_delay min -sort_by_slack -corner fast_1p65V_m40C \
-    -file $outdir/hold_min.rpt
-
-# Worst slack and TNS
-report_worst_slack -min -corner fast_1p65V_m40C \
-    -file $outdir/ws_min.rpt
-
-report_tns -corner fast_1p65V_m40C \
-    -file $outdir/tns_min.rpt
+# -file and -append are not supported in this OpenROAD build; all output
+# goes to stdout and is captured by the shell's tee into openroad.log
+puts "=== Hold Paths (fast_1p65V_m40C) ==="
+report_checks -path_delay min -sort_by_slack -corner fast_1p65V_m40C
 
 puts ""
 puts "=== Hold Summary (fast_1p65V_m40C) ==="

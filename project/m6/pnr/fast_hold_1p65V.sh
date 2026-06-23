@@ -64,10 +64,7 @@ apptainer exec --bind /scratch,/home,/tmp $LIBRELANE_SIF \
     2>&1 | tee $OUTDIR/openroad.log
 
 echo ""
-echo "=== Results ==="
-echo "--- Worst Hold Slack ---"
-cat $OUTDIR/ws_min.rpt 2>/dev/null
-echo "--- TNS ---"
-cat $OUTDIR/tns_min.rpt 2>/dev/null
+echo "=== Results (see openroad.log for full timing paths) ==="
+grep -A 2 "Hold Summary" $OUTDIR/openroad.log 2>/dev/null || true
 echo ""
-echo "=== Done at $(date) — full report: $OUTDIR/hold_min.rpt ==="
+echo "=== Done at $(date) — full log: $OUTDIR/openroad.log ==="
