@@ -42,18 +42,15 @@ puts $f "fast_1p65V_m40C Corner — Hold (min path) Analysis"
 puts $f "============================================================"
 close $f
 
-redirect -append $outdir/hold_min.rpt {
-    report_checks -path_delay min -sort_by_slack -corner fast_1p65V_m40C
-}
+report_checks -path_delay min -sort_by_slack -corner fast_1p65V_m40C \
+    -append -file $outdir/hold_min.rpt
 
 # Worst slack and TNS
-redirect $outdir/ws_min.rpt {
-    report_worst_slack -min -corner fast_1p65V_m40C
-}
+report_worst_slack -min -corner fast_1p65V_m40C \
+    -file $outdir/ws_min.rpt
 
-redirect $outdir/tns_min.rpt {
-    report_tns -corner fast_1p65V_m40C
-}
+report_tns -corner fast_1p65V_m40C \
+    -file $outdir/tns_min.rpt
 
 puts ""
 puts "=== Hold Summary (fast_1p65V_m40C) ==="
