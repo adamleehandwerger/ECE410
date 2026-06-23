@@ -42,5 +42,5 @@ report_checks -path_delay min -sort_by_slack -corner fast_1p65V_m40C
 
 puts ""
 puts "=== Hold Summary (fast_1p65V_m40C) ==="
-report_worst_slack -min -corner fast_1p65V_m40C
-report_tns -corner fast_1p65V_m40C
+report_worst_slack -min
+report_tns
