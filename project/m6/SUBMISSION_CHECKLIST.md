@@ -11,16 +11,16 @@
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Core harden (svm_compute_core) | ✅ DONE | Job 93441 — 0 DRT violations |
-| Top wrapper harden (svm_top_ihp) | ✅ DONE | Job 93553 — 0 DRC violations |
-| Magic DRC: 0 violations | ✅ DONE | `drc.magic.rpt`: COUNT 0 |
-| KLayout DRC: 0 violations | ✅ DONE | `drc.klayout.lyrdb`: no items |
+| Core harden (svm_compute_core) | ✅ DONE | Job 94560 — 120 steps, 0 DRT viol, hold PASSED |
+| Top wrapper harden (svm_top_ihp) | ✅ DONE | Job 94561 — 74 steps, Magic DRC 0, KLayout DRC 0 |
+| Magic DRC: 0 violations | ✅ DONE | `drc.magic.rpt`: COUNT 0 (top + core) |
+| KLayout DRC: 0 violations | ✅ DONE | `drc.klayout.lyrdb`: no items (top + core) |
 | Setup timing met (typ 1.20V 25°C) | ✅ DONE | WNS = +12.93 ns |
-| Hold timing met (typ 1.20V 25°C) | ✅ DONE | WNS = +0.35 ns |
-| IR drop < 5% (VGND) | ✅ DONE | 0.03% drop |
-| Routing DRC: 0 violations | ✅ DONE | 0 after 2 iterations |
-| Antenna violations: 0 | ✅ DONE | 4 diodes inserted, 0 remaining |
-| GDS generated | ✅ DONE | `svm_top_ihp.gds` (171 MB raw / 36 MB gz) |
+| Hold timing met (typ 1.20V 25°C) | ✅ DONE | R2R WNS = +0.097 ns, 0 R2R violations |
+| IR drop < 5% (VGND) | ✅ DONE | 0.57% drop (with vsrc pin locations) |
+| Routing DRC: 0 violations | ✅ DONE | 0 after DRT convergence |
+| Antenna violations: 0 | ✅ DONE | Diodes inserted, 0 remaining |
+| GDS generated | ✅ DONE | `svm_top_ihp.gds` (171 MB, Jun 23 2026) |
 | Abstract LEF generated | ✅ DONE | `svm_top_ihp.lef` |
 | Gate-level netlist generated | ✅ DONE | `svm_top_ihp.v` |
 
@@ -46,23 +46,23 @@
 
 | Item | Status | Notes |
 |------|--------|-------|
-| GDS pushed to submission repo | ✅ DONE | Gzip-compressed, ≤ 100 MB/file |
+| GDS pushed to submission repo | ✅ DONE | Fresh Jun 23 GDS pushed to ihp-sg13g2-svm |
 | LEF pushed to submission repo | ✅ DONE | |
 | Gate-level netlist pushed | ✅ DONE | |
 | DRC reports pushed | ✅ DONE | Magic + KLayout both 0 violations |
 | Timing reports pushed | ✅ DONE | Post-PnR typ corner |
-| README with project description | ✅ DONE | |
+| README with project description | ✅ DONE | IHP__SVM5740 template structure |
+| IHP submission issue opened | ✅ DONE | IHP-GmbH/Open-Silicon-MPW#40 (July-2026) |
+| Repo restructured to IHP template | ✅ DONE | doc/, SVM5740-main/PlaceAndRoute/, rtl/, verification/ |
 
 ## Remaining Before Tape-Out
 
 | Item | Priority | Notes |
 |------|----------|-------|
-| Register project with IHP shuttle | 🔴 HIGH | Contact IHP team at ihp-go.de before Aug 23 |
-| Provide VSRC_LOC_FILES for accurate IR drop | 🟡 MED | Current IR drop advisory only (no supply pins specified) |
-| LVS verification | 🟡 MED | Not run — Magic DRC only; LVS requires SPICE extraction |
-| Confirm PDN macro power connection | 🟡 MED | u_svm VPWR/VGND connected via PDN_MACRO_CONNECTIONS; verify with LVS |
-| Fast-corner hold timing (-0.127 ns pre-PnR) | 🟢 LOW | Post-PnR typ corner is clean; pre-PnR fast corner is pessimistic |
-| Update design_summary.md §m6 | 🟢 LOW | Document final harden metrics |
+| IHP response to issue #40 | 🔴 HIGH | Await IHP team review at IHP-GmbH/Open-Silicon-MPW#40 |
+| LVS verification | 🟡 MED | Magic SPICE extraction failed (tech file issue); Magic DRC clean |
+| Fast-corner hold (1.65V) result | 🟡 MED | Job 94565 submitted; TCL redirect bug fixed; awaiting result |
+| Update design_summary.md §m6 | 🟢 LOW | Document final harden metrics (jobs 94560/94561) |
 | KLayout XOR (Magic vs. KLayout GDS) | 🟢 LOW | Set RUN_KLAYOUT_XOR: 1 and re-run signoff |
 
 ## Key File Locations
