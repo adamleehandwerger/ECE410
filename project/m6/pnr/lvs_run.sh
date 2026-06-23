@@ -5,7 +5,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=16G
-#SBATCH --time=2:00:00
+#SBATCH --time=4:00:00
 #SBATCH --output=%x_%j.out
 #SBATCH --error=%x_%j.err
 #SBATCH --mail-type=END,FAIL
@@ -83,7 +83,6 @@ run_lvs() {
     cat > /tmp/magic_extract_${DESIGN}.tcl << MAGIC_EOF
 gds read ${GDS}
 load ${TOP}
-flatten ${TOP}
 extract all
 ext2spice hierarchy on
 ext2spice format ngspice
