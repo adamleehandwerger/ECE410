@@ -36,14 +36,8 @@ read_sdc $sdc_file
 file mkdir $outdir
 
 # Worst hold path
-set f [open $outdir/hold_min.rpt w]
-puts $f "============================================================"
-puts $f "fast_1p65V_m40C Corner — Hold (min path) Analysis"
-puts $f "============================================================"
-close $f
-
 report_checks -path_delay min -sort_by_slack -corner fast_1p65V_m40C \
-    -append -file $outdir/hold_min.rpt
+    -file $outdir/hold_min.rpt
 
 # Worst slack and TNS
 report_worst_slack -min -corner fast_1p65V_m40C \

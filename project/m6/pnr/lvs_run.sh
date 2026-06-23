@@ -36,14 +36,25 @@ mkdir -p $LVS_DIR
 module load apptainer/1.4.1-gcc-13.4.0
 LIBRELANE_SIF=$SCRATCH/librelane_3.0.4.sif
 
-# IHP magic / netgen support files (resolved at runtime to handle PDK layout variations)
-MAGIC_TECH=$(find $IHP_PDK_ROOT/ihp-sg13g2/libs.tech/magic -name "sg13g2.tech" | head -1)
-NETGEN_SETUP=$(find $IHP_PDK_ROOT/ihp-sg13g2/libs.tech/netgen -name "*.tcl" | head -1)
+# IHP magic / netgen support files — filename is ihp-sg13g2.tech (not sg13g2.tech)
+MAGIC_TECH=$(find $IHP_PDK_ROOT/ihp-sg13g2/libs.tech/magic -name "ihp-sg13g2.tech" 2>/dev/null | head -1)
+if [ -z "$MAGIC_TECH" ]; then
+    MAGIC_TECH=$(find ~/.ciel -name "ihp-sg13g2.tech" -path "*/magic/*" 2>/dev/null | head -1)
+fi
+NETGEN_SETUP=$(find $IHP_PDK_ROOT/ihp-sg13g2/libs.tech/netgen -name "*.tcl" 2>/dev/null | head -1)
+if [ -z "$NETGEN_SETUP" ]; then
+    NETGEN_SETUP=$(find ~/.ciel -name "ihp-sg13g2_setup.tcl" -path "*/netgen/*" 2>/dev/null | head -1)
+fi
 
 echo "=== m6 LVS at $(date) ==="
 echo "MAGIC_TECH  = $MAGIC_TECH"
 echo "NETGEN_SETUP= $NETGEN_SETUP"
 echo "ARTIFACTS   = $ARTIFACTS"
+
+if [ -z "$MAGIC_TECH" ] || [ -z "$NETGEN_SETUP" ]; then
+    echo "ERROR: Could not find magic tech or netgen setup — check PDK install"
+    exit 1
+fi
 
 # ---------------------------------------------------------------------------
 # run_lvs <design_name> <top_cell>
