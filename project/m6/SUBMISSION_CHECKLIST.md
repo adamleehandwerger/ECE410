@@ -60,8 +60,8 @@
 | Item | Priority | Notes |
 |------|----------|-------|
 | IHP response to issue #40 | 🔴 HIGH | Await IHP team review at IHP-GmbH/Open-Silicon-MPW#40 |
-| LVS verification | 🟡 MED | Magic SPICE extraction failed (tech file issue); Magic DRC clean |
-| Fast-corner hold (1.65V) result | 🟡 MED | Job 94565 submitted; TCL redirect bug fixed; awaiting result |
+| LVS verification | 🟡 MED | ⚠️ Filler-cell mismatch only (job 94591): device count match, cell pins equivalent; fill/decap cells have VDD/VSS in SPICE but no pins in GL Verilog — standard PnR artifact, not functional |
+| Fast-corner hold (1.65V/-40C) | 🟡 MED | ⚠️ WNS = -0.08 ns (1 path) — 1.65V is 37.5% above 1.2V nominal (op range 1.08–1.32V) |
 | Update design_summary.md §m6 | 🟢 LOW | Document final harden metrics (jobs 94560/94561) |
 | KLayout XOR (Magic vs. KLayout GDS) | 🟢 LOW | Set RUN_KLAYOUT_XOR: 1 and re-run signoff |
 
