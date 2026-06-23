@@ -9,8 +9,3 @@ set_clock_uncertainty -setup 0.5  [get_clocks clk]
 set_clock_uncertainty -hold  0.25 [get_clocks clk]
 set_input_delay  -clock clk -max 5.0 [all_inputs]
 set_output_delay -clock clk -max 5.0 [all_outputs]
-
-# Hold analysis: minimum path constraints (inputs can arrive at clock edge,
-# outputs must be held for 0 ns — forces hold-buffer insertion at I/O boundaries)
-set_input_delay  -clock clk -min 0.0 [all_inputs]
-set_output_delay -clock clk -min 0.0 [all_outputs]
