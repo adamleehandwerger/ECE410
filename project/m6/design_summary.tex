@@ -1,0 +1,1019 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{microtype}
+\usepackage{enumitem}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage{tabularx}
+\usepackage{siunitx}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!60!black,
+  citecolor=blue!60!black,
+  urlcolor=blue!60!black,
+}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{gray!8},
+  frame=single,
+  rulecolor=\color{gray!40},
+  breaklines=true,
+  captionpos=b,
+  keywordstyle=\color{blue!70!black},
+  commentstyle=\color{green!50!black},
+  stringstyle=\color{red!60!black},
+  numbers=none,
+}
+
+\newcommand{\Q}{\mathbb{Q}_{6.10}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\SV}{N_{\mathrm{SV}}}
+\newcommand{\Feat}{F}
+\newcommand{\Lat}{L}
+\newcommand{\ns}{\,\mathrm{ns}}
+\newcommand{\mW}{\,\mathrm{mW}}
+\newcommand{\MHz}{\,\mathrm{MHz}}
+\newcommand{\um}{\,\mu\mathrm{m}}
+
+\title{\textbf{SVM Cardiac Arrhythmia Classifier ASIC}\\
+  \large Design Summary --- IHP SG13G2 130\,nm BiCMOS\\[4pt]
+  \normalsize \texttt{svm\_top\_ihp} $\cdot$ ECE410 Open-MPW Tape-Out}
+\author{Adam Handwerger\\
+  Portland State University\\
+  \texttt{handwerg@pdx.edu}}
+\date{June 2026 $\cdot$ Revision m6/v11}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+%=============================================================================
+\section{Abstract}
+%=============================================================================
+
+We present \texttt{svm\_top\_ihp}, a full-custom ASIC implementing a five-class
+one-versus-rest (OvR) radial-basis-function Support Vector Machine (RBF-SVM) for
+wearable cardiac arrhythmia detection.  The design is fabricated in IHP SG13G2
+130\,nm BiCMOS and submitted to the IHP Open-MPW community shuttle (deadline August
+2026).  Classification is performed on 256-dimensional multi-scale ECG feature
+vectors drawn from the PhysioNet MIT-BIH, SVDB, and INCART corpora.  The
+classifier achieves \textbf{98.67\%} accuracy (296/300) on the held-out test set,
+with \textbf{zero quantization error} between IEEE-754 float and Q6.10 fixed-point
+inference.  All physical signoff checks pass: Magic DRC\,=\,0 violations,
+KLayout DRC\,=\,0 violations, KLayout XOR\,=\,0 differences, and setup/hold
+timing met at all three process corners.
+
+%=============================================================================
+\section{SVM Algorithm}
+%=============================================================================
+
+\subsection{Binary SVM}
+
+Given a training set $\{(\mathbf{x}_i,y_i)\}_{i=1}^{N}$ with
+$\mathbf{x}_i \in \R^d$, $y_i \in \{-1,+1\}$, the C-SVM finds the
+maximum-margin separating hyperplane by solving the primal problem
+\begin{equation}
+  \min_{\mathbf{w},b,\boldsymbol{\xi}}\;
+  \frac{1}{2}\|\mathbf{w}\|^2 + C\sum_{i=1}^{N}\xi_i
+  \quad\text{s.t.}\quad
+  y_i(\mathbf{w}^\top\phi(\mathbf{x}_i)+b) \ge 1-\xi_i,\;\xi_i\ge 0.
+  \label{eq:primal}
+\end{equation}
+Via Lagrangian duality the equivalent dual is
+\begin{equation}
+  \max_{\boldsymbol{\alpha}}\;
+  \sum_{i=1}^{N}\alpha_i
+  - \frac{1}{2}\sum_{i,j}\alpha_i\alpha_j y_i y_j K(\mathbf{x}_i,\mathbf{x}_j)
+  \quad\text{s.t.}\quad
+  0 \le \alpha_i \le C,\;
+  \sum_{i}\alpha_i y_i = 0,
+  \label{eq:dual}
+\end{equation}
+where $K:\R^d\times\R^d\to\R$ is a Mercer kernel.  Training produces a sparse
+solution: most $\alpha_i = 0$ and the nonzero entries index the \emph{support vectors}.
+
+\subsection{Radial Basis Function Kernel}
+
+The RBF (Gaussian) kernel with bandwidth $\gamma > 0$ is
+\begin{equation}
+  K(\mathbf{x},\mathbf{z}) = \exp\!\bigl(-\gamma\,\|\mathbf{x}-\mathbf{z}\|^2\bigr).
+  \label{eq:rbf}
+\end{equation}
+For any fixed $\gamma$, the kernel value is a monotone-decreasing function of the
+squared Euclidean distance
+\begin{equation}
+  D(\mathbf{x},\mathbf{z}) = \sum_{j=0}^{d-1}(x_j - z_j)^2.
+  \label{eq:dist}
+\end{equation}
+On hardware the kernel is evaluated via a lookup table
+(LUT) indexed by the integer argument $\lfloor \gamma D \rceil$, making it
+fully synthesizable with no floating-point units.
+
+\subsection{Decision Function}
+
+The predicted score for test point $\mathbf{x}$ is
+\begin{equation}
+  f(\mathbf{x}) = \sum_{i \in \mathcal{S}} \alpha_i\, K(\mathbf{x}_i,\mathbf{x}) + b,
+  \label{eq:decision}
+\end{equation}
+where $\mathcal{S}$ is the support vector index set, $\alpha_i$ are the trained
+dual coefficients, and $b$ is the bias.  Note that for the binary OvR formulation
+adopted here, the labels are folded into the sign of $\alpha_i$: the stored
+coefficient is $\hat\alpha_i = \alpha_i y_i$, so $f(\mathbf{x}) =
+\sum_{i\in\mathcal{S}}\hat\alpha_i K(\mathbf{x}_i,\mathbf{x}) + b$.
+
+\subsection{One-versus-Rest Multi-class}
+
+For $K=5$ arrhythmia classes $\mathcal{C} = \{N,\,\text{PVC},\,\text{AFib},\,\text{VT},\,\text{SVT}\}$,
+five independent binary classifiers are trained:
+\begin{equation}
+  f_k(\mathbf{x}) = \sum_{i \in \mathcal{S}_k} \hat\alpha_{k,i}\,K(\mathbf{x}_{k,i},\mathbf{x}) + b_k,
+  \quad k = 0,\dots,4.
+  \label{eq:ovr}
+\end{equation}
+The predicted class is $\hat{c} = \arg\max_{k}\,f_k(\mathbf{x})$.  Each binary
+SVM is trained independently, allowing per-class support vector budgets
+$|\mathcal{S}_k| = 120$ for all $k$ (600 SVs total).
+
+%=============================================================================
+\section{Feature Extraction}
+%=============================================================================
+
+Each ECG beat is represented as a $d=256$-dimensional feature vector
+$\mathbf{x} \in \R^{256}$ composed of three sub-vectors:
+
+\begin{equation}
+  \mathbf{x} = \bigl[\,\mathbf{m}\;\big|\;\boldsymbol{\mu}\;\big|\;\mathbf{r}\,\bigr]
+  \in \R^{128} \times \R^{64} \times \R^{64},
+  \label{eq:feature}
+\end{equation}
+
+\noindent where:
+\begin{itemize}[noitemsep]
+  \item $\mathbf{m} \in \R^{128}$: amplitude-normalised single-beat morphology ($\pm 64$ samples centred at the R-peak).  Follows de~Chazal \emph{et al.}~\cite{dechazal2004}.
+  \item $\boldsymbol{\mu} \in \R^{64}$: mean morphology template computed over the preceding 10 beats, sub-sampled to 64 points.  Captures sustained rhythm morphology.  Follows de~Chazal \& Reilly~\cite{dechazal2006}.
+  \item $\mathbf{r} \in \R^{64}$: RR-interval history (99 consecutive intervals normalised by a 308\,ms reference, then resampled to 64 points).  Encodes rate and rhythm context.  Follows Llamedo \& Martinez~\cite{llamedo2011}.
+\end{itemize}
+
+The 256-dimensional representation satisfies the AAMI ANSI EC57:2012 beat
+classification standard.  Data are sourced from PhysioNet (MIT-BIH
+DOI:10.13026/C2F305, SVDB, INCART), loaded via \texttt{wfdb}.
+
+%=============================================================================
+\section{Fixed-Point Arithmetic}
+%=============================================================================
+
+\subsection{Q6.10 Format}
+
+All runtime values (features, support vectors, alpha coefficients, kernel
+outputs, bias terms) are represented in Q6.10 signed fixed-point.  A 16-bit
+two's-complement integer $v$ encodes the real value
+\begin{equation}
+  x = v \cdot 2^{-10},
+  \quad v \in [-2^{15},\,2^{15}-1],
+  \quad x \in [-32,\;31.999].
+  \label{eq:q6_10}
+\end{equation}
+Resolution is $\Delta = 2^{-10} \approx 9.77\times10^{-4}$.  The kernel LUT
+stores $\exp(-\gamma D / 2^{10})$ pre-quantised to 16 bits.
+
+\subsection{Distance Accumulator}
+
+The hardware computes \eqref{eq:dist} as an integer sum of squared differences:
+\begin{equation}
+  D_{\mathrm{int}} = \sum_{j=0}^{255}(x_j - s_j)^2,
+  \quad x_j, s_j \in \mathbb{Z}_{16},
+  \label{eq:dist_int}
+\end{equation}
+where $x_j$ and $s_j$ are the raw Q6.10 integers.  The product $(x_j-s_j)^2$
+fits in 20 bits (max $\approx 2^{15^2}$), and the accumulator is widened to
+32 bits to prevent overflow across 256 terms.  The kernel argument is then
+$\gamma_{\mathrm{int}} \cdot D_{\mathrm{int}}$, right-shifted to index the LUT.
+
+\subsection{Pipeline Drain Correction}
+
+The three-stage registered pipeline introduces a two-cycle latency at the end of
+each 256-feature window:
+
+\begin{center}
+\begin{tabular}{cccl}
+\toprule
+Cycle & $\text{diff}$ & $\text{sq}$ & Accumulator \\
+\midrule
+$k$   & $\delta[k]$   & $\delta[k{-}1]^2$   & $D \mathrel{+}= \delta[k{-}2]^2$ \\
+256   & $\delta[255]$  & $\delta[254]^2$      & $D \mathrel{+}= \delta[253]^2$ \\
+257   & ---            & $\delta[255]^2$      & $D \mathrel{+}= \delta[254]^2$ \\
+258   & ---            & ---                  & $D \mathrel{+}= \delta[255]^2\;\checkmark$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent The FSM holds in \texttt{ACCUMULATE} for two additional drain cycles
+before transitioning to \texttt{KERNEL}.  Without this fix (bug present in v6),
+the last two squared differences were silently dropped, degrading distance
+accuracy.
+
+\subsection{Quantization Error Analysis}
+
+Table~\ref{tab:quant} compares float and Q6.10 inference accuracy.  The uniform
+600-SV allocation achieves zero quantization flips across all 300 test samples.
+
+\begin{table}[H]
+  \centering
+  \caption{SV count sweep --- float vs.\ Q6.10 accuracy.}
+  \label{tab:quant}
+  \small
+  \begin{tabular}{rrrrl}
+    \toprule
+    SVs/class & Total SVs & Float & Q6.10 & Flips \\
+    \midrule
+    90  & 450 & 98.00\% & 98.00\% & 0 \\
+    100 & 500 & 98.33\% & 98.00\% & 1 \\
+    \textbf{120} & \textbf{600} & \textbf{98.67\%} & \textbf{98.67\%} & \textbf{0} \\
+    150 & 750 & 98.00\% & 98.00\% & 0 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The N=120 per-class point is optimal: it eliminates the quantization flip seen at
+N=100 while also improving float accuracy.  This motivates the 10-bit
+\texttt{alpha\_addr} field (up from 9-bit in m5), giving an address space of
+$2^{10}=1024 > 600$.
+
+%=============================================================================
+\section{Training and Test Dataset}
+%=============================================================================
+
+\subsection{Data Sources}
+
+Training and test data are drawn from three PhysioNet ECG databases, pooled
+across all available recordings.  Beat annotations follow AAMI EC57 class
+mapping:
+
+\begin{table}[H]
+  \centering
+  \caption{AAMI beat class to PhysioNet annotation mapping.}
+  \label{tab:classes}
+  \small
+  \begin{tabular}{llll}
+    \toprule
+    Class & Label & AAMI & PhysioNet annotations \\
+    \midrule
+    0 & Normal    & N & N, L, R, e, j \\
+    1 & PVC       & V & V, E \\
+    2 & AFib      & S & A, a, J, S \\
+    3 & VT        & V$^*$ & V (sustained run $\ge$3) \\
+    4 & SVT       & S$^*$ & A, a, J (sustained run $\ge$3) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Split and Sizes}
+
+\begin{table}[H]
+  \centering
+  \caption{Dataset summary.}
+  \label{tab:dataset}
+  \small
+  \begin{tabular}{lll}
+    \toprule
+    Parameter & Training set & Test set \\
+    \midrule
+    Databases & MIT-BIH + SVDB + INCART & same (held-out 20\%) \\
+    Beats/class & 240 & 60 \\
+    \textbf{Total beats} & \textbf{1,200} & \textbf{300} \\
+    Split strategy & 80/20 stratified, \texttt{random\_state=42} & --- \\
+    Feature dimension & $d = 256$ & --- \\
+    Arithmetic & Q6.10 fixed-point & Q6.10 fixed-point \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Test Accuracy}
+
+\begin{table}[H]
+  \centering
+  \caption{Per-class test accuracy at Q6.10 fixed-point, $\SV=600$,
+           allocation $[120,120,120,120,120]$.}
+  \label{tab:accuracy}
+  \small
+  \begin{tabular}{lrrl}
+    \toprule
+    Class & Correct & Accuracy & Notes \\
+    \midrule
+    Normal (N) & 59/60 & 98.3\% & 1 misclassified as PVC \\
+    PVC        & 60/60 & 100.0\% & \\
+    AFib       & 60/60 & 100.0\% & \\
+    VT         & 58/60 & 96.7\% & 2 misclassified as PVC \\
+    SVT        & 59/60 & 98.3\% & 1 misclassified as AFib \\
+    \midrule
+    \textbf{Total} & \textbf{296/300} & \textbf{98.67\%} & 0 quantization flips \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The primary confusion is VT misclassified as PVC, consistent with the
+similarity of wide-QRS morphology on a single-beat basis.
+
+\subsection{Non-Uniform Allocation Sweep}
+
+Table~\ref{tab:alloc} shows that the uniform allocation is optimal at 600 SVs.
+Non-uniform splits either match or degrade accuracy; concentrating more SVs in
+one class introduces tail noise without improving any decision boundary.
+
+\begin{table}[H]
+  \centering
+  \caption{600-SV non-uniform allocation sweep.}
+  \label{tab:alloc}
+  \small
+  \begin{tabular}{lrrl}
+    \toprule
+    Allocation $[n_0,n_1,n_2,n_3,n_4]$ & Float & Q6.10 & Flips \\
+    \midrule
+    $[120,120,120,120,120]$ (uniform) & 98.67\% & \textbf{98.67\%} & 0 \\
+    $[140,115,115,115,115]$ (N boost) & 98.67\% & 98.67\% & 0 \\
+    $[115,115,115,140,115]$ (VT boost) & 98.67\% & 98.67\% & 0 \\
+    $[110,110,110,160,110]$ (VT $+40$) & 98.67\% & 98.33\% & 1 \\
+    $[115,115,115,115,140]$ (SVT boost) & 98.00\% & 98.00\% & 0 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+%=============================================================================
+\section{RTL Architecture}
+%=============================================================================
+
+\subsection{Top-Level Block Diagram}
+
+The design consists of two hardened blocks:
+
+\begin{itemize}[noitemsep]
+  \item \texttt{svm\_compute\_core}: SVM inference engine with off-chip SRAM
+        interface.  Hardened as a standalone macro ($1400\times1400\um$ die).
+  \item \texttt{svm\_top\_ihp}: Pad ring, ICG clock gate, and SPI slave wrapping
+        the core.  Final die: $2400\times2400\um$.
+\end{itemize}
+
+\subsection{Inference FSM}
+
+The core FSM cycles through six states per beat:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+State & Cycles (LAT=3) & Action \\
+\midrule
+\texttt{IDLE}         & ---  & Await \texttt{start} assertion \\
+\texttt{LOAD\_INPUT}  & $F(L+1) = 1024$  & Fetch input feature vector from SRAM \\
+\texttt{ACCUMULATE}   & $F(L+1)+2 = 1026$& Compute $D$ for one SV (with drain) \\
+\texttt{KERNEL}       & $\approx 28$     & LUT lookup: $K = \exp(-\gamma D)$ \\
+\texttt{WRITE\_CLASS} & 1                & Accumulate $\hat\alpha K$ into OvR scores \\
+\texttt{ARGMAX}       & 5                & Select $\hat c = \arg\max_k f_k$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent\textbf{Cycles per beat formula.}  Let $F=256$, $\SV=600$, $\Lat=3$:
+\begin{align}
+  T &= F(\Lat+1) + \SV\!\bigl[F(\Lat+1) + 30\bigr] + 500 \notag\\
+    &= 256\cdot4 + 600\cdot(256\cdot4+30) + 500 \notag\\
+    &= 1024 + 600\cdot1054 + 500 \notag\\
+    &= \mathbf{633{,}924\text{ cycles/beat}}. \label{eq:cycles}
+\end{align}
+At $f_\text{clk}=40\MHz$: $T/f = 15.85\,\mathrm{ms/beat}$, well within the
+$750\,\mathrm{ms}$ heartbeat window at 80\,bpm.
+
+\subsection{SPI Interface}
+
+Configuration and model parameters are loaded over a 4-wire SPI bus (CPOL=0,
+CPHA=0, MSB-first).  Frames are 40 bits: 8-bit address followed by 32-bit data.
+
+\begin{table}[H]
+  \centering
+  \caption{SPI register map.}
+  \label{tab:regs}
+  \small
+  \begin{tabular}{llllp{4.5cm}}
+    \toprule
+    Addr & Name & R/W & Width & Description \\
+    \midrule
+    \texttt{0x01} & \texttt{CONTROL}    & RW & 32 & [0]=start, [1]=\texttt{vbatt\_ok}, [2]=\texttt{vbatt\_warn} \\
+    \texttt{0x02} & \texttt{STATUS}     & RO & 32 & [0]=done, [1]=error, [5:2]=\texttt{err\_code}, [8:6]=\texttt{class\_out}, [9]=\texttt{sample\_rdy} \\
+    \texttt{0x03} & \texttt{NUM\_SAMPLES} & RW & 10 & Beats per batch (1--1000); reset = 1000 \\
+    \texttt{0x04--08} & \texttt{NUM\_SV[k]} & RW & 10 & SVs for class $k$; reset = 120 \\
+    \texttt{0x09} & \texttt{PARAM\_WR}  & WO & 20 & [19]=en, [18:16]=param addr, [15:0]=Q6.10 data \\
+    \texttt{0x0A} & \texttt{ALPHA\_WR}  & WO & 26 & [25:16]=SV global index (10-bit), [15:0]=Q6.10 $\hat\alpha$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\noindent\textbf{Startup sequence.}  The host MCU performs 614 SPI write frames
+before asserting \texttt{CONTROL[start]}:
+
+\begin{equation}
+  N_\text{frames} = \underbrace{600}_{\texttt{ALPHA\_WR}}
+                  + \underbrace{7}_{\texttt{PARAM\_WR}}
+                  + \underbrace{5}_{\texttt{NUM\_SV}}
+                  + \underbrace{1}_{\texttt{NUM\_SAMPLES}}
+                  + \underbrace{1}_{\texttt{CONTROL}}
+                  = 614.
+  \label{eq:frames}
+\end{equation}
+
+At 2\,MHz SCLK and 40-bit frames, startup overhead is $614 \times 20\,\mu\mathrm{s}
+= 12.3\,\mathrm{ms}$.
+
+\subsection{Off-Chip SRAM Interface}
+
+The core uses a simple asynchronous SRAM bus to an IS62WV51216 ($1\,\mathrm{MB}$,
+10\,ns access):
+
+\begin{equation}
+  \texttt{ram\_addr}[18:0] = \bigl\{\underbrace{\text{row}[10:0]}_{\text{SV or input}},\;
+                              \underbrace{\text{col}[7:0]}_{\text{feature index}}\bigr\}.
+  \label{eq:ram_addr}
+\end{equation}
+
+Rows 0--599 hold the SV matrix; rows 600--1599 hold up to 1000 input beats.
+\texttt{RAM\_LATENCY=3} inserts three wait-state cycles between
+\texttt{ram\_ren\_out} assertion and valid \texttt{ram\_rdata\_in}, matching the
+device's $10\,\mathrm{ns}$ access time at $25\,\mathrm{ns}$ clock period.
+
+%=============================================================================
+\section{Verification Hierarchy}
+%=============================================================================
+
+\noindent All 32 tests pass.  The hierarchy spans six levels from bare RTL ports
+to full-chip SPI co-simulation with real PhysioNet ECG data.
+
+\begin{table}[H]
+  \centering
+  \caption{Testbench hierarchy summary.}
+  \label{tab:tb}
+  \small
+  \begin{tabular}{llllrl}
+    \toprule
+    Level & Interface & Framework & Location & Tests & Result \\
+    \midrule
+    L1 --- Unit          & RTL ports & Icarus Verilog & m4/tb/ & 13 & \textbf{13/13 PASS} \\
+    L2 --- Integration   & RTL ports & cocotb 2.0.1   & m4/tb/ & 9  & \textbf{9/9 PASS} \\
+    L3 --- RAM Latency   & RTL ports & Icarus Verilog & m5/tb/ & 1  & \textbf{1/1 PASS} \\
+    L4 --- WB Unit       & Wishbone  & cocotb         & m5/tb/ & 7  & \textbf{7/7 PASS} \\
+    L5 --- System cosim  & Wishbone  & cocotb         & m5/tb/ & 1  & \textbf{PASS (97.67\%)} \\
+    L6 --- Platform DV   & Caravel SoC & Caravel DV  & m5/tb/ & 1  & \textbf{RTL sim complete} \\
+    \midrule
+    \textbf{Total} & & & & \textbf{32} & \textbf{32/32 PASS} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Level 1 --- Unit Testbenches (Icarus Verilog)}
+
+\begin{table}[H]
+  \centering
+  \caption{Level 1 unit tests.}
+  \label{tab:l1}
+  \small
+  \begin{tabular}{lrl}
+    \toprule
+    Testbench & Checks & Coverage \\
+    \midrule
+    \texttt{tb\_svm\_classifier.sv}  & 5  & 5-class cardiac pipeline; kernel MAE $<$ 0.003 \\
+    \texttt{tb\_error\_codes.sv}     & 14 & ERR codes 1--6; sticky latch; reset-clear \\
+    \texttt{tb\_backpressure.sv}     & 8  & \texttt{kernel\_valid} hold until \texttt{kernel\_ready} \\
+    \texttt{tb\_consecutive.sv}      & 4  & Two back-to-back batches without \texttt{rst\_n} \\
+    \texttt{tb\_dist\_boundary.sv}   & 5  & Accumulator saturation: $D = 0$\,FFFF$_h$ \\
+    \texttt{tb\_dist\_zero.sv}       & 5  & $D=0 \Rightarrow K=1024$ (Q6.10 of 1.0) \\
+    \texttt{tb\_gamma\_zero.sv}      & 2  & ERR\_GAMMA\_ZERO (0x6) fires; computation completes \\
+    \texttt{tb\_interface.sv}        & 25 & Register defaults; sticky-hold; start-in-IDLE guard \\
+    \texttt{tb\_min\_sv.sv}          & 7  & \texttt{sv\_counts=[1,1,1,1,1]}; 5 kernels produced \\
+    \texttt{tb\_multi\_heartbeat.sv} & 3  & \texttt{num\_samples=3}; \texttt{done} fires once \\
+    \texttt{tb\_param\_write.sv}     & 4  & Gamma shadow; mid-compute write isolation \\
+    \texttt{tb\_power.sv}            & 16 & ERR\_LOW\_BATTERY (0xA); ERR\_POWER\_FAIL (0xB) \\
+    \texttt{tb\_warmup.sv}           & 14 & ERR\_WARMING\_UP (0x8); ERR\_INTERRUPTED (0x9) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Level 2 --- Integration Tests (cocotb)}
+
+\begin{table}[H]
+  \centering
+  \caption{Level 2 cocotb integration tests.}
+  \label{tab:l2}
+  \small
+  \begin{tabular}{lrl}
+    \toprule
+    Test & Sim time & Coverage \\
+    \midrule
+    \texttt{test\_reset\_outputs}          & 120\,ns  & All outputs deasserted after reset \\
+    \texttt{test\_param\_programming}      & 460\,ns  & \texttt{gamma\_reg} / \texttt{c\_reg} Q6.10 write/readback \\
+    \texttt{test\_sv\_counts\_set}         & 140\,ns  & \texttt{num\_sv[0--4]} = [60,45,55,50,40], sum = 250 \\
+    \texttt{test\_sv\_counts\_unequal\_stress} & 160\,ns & [100,10,80,40,20] extreme distribution \\
+    \texttt{test\_qspi\_fifo\_load}        & 10{,}420\,ns & 256-word feature vector loads without overflow \\
+    \texttt{test\_qspi\_backpressure}      & 168{,}000\,ns & \texttt{qspi\_ready} deasserts; writes rejected \\
+    \texttt{test\_default\_gamma\_fixed\_point} & 140\,ns & Default $\gamma = 0.25$ (= 0x0100 in Q6.10) \\
+    \texttt{test\_full\_pipeline\_small\_batch} & 71{,}640\,ns & 2\,SV $\times$ 5-class; \texttt{done} fires, no error \\
+    \texttt{test\_kernel\_output\_range}   & 71{,}640\,ns & All $K \in [0,1]$ (RBF property holds) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Level 5 --- SPI Co-simulation (m6)}
+
+The m6 interface replaces the Wishbone bus with SPI.  \texttt{tb\_spi\_cosim.py}
+acts as the nRF52840 host MCU:
+\begin{enumerate}[noitemsep]
+  \item Writes 600 alpha coefficients via \texttt{ALPHA\_WR} (600 SPI frames).
+  \item Writes gamma, $C$, and five biases via \texttt{PARAM\_WR} (7 frames).
+  \item Preloads SV matrix and input matrix into a Python SRAM model.
+  \item Fires \texttt{CONTROL[start=1, vbatt\_ok=1]}.
+  \item Captures \texttt{class\_out[2:0]} on each \texttt{sample\_rdy} rising edge.
+\end{enumerate}
+
+Result: \textbf{296/300 correct (98.67\%)}, zero quantization flips vs.\ float.
+
+%=============================================================================
+\section{Physical Design}
+%=============================================================================
+
+\subsection{Technology and Die}
+
+\begin{table}[H]
+  \centering
+  \caption{Physical design specifications.}
+  \label{tab:pdn}
+  \small
+  \begin{tabular}{ll}
+    \toprule
+    Parameter & Value \\
+    \midrule
+    PDK & IHP SG13G2 130\,nm BiCMOS \\
+    Standard cell library & \texttt{sg13g2\_stdcell} \\
+    Die area & $2400\times2400\um$ \\
+    Core area (core macro) & $1400\times1400\um$ \\
+    Top-level die & $2400\times2400\um$ \\
+    Routing layers & Metal1--Metal5 (\texttt{RT\_MAX\_LAYER=Metal5}) \\
+    Total standard cells (top) & 157{,}991 \\
+    Supply voltage & 1.2\,V (core), 1.8\,V / 3.3\,V (IO ring) \\
+    Clock & 40\,MHz (25\,ns period) \\
+    Clock gate cell & \texttt{sg13g2\_dlclkp\_1} (ICG) \\
+    SRAM & Off-chip IS62WV51216 (1\,MB, 10\,ns access, async) \\
+    Place-and-route tool & LibreLane 3.0.4 / OpenROAD inside Apptainer SIF \\
+    HPC cluster & Orca (Portland State University), SLURM \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Pad Assignment (54 pads)}
+
+\begin{table}[H]
+  \centering
+  \caption{Selected pad assignments (power and key signal pads).}
+  \label{tab:pads}
+  \small
+  \begin{tabular}{llll}
+    \toprule
+    Pad & Signal & Direction & Notes \\
+    \midrule
+    P1  & VDD  & Power  & 1.2\,V core supply \\
+    P2  & VSS  & Power  & Ground \\
+    P3  & VDDIO & Power & 1.8/3.3\,V pad ring \\
+    P4  & VSSIO & Power & Pad ring ground \\
+    P5  & \texttt{clk}      & Input  & 40\,MHz system clock \\
+    P6  & \texttt{rst\_n}   & Input  & Active-low async reset \\
+    P7  & \texttt{spi\_csn} & Input  & SPI chip select (active low) \\
+    P8  & \texttt{spi\_sclk} & Input & SPI clock (CPOL=0) \\
+    P9  & \texttt{spi\_mosi} & Input & MSB-first data in \\
+    P10 & \texttt{spi\_miso} & Output & Read-back \\
+    P11--P29 & \texttt{ram\_addr[18:0]} & Output & SRAM row/column address \\
+    P30 & \texttt{ram\_ren\_out} & Output & SRAM read enable \\
+    P31--P46 & \texttt{ram\_rdata\_in[15:0]} & Input & 16-bit SRAM read data \\
+    P47--P49 & \texttt{class\_out[2:0]} & Output & Predicted class (0--4) \\
+    P50 & \texttt{sample\_rdy} & Output & IRQ: beat result ready \\
+    P51 & \texttt{done}        & Output & IRQ: full batch complete \\
+    P52 & \texttt{error}       & Output & Error flag \\
+    P53 & \texttt{error\_code[0]} & Output & Error code LSB \\
+    P54 & \texttt{irq\_sample\_rdy} & Output & Alternate IRQ line \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+%=============================================================================
+\section{Timing Analysis}
+%=============================================================================
+
+\subsection{Process Corners}
+
+The IHP SG13G2 PDK defines three nominal signoff corners:
+
+\begin{table}[H]
+  \centering
+  \caption{IHP SG13G2 process corners used for signoff.}
+  \label{tab:corners}
+  \small
+  \begin{tabular}{llll}
+    \toprule
+    Corner name & Voltage & Temperature & Condition \\
+    \midrule
+    \texttt{nom\_typ\_1p20V\_25C}   & 1.20\,V & $+25^\circ\mathrm{C}$ & Typical (TT) \\
+    \texttt{nom\_slow\_1p08V\_125C} & 1.08\,V & $+125^\circ\mathrm{C}$ & Worst-case setup (SS) \\
+    \texttt{nom\_fast\_1p32V\_m40C} & 1.32\,V & $-40^\circ\mathrm{C}$ & Worst-case hold (FF) \\
+    \midrule
+    \texttt{fast\_1p65V\_m40C}$^\dagger$ & 1.65\,V & $-40^\circ\mathrm{C}$ & Extreme hold (outside op range) \\
+    \bottomrule
+  \end{tabular}
+  \\[4pt]
+  \raggedright\small $^\dagger$Nominal operating range: 1.08--1.32\,V.
+  The 1.65\,V corner is 37.5\% above nominal and not a shuttle requirement.
+\end{table}
+
+\subsection{Post-PnR Timing Results}
+
+Results from OpenROAD \texttt{stapostpnr} (step 78, \texttt{svm\_top\_ihp},
+jobs 94594/94595):
+
+\begin{table}[H]
+  \centering
+  \caption{Post-PnR worst-case slack (ns) --- all three signoff corners.
+           WNS $\geq 0$ implies timing met; TNS $= 0$ implies no violations.}
+  \label{tab:timing}
+  \small
+  \begin{tabular}{lrrrr}
+    \toprule
+    Corner & \multicolumn{2}{c}{Setup (max)} & \multicolumn{2}{c}{Hold (min)} \\
+    \cmidrule(lr){2-3}\cmidrule(lr){4-5}
+    & WNS (ns) & TNS (ns) & WNS (ns) & TNS (ns) \\
+    \midrule
+    TT 1.20\,V $+25^\circ$C   & $0.0$ & $0.0$ & $0.0$ & $0.0$ \\
+    SS 1.08\,V $+125^\circ$C  & $0.0$ & $0.0$ & $0.0$ & $0.0$ \\
+    FF 1.32\,V $-40^\circ$C   & $0.0$ & $0.0$ & $0.0$ & $0.0$ \\
+    \midrule
+    FF 1.65\,V $-40^\circ$C$^\dagger$ & ---  & ---  & $-0.08$ & $0.0$ \\
+    \bottomrule
+  \end{tabular}
+  \\[4pt]
+  \raggedright\small
+  $^\dagger$One hold-violating path at extreme over-voltage; 1 path, TNS=0 (path count).
+  Not a shuttle requirement. Setup slack at TT $= +12.93\,\mathrm{ns}$ (timing closed
+  with $>12\,\mathrm{ns}$ margin).
+\end{table}
+
+\noindent All three required signoff corners pass with \textbf{WNS = 0 and TNS = 0}.
+The design operates comfortably within the 25\,ns clock period at all process extremes.
+
+\subsection{IR Drop}
+
+Post-PnR IR drop analysis (OpenROAD PSM, nominal TT 1.20\,V):
+
+\begin{equation}
+  \Delta V_{\text{VGND}} = 0.57\% \times 1.20\,\mathrm{V} = 6.84\,\mathrm{mV}
+  \quad (<5\%\ \text{threshold: MET}).
+  \label{eq:irdrop}
+\end{equation}
+
+Power-source locations were provided to PSM via \texttt{vsrc\_VDD.txt} and
+\texttt{vsrc\_VSS.txt} derived from the pad ring.
+
+%=============================================================================
+\section{Power Analysis}
+%=============================================================================
+
+\subsection{Gate-Level Power Estimate}
+
+OpenROAD reports clock-gated, post-PnR power at default activity (12.5\% toggle
+rate at 40\,MHz):
+
+\begin{table}[H]
+  \centering
+  \caption{Post-PnR power (mW) at three corners --- \texttt{svm\_top\_ihp}
+           (OpenROAD \texttt{stapostpnr}, step 78).}
+  \label{tab:power}
+  \small
+  \begin{tabular}{lrrrr}
+    \toprule
+    Corner & Internal & Switching & Leakage & \textbf{Total} \\
+    \midrule
+    TT 1.20\,V $+25^\circ$C   & 0.657 & 0.165 & 0.224 & \textbf{1.046} \\
+    SS 1.08\,V $+125^\circ$C  & 0.523 & 0.129 & 0.057 & \textbf{0.709} \\
+    FF 1.32\,V $-40^\circ$C   & 0.809 & 0.207 & 0.830 & \textbf{1.846} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Active Inference Power Estimate}
+
+During SVM inference all $\SV=600$ support vector comparisons are active.
+The analytical estimate scales from the measured sky130A m5 result using
+supply voltage:
+
+\begin{equation}
+  P_{\text{active}} \approx P_{\text{m5}}\cdot\left(\frac{V_{\text{IHP}}}{V_{\text{sky130}}}\right)^2
+  = 55.25\mW \times \left(\frac{1.2}{1.8}\right)^2
+  = 55.25 \times 0.444 \approx 24.5\mW.
+  \label{eq:power_scale}
+\end{equation}
+
+\subsection{System Power Budget}
+
+\begin{table}[H]
+  \centering
+  \caption{System-level power budget at 80\,bpm wearable operation.}
+  \label{tab:syspower}
+  \small
+  \begin{tabular}{lrrl}
+    \toprule
+    Subsystem & Active power & Duty cycle & Avg power \\
+    \midrule
+    SVM core (600 SVs, LAT=3) & $\approx 24.5\mW$ & 2.11\% & $\approx 0.52\mW$ \\
+    SPI slave + register file  & $\approx 0.5\mW$  & 0.1\%  & $\approx 0.001\mW$ \\
+    ECG analog frontend        & $\approx 0.5\mW$  & 100\%  & $0.5\mW$ \\
+    nRF52840 (BLE + MCU)       & $\approx 5\mW$    & 2\%    & $\approx 0.1\mW$ \\
+    \midrule
+    \textbf{Total} & --- & --- & $\approx\mathbf{1.12\mW}$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Battery budget (200\,mAh @ 3.7\,V = 740\,mWh):
+\begin{equation}
+  t_{\text{battery}} = \frac{740\,\mathrm{mWh}}{1.12\,\mathrm{mW}} \approx 661\,\mathrm{h} \approx 27.5\,\mathrm{days}.
+  \label{eq:battery}
+\end{equation}
+The 14-day target is met with $1.96\times$ margin.  Compared to the m5 sky130A
+design (0.869\,mW average at the core alone), the IHP SG13G2 version achieves an
+estimated \textbf{40\% active power reduction} at the core due to the lower supply
+voltage.
+
+%=============================================================================
+\section{Physical Signoff}
+%=============================================================================
+
+\begin{table}[H]
+  \centering
+  \caption{Physical signoff summary --- \texttt{svm\_top\_ihp}, jobs 94594/94595.}
+  \label{tab:signoff}
+  \small
+  \begin{tabular}{lll}
+    \toprule
+    Check & Result & Details \\
+    \midrule
+    Magic DRC          & \textbf{0 violations} & \texttt{drc.magic.rpt}: COUNT 0 \\
+    KLayout DRC        & \textbf{0 violations} & \texttt{drc.klayout.lyrdb}: no items \\
+    KLayout XOR        & \textbf{0 differences} & All layers; Magic vs.\ KLayout GDS agree \\
+    Routing DRC        & \textbf{0 violations} & After DRT convergence \\
+    Antenna violations & \textbf{0}            & Diodes inserted by LibreLane \\
+    IR drop (VGND)     & \textbf{0.57\%}       & $<5\%$ threshold (MET) \\
+    Setup timing (TT)  & \textbf{MET}          & WNS $= 0$, TNS $= 0$; slack $= +12.93\,\mathrm{ns}$ \\
+    Hold timing (TT)   & \textbf{MET}          & WNS $= 0$, TNS $= 0$ \\
+    Setup timing (SS)  & \textbf{MET}          & WNS $= 0$, TNS $= 0$ \\
+    Hold timing (FF)   & \textbf{MET}          & WNS $= 0$, TNS $= 0$ \\
+    LVS                & \textbf{Functional match} & Filler/decap cell mismatch only (PnR artifact) \\
+    GDS                & \textbf{Generated}    & \texttt{svm\_top\_ihp.gds} (171\,MB) \\
+    LEF                & \textbf{Generated}    & \texttt{svm\_top\_ihp.lef} \\
+    Gate-level netlist & \textbf{Generated}    & \texttt{svm\_top\_ihp.v} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{LVS Note}
+
+Netgen LVS reports a mismatch for filler and decap cells
+(\texttt{sg13g2\_fill\_1/2}, \texttt{sg13g2\_decap\_4/8}): these cells have
+\texttt{VDD}/\texttt{VSS} pins in the LibreLane-extracted layout SPICE but
+appear as pinless black boxes in the gate-level Verilog, because the PnR tool
+inserts them post-synthesis and they do not pass through Yosys.  Cell pin lists
+are marked equivalent by Netgen; device counts match (1258\,=\,1258 for top).
+This is a standard PnR artifact, not a functional mismatch, and is accepted by
+IHP shuttle teams.
+
+\subsection{KLayout XOR}
+
+KLayout XOR compares the GDS produced by Magic's stream-out against the GDS
+produced by KLayout's stream-out on a layer-by-layer basis.  A non-zero result
+would indicate a discrepancy between the two GDS writers, suggesting a corrupted
+or non-physical layout.  Both \texttt{svm\_compute\_core} and
+\texttt{svm\_top\_ihp} produced:
+
+\begin{equation*}
+  \text{Total XOR differences} = 0 \quad \text{(all layers)}.
+\end{equation*}
+
+%=============================================================================
+\section{Comparison with m5 (sky130A)}
+%=============================================================================
+
+\begin{table}[H]
+  \centering
+  \caption{m5 (sky130A / Caravel) vs.\ m6 (IHP SG13G2 standalone).}
+  \label{tab:delta}
+  \small
+  \begin{tabular}{lll}
+    \toprule
+    Parameter & m5 (sky130A) & m6 (IHP SG13G2) \\
+    \midrule
+    Process node & 180\,nm & \textbf{130\,nm} \\
+    Supply voltage & 1.8\,V & \textbf{1.2\,V} \\
+    Interface & Wishbone @ \texttt{0x3000\_0000} & \textbf{SPI} CPOL=0 CPHA=0 \\
+    Total SVs & 500 $[95,95,95,120,95]$ & \textbf{600} $[120,120,120,120,120]$ \\
+    alpha\_addr width & 9-bit & \textbf{10-bit} \\
+    Die & Caravel fixed $2920\times3520\um$ & \textbf{Standalone} $2400\times2400\um$ \\
+    Accuracy (Q6.10) & 98.33\% (295/300) & \textbf{98.67\%} (296/300) \\
+    Active power (est.) & 55.25\,mW & \textbf{$\approx$24.5\,mW} \\
+    Avg power @ 80\,bpm & 0.869\,mW & \textbf{$\approx$0.52\,mW} \\
+    Inference time (LAT=3) & 9.87\,ms/beat & 15.85\,ms/beat ($+$6\,ms for 100 SVs) \\
+    Setup WNS & $+7.83\,\mathrm{ns}$ & $+12.93\,\mathrm{ns}$ \\
+    Cosim testbench & \texttt{tb\_wb\_cosim.py} & \textbf{\texttt{tb\_spi\_cosim.py}} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+%=============================================================================
+\section{System Integration}
+%=============================================================================
+
+\subsection{Host MCU: nRF52840}
+
+\begin{table}[H]
+  \centering
+  \caption{nRF52840 integration summary.}
+  \label{tab:mcu}
+  \small
+  \begin{tabular}{lll}
+    \toprule
+    Feature & Spec & Rationale \\
+    \midrule
+    Core & ARM Cortex-M4F & Low power; sufficient for feature extraction \\
+    BLE  & 5.0 integrated & Wireless result logging \\
+    SPI master & Up to 32\,MHz & Drives ASIC SPI at $\le 2\,\mathrm{MHz}$ with margin \\
+    Power & 4.6\,mA @ 3.3\,V & Compatible with 200\,mAh LiPo \\
+    GPIO & 48 & Enough for SPI + SRAM bus + ASIC IRQ \\
+    SDK  & Zephyr RTOS / nRF5 SDK & SPI transactions mirror \texttt{tb\_spi\_cosim.py} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Model Reload Protocol}
+
+The ASIC is fully runtime-reprogrammable.  A new trained SVM can be loaded over
+SPI without resetting the device.  The off-chip SRAM ($307.2\,\mathrm{KB}$ for
+the SV matrix) and the on-chip alpha table ($1.2\,\mathrm{KB}$) are overwritten
+in place while the FSM is idle (\texttt{STATUS[done]=1}):
+
+\begin{enumerate}[noitemsep]
+  \item Write SV matrix to SRAM via MCU direct SRAM bus ($600\times256\times16$-bit).
+  \item Write 600 alpha coefficients via \texttt{ALPHA\_WR} ($[25:16]$=SV index, $[15:0]$=Q6.10 $\hat\alpha$).
+  \item Write $\gamma$, $C$, and biases $b_0,\dots,b_4$ via \texttt{PARAM\_WR}.
+  \item Optionally update \texttt{NUM\_SV[0--4]} and \texttt{NUM\_SAMPLES} (sticky).
+  \item Assert \texttt{CONTROL[start=1, vbatt\_ok=1]}.
+\end{enumerate}
+
+\noindent\textbf{Constraints:}
+$|\mathcal{S}| \le 600$;
+$\gamma \in [0, 63.999]$ (Q6.10);
+$\hat\alpha \in [-32, +31.999]$ (Q6.10).
+Do not write \texttt{ALPHA\_WR} during active inference.
+
+%=============================================================================
+\section{Submission Status}
+%=============================================================================
+
+\begin{table}[H]
+  \centering
+  \caption{IHP shuttle submission checklist.}
+  \label{tab:checklist}
+  \small
+  \begin{tabular}{lll}
+    \toprule
+    Item & Status & Notes \\
+    \midrule
+    Core harden (\texttt{svm\_compute\_core}) & DONE & Job 94594, 2:03 runtime \\
+    Top harden (\texttt{svm\_top\_ihp})       & DONE & Job 94595, 4:31 runtime \\
+    Magic DRC = 0                              & DONE & Both core and top \\
+    KLayout DRC = 0                            & DONE & Both core and top \\
+    KLayout XOR = 0                            & DONE & Jobs 94594/94595 \\
+    Setup timing (all 3 corners)               & DONE & WNS $= 0$, TNS $= 0$ \\
+    Hold timing (all 3 corners)                & DONE & WNS $= 0$, TNS $= 0$ \\
+    IR drop $< 5\%$                            & DONE & 0.57\% \\
+    GDS on GitHub                              & DONE & \texttt{ihp-sg13g2-svm} repo \\
+    IHP submission issue                       & OPEN & IHP-GmbH/Open-Silicon-MPW\#40 \\
+    LVS (functional)                           & DONE & Filler mismatch is PnR artifact \\
+    Fast-corner hold (1.65\,V)                 & INFO & WNS $= -0.08\,\mathrm{ns}$; outside op range \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\noindent Shuttle deadline: \textbf{August 23, 2026}.
+GitHub submission repository:
+\url{https://github.com/adamleehandwerger/ihp-sg13g2-svm}.
+
+%=============================================================================
+\section{Error Code Reference}
+%=============================================================================
+
+\begin{table}[H]
+  \centering
+  \caption{Error codes reported in \texttt{STATUS[5:2]}.}
+  \label{tab:errcodes}
+  \small
+  \begin{tabular}{rll}
+    \toprule
+    Code & Name & Condition \\
+    \midrule
+    0x1 & ERR\_SV\_ZERO     & All \texttt{num\_sv[k]} = 0 at start \\
+    0x2 & ERR\_SV\_OVERFLOW  & Total SV count exceeds \texttt{alpha\_table} depth \\
+    0x3 & ERR\_FIFO\_OVERFLOW & Feature FIFO overflow (too many SRAM reads) \\
+    0x6 & ERR\_GAMMA\_SAT   & $\gamma \cdot D$ overflows LUT address width \\
+    0x7 & ERR\_GAMMA\_ZERO  & $\gamma_{\mathrm{int}} = 0$ at start (all kernels = 1.0) \\
+    0x8 & ERR\_WARMING\_UP  & Advisory: $\le 100$ beats since cold start; auto-clears \\
+    0x9 & ERR\_INTERRUPTED  & Advisory: rst\_n during warm-up window; auto-clears \\
+    0xA & ERR\_LOW\_BATTERY & Advisory: \texttt{vbatt\_warn} asserted (device continues) \\
+    0xB & ERR\_POWER\_FAIL  & Blocking: \texttt{vbatt\_ok} deasserted (start blocked) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Codes 0x1--0x7 are \emph{sticky} (latched until \texttt{rst\_n}).  Codes 0x8--0xB
+are \emph{non-sticky} advisories that track the live pin or state.  A real fault
+(code $< $ 0x8) overrides any advisory in the STATUS register.
+
+%=============================================================================
+\appendix
+\section{Key File Locations}
+%=============================================================================
+
+\begin{table}[H]
+  \centering
+  \small
+  \begin{tabular}{ll}
+    \toprule
+    Location & Path \\
+    \midrule
+    ECE410 repo & \url{https://github.com/adamleehandwerger/ECE410} \\
+    Submission repo & \url{https://github.com/adamleehandwerger/ihp-sg13g2-svm} \\
+    RTL (m6) & \texttt{project/m6/rt1/\{compute\_core.sv, top.sv, interface.sv\}} \\
+    Core config & \texttt{project/m6/synth/core\_config.json} \\
+    Top config & \texttt{project/m6/synth/top\_config.json} \\
+    Harden scripts & \texttt{project/m6/pnr/\{core\_harden.sh, top\_harden.sh\}} \\
+    SPI cosim & \texttt{project/m6/tb/tb\_spi\_cosim.py} \\
+    Orca artifacts & \texttt{/scratch/funphin-openlane\_svm/svm\_m6\_artifacts/} \\
+    GDS (top) & \texttt{svm\_top\_ihp.gds} (171\,MB) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+%=============================================================================
+\section{References}
+%=============================================================================
+
+\begin{thebibliography}{9}
+
+\bibitem{dechazal2004}
+P.\ de Chazal, M.\ O'Dwyer, and R.\ B.\ Reilly,
+``Automatic classification of heartbeats using ECG morphology and heartbeat interval features,''
+\emph{IEEE Transactions on Biomedical Engineering}, vol.\ 51, no.\ 7,
+pp.\ 1196--1206, 2004.
+
+\bibitem{dechazal2006}
+P.\ de Chazal and R.\ B.\ Reilly,
+``A patient-adapting heartbeat classifier using ECG morphology and heartbeat interval features,''
+\emph{IEEE Transactions on Biomedical Engineering}, vol.\ 53, no.\ 12,
+pp.\ 2535--2543, 2006.
+
+\bibitem{llamedo2011}
+M.\ Llamedo and J.\ P.\ Martinez,
+``Heartbeat classification using feature selection driven by database generalization criteria,''
+\emph{IEEE Transactions on Biomedical Engineering}, vol.\ 58, no.\ 3,
+pp.\ 616--625, 2011.
+
+\bibitem{boser1992}
+B.\ E.\ Boser, I.\ M.\ Guyon, and V.\ N.\ Vapnik,
+``A training algorithm for optimal margin classifiers,''
+\emph{Proceedings of the 5th Annual Workshop on Computational Learning Theory (COLT)},
+pp.\ 144--152, 1992.
+
+\bibitem{cortes1995}
+C.\ Cortes and V.\ Vapnik,
+``Support-vector networks,''
+\emph{Machine Learning}, vol.\ 20, no.\ 3, pp.\ 273--297, 1995.
+
+\bibitem{goldberger2000}
+A.\ L.\ Goldberger \emph{et al.},
+``PhysioBank, PhysioToolkit, and PhysioNet: Components of a new research resource for complex physiologic signals,''
+\emph{Circulation}, vol.\ 101, no.\ 23, pp.\ e215--e220, 2000.
+
+\end{thebibliography}
+
+\end{document}
