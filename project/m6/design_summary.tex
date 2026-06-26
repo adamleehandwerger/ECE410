@@ -388,15 +388,17 @@ State & Cycles (LAT=3) & Action \\
 \end{tabular}
 \end{center}
 
-\noindent\textbf{Cycles per beat formula.}  Let $F=256$, $\SV=500$, $\Lat=3$:
+\noindent\textbf{Cycles per beat formula.}  Let $F=256$, $\SV=500$, $\Lat=3$.
+Each SRAM read occupies $\Lat$ cycles (assert + $\Lat{-}1$ wait states):
 \begin{align}
-  T &= F(\Lat+1) + \SV\!\bigl[F(\Lat+1) + 30\bigr] + 500 \notag\\
-    &= 256\cdot4 + 500\cdot(256\cdot4+30) + 500 \notag\\
-    &= 1024 + 500\cdot1054 + 500 \notag\\
-    &= \mathbf{528{,}524\text{ cycles/beat}}. \label{eq:cycles}
+  T &= F\Lat + \SV\!\bigl[F\Lat + 30\bigr] + 500 \notag\\
+    &= 256\cdot3 + 500\cdot(256\cdot3+30) + 500 \notag\\
+    &= 768 + 500\cdot798 + 500 \notag\\
+    &= \mathbf{400{,}268\text{ cycles/beat}}. \label{eq:cycles}
 \end{align}
-At $f_\text{clk}=40\MHz$: $T/f = 13.21\,\mathrm{ms/beat}$, well within the
-$750\,\mathrm{ms}$ heartbeat window at 80\,bpm.
+At $f_\text{clk}=40\MHz$: $T/f \approx 10.0\,\mathrm{ms/beat}$
+(verified by m5 benchmark: 9.87\,ms at the same parameters),
+well within the $750\,\mathrm{ms}$ heartbeat window at 80\,bpm.
 
 \subsection{SPI Interface}
 
@@ -450,9 +452,9 @@ The core uses a simple asynchronous SRAM bus to an IS62WV51216 ($1\,\mathrm{MB}$
 \end{equation}
 
 Rows 0--499 hold the SV matrix; rows 500--1499 hold up to 1000 input beats.
-\texttt{RAM\_LATENCY=3} inserts three wait-state cycles between
-\texttt{ram\_ren\_out} assertion and valid \texttt{ram\_rdata\_in}, matching the
-device's $10\,\mathrm{ns}$ access time at $25\,\mathrm{ns}$ clock period.
+\texttt{RAM\_LATENCY=3} means each read occupies 3 clock cycles (assert
+$+$ 2 wait states), matching the IS62WV51216's $10\,\mathrm{ns}$ access time
+at the $25\,\mathrm{ns}$ clock period.
 
 %=============================================================================
 \section{Verification Hierarchy}
@@ -719,16 +721,20 @@ rate at 40\,MHz):
 
 \subsection{Active Inference Power Estimate}
 
-During SVM inference all $\SV=500$ support vector comparisons are active.
-The analytical estimate scales from the measured sky130A m5 result using
-supply voltage:
+The m6 average power is estimated by scaling the \emph{measured} m5 sky130A
+duty-cycled average (LAT=3, 500\,SVs, 80\,bpm: $0.852\,\mathrm{mW}$)
+by the supply voltage ratio:
 
 \begin{equation}
-  P_{\text{active}} \approx P_{\text{m5}}\cdot\left(\frac{V_{\text{IHP}}}{V_{\text{sky130}}}\right)^2
-  = 55.25\mW \times \left(\frac{1.2}{1.8}\right)^2
-  = 55.25 \times 0.444 \approx 24.5\mW.
+  P_{\text{avg,core}} \approx P_{\text{m5,avg}}\cdot\left(\frac{V_{\text{IHP}}}{V_{\text{sky130}}}\right)^2
+  = 0.852\mW \times \left(\frac{1.2}{1.8}\right)^2
+  = 0.852 \times 0.444 \approx 0.378\mW.
   \label{eq:power_scale}
 \end{equation}
+
+\noindent This estimate preserves the measured m5 duty cycle (1.29\% at
+LAT=3, 80\,bpm) and accounts only for the $V^2$ supply reduction.
+Estimated active power: $0.378\,\mathrm{mW} / 0.0129 \approx 29\,\mathrm{mW}$.
 
 \subsection{System Power Budget}
 
@@ -741,22 +747,22 @@ supply voltage:
     \toprule
     Subsystem & Active power & Duty cycle & Avg power \\
     \midrule
-    SVM core (500 SVs, LAT=3) & $\approx 24.5\mW$ & 1.76\% & $\approx 0.43\mW$ \\
+    SVM core (500 SVs, LAT=3) & $\approx 29\mW$ & 1.29\% & $\approx 0.38\mW$ \\
     SPI slave + register file  & $\approx 0.5\mW$  & 0.1\%  & $\approx 0.001\mW$ \\
     ECG analog frontend        & $\approx 0.5\mW$  & 100\%  & $0.5\mW$ \\
     nRF52840 (BLE + MCU)       & $\approx 5\mW$    & 2\%    & $\approx 0.1\mW$ \\
     \midrule
-    \textbf{Total} & --- & --- & $\approx\mathbf{1.03\mW}$ \\
+    \textbf{Total} & --- & --- & $\approx\mathbf{0.98\mW}$ \\
     \bottomrule
   \end{tabular}
 \end{table}
 
 Battery budget (200\,mAh @ 3.7\,V = 740\,mWh):
 \begin{equation}
-  t_{\text{battery}} = \frac{740\,\mathrm{mWh}}{1.03\,\mathrm{mW}} \approx 718\,\mathrm{h} \approx 29.9\,\mathrm{days}.
+  t_{\text{battery}} = \frac{740\,\mathrm{mWh}}{0.98\,\mathrm{mW}} \approx 755\,\mathrm{h} \approx 31.5\,\mathrm{days}.
   \label{eq:battery}
 \end{equation}
-The 14-day target is met with $2.14\times$ margin.  Compared to the m5 sky130A
+The 14-day target is met with $2.25\times$ margin.  Compared to the m5 sky130A
 design (0.869\,mW average at the core alone), the IHP SG13G2 version achieves an
 estimated \textbf{40\% active power reduction} at the core due to the lower supply
 voltage.
@@ -836,8 +842,8 @@ or non-physical layout.  Both \texttt{svm\_compute\_core} and
     Die & Caravel fixed $2920\times3520\um$ & \textbf{Standalone} $2400\times2400\um$ \\
     Accuracy (Q6.10) & 97.67\% (293/300) & \textbf{98.33\%} (295/300) \\
     Active power (est.) & 55.25\,mW & \textbf{$\approx$24.5\,mW} \\
-    Avg power @ 80\,bpm & 0.869\,mW & \textbf{$\approx$0.43\,mW} \\
-    Inference time (LAT=3) & 9.87\,ms/beat & \textbf{13.21\,ms/beat} \\
+    Avg power @ 80\,bpm & 0.852\,mW & \textbf{$\approx$0.38\,mW} \\
+    Inference time (LAT=3) & 9.87\,ms/beat & \textbf{$\approx$10.0\,ms/beat} \\
     Setup WNS & $+7.83\,\mathrm{ns}$ & $+12.93\,\mathrm{ns}$ \\
     Cosim testbench & \texttt{tb\_wb\_cosim.py} & \textbf{\texttt{tb\_spi\_cosim.py}} \\
     \bottomrule
