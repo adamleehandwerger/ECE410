@@ -34,13 +34,13 @@
 | Supply voltage | 1.2 V |
 | Clock | 40 MHz (25 ns period) |
 | Classifier | 5-class OVR RBF-SVM (Normal/PVC/AFib/VT/SVT) |
-| Support vectors | 500 total — [95,95,95,120,95] per class |
+| Support vectors | 600 total — [120,120,120,120,120] per class |
 | Feature dimension | 256 (128 single-beat + 64 10-beat + 64 RR-interval) |
 | RAM | Off-chip 1 MB async SRAM (IS62WV51216) |
 | Configuration | SPI slave (CPOL=0, CPHA=0), nRF52840 MCU |
-| Accuracy (ASIC Q6.10) | **98.33%** (295/300 PhysioNet test set) |
-| Active power | 55.25 mW |
-| Avg power @ 80 bpm | 0.869 mW |
+| Accuracy (ASIC Q6.10) | **98.67%** (296/300 PhysioNet test set) |
+| Active power (est.) | ~24.5 mW (scaled from m5 at 1.2V vs 1.8V) |
+| Avg power @ 80 bpm | ~0.52 mW |
 
 ## Submission Items
 
