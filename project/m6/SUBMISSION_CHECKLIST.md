@@ -11,8 +11,8 @@
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Core harden (svm_compute_core) | ✅ DONE | Job 94560 — 120 steps, 0 DRT viol, hold PASSED |
-| Top wrapper harden (svm_top_ihp) | ✅ DONE | Job 94561 — 74 steps, Magic DRC 0, KLayout DRC 0 |
+| Core harden (svm_compute_core) | ✅ DONE | Job 94594 — KLayout XOR 0 diffs, DRC 0 (2:03 runtime) |
+| Top wrapper harden (svm_top_ihp) | ✅ DONE | Job 94595 — KLayout XOR 0 diffs, Magic DRC 0, KLayout DRC 0 (4:31 runtime) |
 | Magic DRC: 0 violations | ✅ DONE | `drc.magic.rpt`: COUNT 0 (top + core) |
 | KLayout DRC: 0 violations | ✅ DONE | `drc.klayout.lyrdb`: no items (top + core) |
 | Setup timing met (typ 1.20V 25°C) | ✅ DONE | WNS = +12.93 ns |
@@ -62,8 +62,8 @@
 | IHP response to issue #40 | 🔴 HIGH | Await IHP team review at IHP-GmbH/Open-Silicon-MPW#40 |
 | LVS verification | 🟡 MED | ⚠️ Filler-cell mismatch only (job 94591): device count match, cell pins equivalent; fill/decap cells have VDD/VSS in SPICE but no pins in GL Verilog — standard PnR artifact, not functional |
 | Fast-corner hold (1.65V/-40C) | 🟡 MED | ⚠️ WNS = -0.08 ns (1 path) — 1.65V is 37.5% above 1.2V nominal (op range 1.08–1.32V) |
-| Update design_summary.md §m6 | 🟢 LOW | Document final harden metrics (jobs 94560/94561) |
-| KLayout XOR (Magic vs. KLayout GDS) | 🟢 LOW | Set RUN_KLAYOUT_XOR: 1 and re-run signoff |
+| Update design_summary.md §m6 | 🟢 LOW | Document final harden metrics (jobs 94594/94595) |
+| KLayout XOR (Magic vs. KLayout GDS) | ✅ DONE | Jobs 94594/94595 — Total XOR differences: 0 (all layers, both core + top) |
 
 ## Key File Locations
 
