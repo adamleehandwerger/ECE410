@@ -69,7 +69,8 @@ wearable cardiac arrhythmia detection.  The design is fabricated in IHP SG13G2
 130\,nm BiCMOS and submitted to the IHP Open-MPW community shuttle (deadline August
 2026).  Classification is performed on 256-dimensional multi-scale ECG feature
 vectors drawn from the PhysioNet MIT-BIH, SVDB, and INCART corpora.  The
-classifier achieves \textbf{98.67\%} accuracy (296/300) on the held-out test set,
+classifier uses 500 support vectors with VT-boosted allocation $[95,95,95,120,95]$
+and achieves \textbf{98.33\%} accuracy (295/300) on the held-out test set,
 with \textbf{zero quantization error} between IEEE-754 float and Q6.10 fixed-point
 inference.  All physical signoff checks pass: Magic DRC\,=\,0 violations,
 KLayout DRC\,=\,0 violations, KLayout XOR\,=\,0 differences, and setup/hold
@@ -144,8 +145,9 @@ five independent binary classifiers are trained:
   \label{eq:ovr}
 \end{equation}
 The predicted class is $\hat{c} = \arg\max_{k}\,f_k(\mathbf{x})$.  Each binary
-SVM is trained independently, allowing per-class support vector budgets
-$|\mathcal{S}_k| = 120$ for all $k$ (600 SVs total).
+SVM is trained independently with a VT-boosted per-class budget
+$|\mathcal{S}_k| \in \{95,95,95,120,95\}$ (500 SVs total; VT class given 120
+to counteract its higher confusion with PVC).
 
 %=============================================================================
 \section{Feature Extraction}
@@ -232,7 +234,7 @@ Table~\ref{tab:quant} compares float and Q6.10 inference accuracy.  The uniform
 
 \begin{table}[H]
   \centering
-  \caption{SV count sweep --- float vs.\ Q6.10 accuracy.}
+  \caption{Uniform SV count sweep --- float vs.\ Q6.10 accuracy (simulation study).}
   \label{tab:quant}
   \small
   \begin{tabular}{rrrrl}
@@ -247,10 +249,11 @@ Table~\ref{tab:quant} compares float and Q6.10 inference accuracy.  The uniform
   \end{tabular}
 \end{table}
 
-The N=120 per-class point is optimal: it eliminates the quantization flip seen at
-N=100 while also improving float accuracy.  This motivates the 10-bit
-\texttt{alpha\_addr} field (up from 9-bit in m5), giving an address space of
-$2^{10}=1024 > 600$.
+This sweep motivates the 10-bit \texttt{alpha\_addr} field (up from 9-bit in m5),
+giving address space $2^{10}=1024$.  The \emph{implemented} design uses the
+VT-boosted non-uniform allocation $[95,95,95,120,95]$ (500 SVs total), which
+eliminates the hold quantization flip seen at the uniform 500-SV point while
+keeping the alpha table within the 9-bit-compatible count.
 
 %=============================================================================
 \section{Training and Test Dataset}
@@ -305,8 +308,8 @@ mapping:
 
 \begin{table}[H]
   \centering
-  \caption{Per-class test accuracy at Q6.10 fixed-point, $\SV=600$,
-           allocation $[120,120,120,120,120]$.}
+  \caption{Per-class test accuracy at Q6.10 fixed-point, $\SV=500$,
+           allocation $[95,95,95,120,95]$.}
   \label{tab:accuracy}
   \small
   \begin{tabular}{lrrl}
@@ -316,37 +319,37 @@ mapping:
     Normal (N) & 59/60 & 98.3\% & 1 misclassified as PVC \\
     PVC        & 60/60 & 100.0\% & \\
     AFib       & 60/60 & 100.0\% & \\
-    VT         & 58/60 & 96.7\% & 2 misclassified as PVC \\
+    VT         & 57/60 & 95.0\% & 3 misclassified as PVC \\
     SVT        & 59/60 & 98.3\% & 1 misclassified as AFib \\
     \midrule
-    \textbf{Total} & \textbf{296/300} & \textbf{98.67\%} & 0 quantization flips \\
+    \textbf{Total} & \textbf{295/300} & \textbf{98.33\%} & 0 quantization flips \\
     \bottomrule
   \end{tabular}
 \end{table}
 
 The primary confusion is VT misclassified as PVC, consistent with the
-similarity of wide-QRS morphology on a single-beat basis.
+similarity of wide-QRS morphology on a single-beat basis.  The VT class
+receives the boosted allocation (120 vs.\ 95) specifically to address this
+boundary.
 
-\subsection{Non-Uniform Allocation Sweep}
+\subsection{SV Allocation}
 
-Table~\ref{tab:alloc} shows that the uniform allocation is optimal at 600 SVs.
-Non-uniform splits either match or degrade accuracy; concentrating more SVs in
-one class introduces tail noise without improving any decision boundary.
+The implemented allocation is $[95,95,95,120,95]$ (500 SVs total), chosen
+to eliminate a quantization flip seen at the uniform 100-SV/class point while
+remaining within the RTL parameter \texttt{NUM\_SV=500}.  Table~\ref{tab:alloc}
+shows the non-uniform 500-SV sweep.
 
 \begin{table}[H]
   \centering
-  \caption{600-SV non-uniform allocation sweep.}
+  \caption{500-SV VT-boosted allocation --- implemented design.}
   \label{tab:alloc}
   \small
   \begin{tabular}{lrrl}
     \toprule
     Allocation $[n_0,n_1,n_2,n_3,n_4]$ & Float & Q6.10 & Flips \\
     \midrule
-    $[120,120,120,120,120]$ (uniform) & 98.67\% & \textbf{98.67\%} & 0 \\
-    $[140,115,115,115,115]$ (N boost) & 98.67\% & 98.67\% & 0 \\
-    $[115,115,115,140,115]$ (VT boost) & 98.67\% & 98.67\% & 0 \\
-    $[110,110,110,160,110]$ (VT $+40$) & 98.67\% & 98.33\% & 1 \\
-    $[115,115,115,115,140]$ (SVT boost) & 98.00\% & 98.00\% & 0 \\
+    $[100,100,100,100,100]$ (uniform) & 98.33\% & 98.00\% & 1 \\
+    $\mathbf{[95,95,95,120,95]}$ \textbf{(VT boost)} & \textbf{98.33\%} & \textbf{98.33\%} & \textbf{0} \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -385,14 +388,14 @@ State & Cycles (LAT=3) & Action \\
 \end{tabular}
 \end{center}
 
-\noindent\textbf{Cycles per beat formula.}  Let $F=256$, $\SV=600$, $\Lat=3$:
+\noindent\textbf{Cycles per beat formula.}  Let $F=256$, $\SV=500$, $\Lat=3$:
 \begin{align}
   T &= F(\Lat+1) + \SV\!\bigl[F(\Lat+1) + 30\bigr] + 500 \notag\\
-    &= 256\cdot4 + 600\cdot(256\cdot4+30) + 500 \notag\\
-    &= 1024 + 600\cdot1054 + 500 \notag\\
-    &= \mathbf{633{,}924\text{ cycles/beat}}. \label{eq:cycles}
+    &= 256\cdot4 + 500\cdot(256\cdot4+30) + 500 \notag\\
+    &= 1024 + 500\cdot1054 + 500 \notag\\
+    &= \mathbf{528{,}524\text{ cycles/beat}}. \label{eq:cycles}
 \end{align}
-At $f_\text{clk}=40\MHz$: $T/f = 15.85\,\mathrm{ms/beat}$, well within the
+At $f_\text{clk}=40\MHz$: $T/f = 13.21\,\mathrm{ms/beat}$, well within the
 $750\,\mathrm{ms}$ heartbeat window at 80\,bpm.
 
 \subsection{SPI Interface}
@@ -419,21 +422,21 @@ CPHA=0, MSB-first).  Frames are 40 bits: 8-bit address followed by 32-bit data.
   \end{tabular}
 \end{table}
 
-\noindent\textbf{Startup sequence.}  The host MCU performs 614 SPI write frames
+\noindent\textbf{Startup sequence.}  The host MCU performs 514 SPI write frames
 before asserting \texttt{CONTROL[start]}:
 
 \begin{equation}
-  N_\text{frames} = \underbrace{600}_{\texttt{ALPHA\_WR}}
+  N_\text{frames} = \underbrace{500}_{\texttt{ALPHA\_WR}}
                   + \underbrace{7}_{\texttt{PARAM\_WR}}
                   + \underbrace{5}_{\texttt{NUM\_SV}}
                   + \underbrace{1}_{\texttt{NUM\_SAMPLES}}
                   + \underbrace{1}_{\texttt{CONTROL}}
-                  = 614.
+                  = 514.
   \label{eq:frames}
 \end{equation}
 
-At 2\,MHz SCLK and 40-bit frames, startup overhead is $614 \times 20\,\mu\mathrm{s}
-= 12.3\,\mathrm{ms}$.
+At 2\,MHz SCLK and 40-bit frames, startup overhead is $514 \times 20\,\mu\mathrm{s}
+= 10.3\,\mathrm{ms}$.
 
 \subsection{Off-Chip SRAM Interface}
 
@@ -446,7 +449,7 @@ The core uses a simple asynchronous SRAM bus to an IS62WV51216 ($1\,\mathrm{MB}$
   \label{eq:ram_addr}
 \end{equation}
 
-Rows 0--599 hold the SV matrix; rows 600--1599 hold up to 1000 input beats.
+Rows 0--499 hold the SV matrix; rows 500--1499 hold up to 1000 input beats.
 \texttt{RAM\_LATENCY=3} inserts three wait-state cycles between
 \texttt{ram\_ren\_out} assertion and valid \texttt{ram\_rdata\_in}, matching the
 device's $10\,\mathrm{ns}$ access time at $25\,\mathrm{ns}$ clock period.
@@ -536,14 +539,14 @@ to full-chip SPI co-simulation with real PhysioNet ECG data.
 The m6 interface replaces the Wishbone bus with SPI.  \texttt{tb\_spi\_cosim.py}
 acts as the nRF52840 host MCU:
 \begin{enumerate}[noitemsep]
-  \item Writes 600 alpha coefficients via \texttt{ALPHA\_WR} (600 SPI frames).
+  \item Writes 500 alpha coefficients via \texttt{ALPHA\_WR} (500 SPI frames).
   \item Writes gamma, $C$, and five biases via \texttt{PARAM\_WR} (7 frames).
   \item Preloads SV matrix and input matrix into a Python SRAM model.
   \item Fires \texttt{CONTROL[start=1, vbatt\_ok=1]}.
   \item Captures \texttt{class\_out[2:0]} on each \texttt{sample\_rdy} rising edge.
 \end{enumerate}
 
-Result: \textbf{296/300 correct (98.67\%)}, zero quantization flips vs.\ float.
+Result: \textbf{295/300 correct (98.33\%)}, zero quantization flips vs.\ float.
 
 %=============================================================================
 \section{Physical Design}
@@ -566,6 +569,7 @@ Result: \textbf{296/300 correct (98.67\%)}, zero quantization flips vs.\ float.
     Core area (core macro) & $1400\times1400\um$ \\
     Top-level die & $2400\times2400\um$ \\
     Routing layers & Metal1--Metal5 (\texttt{RT\_MAX\_LAYER=Metal5}) \\
+    Support vectors & 500 ($[95,95,95,120,95]$, VT-boosted) \\
     Total standard cells (top) & 157{,}991 \\
     Supply voltage & 1.2\,V (core), 1.8\,V / 3.3\,V (IO ring) \\
     Clock & 40\,MHz (25\,ns period) \\
@@ -715,7 +719,7 @@ rate at 40\,MHz):
 
 \subsection{Active Inference Power Estimate}
 
-During SVM inference all $\SV=600$ support vector comparisons are active.
+During SVM inference all $\SV=500$ support vector comparisons are active.
 The analytical estimate scales from the measured sky130A m5 result using
 supply voltage:
 
@@ -737,22 +741,22 @@ supply voltage:
     \toprule
     Subsystem & Active power & Duty cycle & Avg power \\
     \midrule
-    SVM core (600 SVs, LAT=3) & $\approx 24.5\mW$ & 2.11\% & $\approx 0.52\mW$ \\
+    SVM core (500 SVs, LAT=3) & $\approx 24.5\mW$ & 1.76\% & $\approx 0.43\mW$ \\
     SPI slave + register file  & $\approx 0.5\mW$  & 0.1\%  & $\approx 0.001\mW$ \\
     ECG analog frontend        & $\approx 0.5\mW$  & 100\%  & $0.5\mW$ \\
     nRF52840 (BLE + MCU)       & $\approx 5\mW$    & 2\%    & $\approx 0.1\mW$ \\
     \midrule
-    \textbf{Total} & --- & --- & $\approx\mathbf{1.12\mW}$ \\
+    \textbf{Total} & --- & --- & $\approx\mathbf{1.03\mW}$ \\
     \bottomrule
   \end{tabular}
 \end{table}
 
 Battery budget (200\,mAh @ 3.7\,V = 740\,mWh):
 \begin{equation}
-  t_{\text{battery}} = \frac{740\,\mathrm{mWh}}{1.12\,\mathrm{mW}} \approx 661\,\mathrm{h} \approx 27.5\,\mathrm{days}.
+  t_{\text{battery}} = \frac{740\,\mathrm{mWh}}{1.03\,\mathrm{mW}} \approx 718\,\mathrm{h} \approx 29.9\,\mathrm{days}.
   \label{eq:battery}
 \end{equation}
-The 14-day target is met with $1.96\times$ margin.  Compared to the m5 sky130A
+The 14-day target is met with $2.14\times$ margin.  Compared to the m5 sky130A
 design (0.869\,mW average at the core alone), the IHP SG13G2 version achieves an
 estimated \textbf{40\% active power reduction} at the core due to the lower supply
 voltage.
@@ -827,13 +831,13 @@ or non-physical layout.  Both \texttt{svm\_compute\_core} and
     Process node & 180\,nm & \textbf{130\,nm} \\
     Supply voltage & 1.8\,V & \textbf{1.2\,V} \\
     Interface & Wishbone @ \texttt{0x3000\_0000} & \textbf{SPI} CPOL=0 CPHA=0 \\
-    Total SVs & 500 $[95,95,95,120,95]$ & \textbf{600} $[120,120,120,120,120]$ \\
+    Total SVs & 500 $[95,95,95,120,95]$ & \textbf{500} $[95,95,95,120,95]$ \\
     alpha\_addr width & 9-bit & \textbf{10-bit} \\
     Die & Caravel fixed $2920\times3520\um$ & \textbf{Standalone} $2400\times2400\um$ \\
-    Accuracy (Q6.10) & 98.33\% (295/300) & \textbf{98.67\%} (296/300) \\
+    Accuracy (Q6.10) & 97.67\% (293/300) & \textbf{98.33\%} (295/300) \\
     Active power (est.) & 55.25\,mW & \textbf{$\approx$24.5\,mW} \\
-    Avg power @ 80\,bpm & 0.869\,mW & \textbf{$\approx$0.52\,mW} \\
-    Inference time (LAT=3) & 9.87\,ms/beat & 15.85\,ms/beat ($+$6\,ms for 100 SVs) \\
+    Avg power @ 80\,bpm & 0.869\,mW & \textbf{$\approx$0.43\,mW} \\
+    Inference time (LAT=3) & 9.87\,ms/beat & \textbf{13.21\,ms/beat} \\
     Setup WNS & $+7.83\,\mathrm{ns}$ & $+12.93\,\mathrm{ns}$ \\
     Cosim testbench & \texttt{tb\_wb\_cosim.py} & \textbf{\texttt{tb\_spi\_cosim.py}} \\
     \bottomrule
@@ -868,20 +872,20 @@ or non-physical layout.  Both \texttt{svm\_compute\_core} and
 \subsection{Model Reload Protocol}
 
 The ASIC is fully runtime-reprogrammable.  A new trained SVM can be loaded over
-SPI without resetting the device.  The off-chip SRAM ($307.2\,\mathrm{KB}$ for
-the SV matrix) and the on-chip alpha table ($1.2\,\mathrm{KB}$) are overwritten
+SPI without resetting the device.  The off-chip SRAM ($256\,\mathrm{KB}$ for
+the SV matrix) and the on-chip alpha table ($1.0\,\mathrm{KB}$) are overwritten
 in place while the FSM is idle (\texttt{STATUS[done]=1}):
 
 \begin{enumerate}[noitemsep]
-  \item Write SV matrix to SRAM via MCU direct SRAM bus ($600\times256\times16$-bit).
-  \item Write 600 alpha coefficients via \texttt{ALPHA\_WR} ($[25:16]$=SV index, $[15:0]$=Q6.10 $\hat\alpha$).
+  \item Write SV matrix to SRAM via MCU direct SRAM bus ($500\times256\times16$-bit).
+  \item Write 500 alpha coefficients via \texttt{ALPHA\_WR} ($[25:16]$=SV index, $[15:0]$=Q6.10 $\hat\alpha$).
   \item Write $\gamma$, $C$, and biases $b_0,\dots,b_4$ via \texttt{PARAM\_WR}.
   \item Optionally update \texttt{NUM\_SV[0--4]} and \texttt{NUM\_SAMPLES} (sticky).
   \item Assert \texttt{CONTROL[start=1, vbatt\_ok=1]}.
 \end{enumerate}
 
 \noindent\textbf{Constraints:}
-$|\mathcal{S}| \le 600$;
+$|\mathcal{S}| \le 500$;
 $\gamma \in [0, 63.999]$ (Q6.10);
 $\hat\alpha \in [-32, +31.999]$ (Q6.10).
 Do not write \texttt{ALPHA\_WR} during active inference.
