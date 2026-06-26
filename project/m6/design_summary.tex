@@ -988,6 +988,38 @@ are \emph{non-sticky} advisories that track the live pin or state.  A real fault
 \end{table}
 
 %=============================================================================
+\section*{Acknowledgments}
+%=============================================================================
+
+\noindent\textbf{Computing resources.}
+All place-and-route, timing signoff, and cosimulation jobs were run on the
+\emph{Orca} high-performance computing cluster at Portland State University
+(PSU Research Computing), using LibreLane 3.0.4 inside an Apptainer
+container on the \texttt{long} SLURM partition.
+
+\medskip
+\noindent\textbf{Data.}
+The cardiac arrhythmia classifier was trained and evaluated using the following
+publicly available resources:
+
+\begin{itemize}[noitemsep]
+  \item \textbf{MIT-BIH Arrhythmia Database} (PhysioNet record nos.\ 100--234):
+        G.\ B.\ Moody and R.\ G.\ Mark, ``The impact of the MIT-BIH Arrhythmia
+        Database,'' \emph{IEEE Eng.\ Med.\ Biol.\ Mag.}, vol.\ 20, no.\ 3,
+        pp.\ 45--50, 2001.
+  \item \textbf{PhysioNet / PhysioBank / PhysioToolkit}:
+        A.\ L.\ Goldberger \emph{et al.}, ``PhysioBank, PhysioToolkit, and
+        PhysioNet,'' \emph{Circulation}, vol.\ 101, no.\ 23,
+        pp.\ e215--e220, 2000.  \url{https://physionet.org}
+  \item \textbf{IHP SG13G2 Open-Source PDK}:
+        IHP Microelectronics, \emph{ihp-sg13g2 PDK},
+        \url{https://github.com/IHP-GmbH/IHP-Open-PDK}, 2024.
+  \item \textbf{LibreLane EDA flow}:
+        Efabless / The OpenROAD Project, \emph{LibreLane 3.0.4},
+        \url{https://github.com/efabless/openlane2}, 2024.
+\end{itemize}
+
+%=============================================================================
 \section{References}
 %=============================================================================
 
