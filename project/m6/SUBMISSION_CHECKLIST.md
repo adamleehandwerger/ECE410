@@ -39,8 +39,8 @@
 | RAM | Off-chip 1 MB async SRAM (IS62WV51216) |
 | Configuration | SPI slave (CPOL=0, CPHA=0), nRF52840 MCU |
 | Accuracy (ASIC Q6.10) | **98.33%** (295/300 PhysioNet test set) |
-| Active power (est.) | ~24.5 mW (scaled from m5 at 1.2V vs 1.8V) |
-| Avg power @ 80 bpm | ~0.52 mW |
+| Active power (est.) | ~29 mW (= 66 mW m5 benchmark × (1.2/1.8)²) |
+| Avg power @ 80 bpm | ~0.38 mW (LAT=3, 1.29% duty, = 0.852 mW m5 × (1.2/1.8)²) |
 
 ## Submission Items
 

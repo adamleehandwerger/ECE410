@@ -378,12 +378,12 @@ The core FSM cycles through six states per beat:
 \toprule
 State & Cycles (LAT=3) & Action \\
 \midrule
-\texttt{IDLE}         & ---  & Await \texttt{start} assertion \\
-\texttt{LOAD\_INPUT}  & $F(L+1) = 1024$  & Fetch input feature vector from SRAM \\
-\texttt{ACCUMULATE}   & $F(L+1)+2 = 1026$& Compute $D$ for one SV (with drain) \\
-\texttt{KERNEL}       & $\approx 28$     & LUT lookup: $K = \exp(-\gamma D)$ \\
-\texttt{WRITE\_CLASS} & 1                & Accumulate $\hat\alpha K$ into OvR scores \\
-\texttt{ARGMAX}       & 5                & Select $\hat c = \arg\max_k f_k$ \\
+\texttt{IDLE}         & ---         & Await \texttt{start} assertion \\
+\texttt{LOAD\_INPUT}  & $F \cdot L = 768$   & Fetch input feature vector from SRAM \\
+\texttt{ACCUMULATE}   & $F \cdot L + 2 = 770$ & Compute $D$ for one SV (with 2-cycle drain) \\
+\texttt{KERNEL}       & $\approx 18$        & LUT lookup: $K = \exp(-\gamma D)$ \\
+\texttt{WRITE\_CLASS} & 1                   & Accumulate $\hat\alpha K$ into OvR scores \\
+\texttt{ARGMAX}       & 5                   & Select $\hat c = \arg\max_k f_k$ \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -391,13 +391,16 @@ State & Cycles (LAT=3) & Action \\
 \noindent\textbf{Cycles per beat formula.}  Let $F=256$, $\SV=500$, $\Lat=3$.
 Each SRAM read occupies $\Lat$ cycles (assert + $\Lat{-}1$ wait states):
 \begin{align}
-  T &= F\Lat + \SV\!\bigl[F\Lat + 30\bigr] + 500 \notag\\
-    &= 256\cdot3 + 500\cdot(256\cdot3+30) + 500 \notag\\
-    &= 768 + 500\cdot798 + 500 \notag\\
-    &= \mathbf{400{,}268\text{ cycles/beat}}. \label{eq:cycles}
+  T &= F\Lat + \SV\!\bigl[F\Lat + 20\bigr] + \text{overhead} \notag\\
+    &\approx 768 + 500 \cdot 788 + 1{,}769 \notag\\
+    &= \mathbf{396{,}769\text{ cycles/beat}}. \label{eq:cycles}
 \end{align}
-At $f_\text{clk}=40\MHz$: $T/f \approx 10.0\,\mathrm{ms/beat}$
-(verified by m5 benchmark: 9.87\,ms at the same parameters),
+The per-SV term $+20$ captures the 2-cycle pipeline drain and the 18-cycle
+KERNEL Horner evaluation; the 1{,}769-cycle overhead represents FSM
+state-transition latency.  This matches the m5 benchmark cycle-accurate table
+(LOAD: 768 + COMPUTE\_DIST: 387{,}000 + KERNEL: 9{,}000 + WRITE: 1
+$=$ 396{,}769 cycles).
+At $f_\text{clk}=40\MHz$: $T/f \approx 9.9\,\mathrm{ms/beat}$,
 well within the $750\,\mathrm{ms}$ heartbeat window at 80\,bpm.
 
 \subsection{SPI Interface}
@@ -841,9 +844,9 @@ or non-physical layout.  Both \texttt{svm\_compute\_core} and
     alpha\_addr width & 9-bit & \textbf{10-bit} \\
     Die & Caravel fixed $2920\times3520\um$ & \textbf{Standalone} $2400\times2400\um$ \\
     Accuracy (Q6.10) & 97.67\% (293/300) & \textbf{98.33\%} (295/300) \\
-    Active power (est.) & 55.25\,mW & \textbf{$\approx$24.5\,mW} \\
+    Active power (est.) & 66\,mW & \textbf{$\approx$29\,mW} \\
     Avg power @ 80\,bpm & 0.852\,mW & \textbf{$\approx$0.38\,mW} \\
-    Inference time (LAT=3) & 9.87\,ms/beat & \textbf{$\approx$10.0\,ms/beat} \\
+    Inference time (LAT=3) & $\approx$9.9\,ms/beat & \textbf{$\approx$9.9\,ms/beat} \\
     Setup WNS & $+7.83\,\mathrm{ns}$ & $+12.93\,\mathrm{ns}$ \\
     Cosim testbench & \texttt{tb\_wb\_cosim.py} & \textbf{\texttt{tb\_spi\_cosim.py}} \\
     \bottomrule
