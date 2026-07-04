@@ -82,18 +82,11 @@ apptainer exec --bind /scratch,/tmp $LIBRELANE_SIF librelane --version 2>/dev/nu
 # ── Run LibreLane Chip flow ────────────────────────────────────────────
 RUN_DIR=$DESIGN_DIR/runs/chip_harden
 echo "--- Running chip_top Chip flow ---"
-RESUME_FLAG=""
-if [ -d "$RUN_DIR" ]; then
-    echo "Existing run found — resuming from last successful step"
-    RESUME_FLAG="--from-last-checkpoint"
-fi
-
 apptainer exec --bind /scratch,/tmp $LIBRELANE_SIF \
     librelane \
     --pdk ihp-sg13g2 \
     --run-tag chip_harden \
     --jobs $SLURM_CPUS_PER_TASK \
-    $RESUME_FLAG \
     $DESIGN_DIR/chip_config.yaml 2>&1
 
 echo "=== Chip harden done at $(date) ==="
