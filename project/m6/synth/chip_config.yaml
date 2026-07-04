@@ -1,0 +1,186 @@
+meta:
+  version: 3
+  flow: Chip
+  substituting_steps:
+    Checker.IllegalOverlap: null
+    KLayout.Antenna: null
+    Checker.KLayoutAntenna: null
+    OpenROAD.IRDropReport: null
+    KLayout.Filler: null
+
+DESIGN_NAME: chip_top
+
+VERILOG_FILES:
+  - dir::../rt1/chip_top.sv
+  - dir::../rt1/top.sv
+  - dir::../rt1/compute_core_bb.v
+
+VERILOG_DEFINES: [FUNCTIONAL]
+VERILOG_POWER_DEFINE: "USE_POWER_PINS"
+
+PRIMARY_GDSII_STREAMOUT_TOOL: klayout
+
+# ── Pad placement ──────────────────────────────────────────────────
+# Convention: PAD_SOUTH left→right, PAD_NORTH left→right,
+#             PAD_WEST  bottom→top, PAD_EAST  bottom→top
+
+PAD_SOUTH:
+  - clk_pad
+  - rst_n_pad
+  - spi_csn_pad
+  - spi_sclk_pad
+  - spi_mosi_pad
+  - spi_miso_pad
+  - south_vdd_pad
+  - south_vss_pad
+  - south_iovdd_pad
+  - south_iovss_pad
+
+PAD_EAST:
+  - "g_rdata\\[0\\].rdata_pad"
+  - "g_rdata\\[1\\].rdata_pad"
+  - "g_rdata\\[2\\].rdata_pad"
+  - "g_rdata\\[3\\].rdata_pad"
+  - "g_rdata\\[4\\].rdata_pad"
+  - "g_rdata\\[5\\].rdata_pad"
+  - "g_rdata\\[6\\].rdata_pad"
+  - "g_rdata\\[7\\].rdata_pad"
+  - "g_rdata\\[8\\].rdata_pad"
+  - "g_rdata\\[9\\].rdata_pad"
+  - "g_rdata\\[10\\].rdata_pad"
+  - "g_rdata\\[11\\].rdata_pad"
+  - "g_rdata\\[12\\].rdata_pad"
+  - "g_rdata\\[13\\].rdata_pad"
+  - "g_rdata\\[14\\].rdata_pad"
+  - "g_rdata\\[15\\].rdata_pad"
+  - east_vdd_pad
+  - east_vss_pad
+
+PAD_NORTH:
+  - "g_addr\\[0\\].addr_pad"
+  - "g_addr\\[1\\].addr_pad"
+  - "g_addr\\[2\\].addr_pad"
+  - "g_addr\\[3\\].addr_pad"
+  - "g_addr\\[4\\].addr_pad"
+  - "g_addr\\[5\\].addr_pad"
+  - "g_addr\\[6\\].addr_pad"
+  - "g_addr\\[7\\].addr_pad"
+  - "g_addr\\[8\\].addr_pad"
+  - "g_addr\\[9\\].addr_pad"
+  - "g_addr\\[10\\].addr_pad"
+  - "g_addr\\[11\\].addr_pad"
+  - "g_addr\\[12\\].addr_pad"
+  - "g_addr\\[13\\].addr_pad"
+  - "g_addr\\[14\\].addr_pad"
+  - "g_addr\\[15\\].addr_pad"
+  - "g_addr\\[16\\].addr_pad"
+  - "g_addr\\[17\\].addr_pad"
+  - "g_addr\\[18\\].addr_pad"
+  - ram_ren_pad
+  - north_vdd_pad
+  - north_vss_pad
+
+PAD_WEST:
+  - west_iovss_pad
+  - west_iovdd_pad
+  - irq_done_pad
+  - irq_srdy_pad
+  - "g_ecode\\[3\\].ecode_pad"
+  - "g_ecode\\[2\\].ecode_pad"
+  - "g_ecode\\[1\\].ecode_pad"
+  - "g_ecode\\[0\\].ecode_pad"
+  - error_pad
+  - done_pad
+  - sample_rdy_pad
+  - "g_class\\[2\\].class_pad"
+  - "g_class\\[1\\].class_pad"
+  - "g_class\\[0\\].class_pad"
+
+# ── SDC ────────────────────────────────────────────────────────────
+PNR_SDC_FILE:     dir::chip_top.sdc
+SIGNOFF_SDC_FILE: dir::chip_top.sdc
+FALLBACK_SDC:     dir::chip_top.sdc
+
+# ── Power nets ─────────────────────────────────────────────────────
+VDD_NETS: ["VDD"]
+GND_NETS: ["VSS"]
+
+# ── Clock (through pad) ────────────────────────────────────────────
+CLOCK_PORT:   clk_PAD
+CLOCK_NET:    clk_pad/p2c
+CLOCK_PERIOD: 25
+
+# ── Floorplan: same 2400×2400 µm die; 365 µm pad offset ───────────
+FP_SIZING:  absolute
+DIE_AREA:   [0, 0, 2400, 2400]
+CORE_AREA:  [365, 365, 2035, 2035]
+
+PL_TARGET_DENSITY_PCT: 30
+GRT_ALLOW_CONGESTION:  true
+
+# ── PDN ────────────────────────────────────────────────────────────
+PDN_CORE_RING:              true
+PDN_CORE_RING_VWIDTH:       15
+PDN_CORE_RING_HWIDTH:       15
+PDN_CORE_RING_VSPACING:     5
+PDN_CORE_RING_HSPACING:     5
+PDN_CORE_RING_CONNECT_TO_PADS: true
+PDN_ENABLE_PINS:            false
+PDN_MACRO_CONNECTIONS:
+  - "u_svm_top.u_svm VDD VSS VPWR VGND"
+MAGIC_EXT_UNIQUE: notopports
+
+# ── Bondpads ───────────────────────────────────────────────────────
+PAD_BONDPAD_NAME: sg13g2_ip__bondpad_70x70
+EXTRA_GDS:
+  - dir::../ip/sg13g2_ip__bondpad_70x70/final/gds/sg13g2_ip__bondpad_70x70.gds
+EXTRA_LEFS:
+  - dir::../ip/sg13g2_ip__bondpad_70x70/final/lef/sg13g2_ip__bondpad_70x70.lef
+IGNORE_DISCONNECTED_MODULES:
+  - sg13g2_ip__bondpad_70x70
+
+# ── Custom sg13g2 I/O pad models (timing + LEF) ───────────────────
+PAD_LEFS:           dir::../ip/sg13g2_io_custom/lef/sg13g2_io.lef
+PAD_VERILOG_MODELS: dir::../ip/sg13g2_io_custom/verilog/sg13g2_io.v
+
+# ── Timing libraries ───────────────────────────────────────────────
+LIB:
+  "*_fast_1p32V_m40C":
+    - pdk_dir::libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_fast_1p32V_m40C.lib
+    - dir::../ip/sg13g2_io_custom/lib/sg13g2_io_fast_1p32V_3p6V_m40C.lib
+  "*_fast_1p65V_m40C":
+    - pdk_dir::libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_fast_1p65V_m40C.lib
+    - dir::../ip/sg13g2_io_custom/lib/sg13g2_io_fast_1p65V_3p6V_m40C.lib
+  "*_slow_1p08V_125C":
+    - pdk_dir::libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_slow_1p08V_125C.lib
+    - dir::../ip/sg13g2_io_custom/lib/sg13g2_io_slow_1p08V_3p0V_125C.lib
+  "*_typ_1p20V_25C":
+    - pdk_dir::libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_typ_1p20V_25C.lib
+    - dir::../ip/sg13g2_io_custom/lib/sg13g2_io_typ_1p2V_3p3V_25C.lib
+
+STA_CORNERS:
+  - nom_fast_1p32V_m40C
+  - nom_fast_1p65V_m40C
+  - nom_slow_1p08V_125C
+  - nom_typ_1p20V_25C
+
+DEFAULT_CORNER: nom_typ_1p20V_25C
+
+# ── Hardened macro: svm_compute_core ──────────────────────────────
+MACROS:
+  svm_compute_core:
+    gds:
+      - dir::../pnr/gds/svm_compute_core.gds
+    lef:
+      - dir::../pnr/gds/svm_compute_core.lef
+    vh:
+      - dir::../rt1/compute_core_bb.v
+    instances:
+      u_svm_top.u_svm:
+        location: [400, 400]
+        orientation: N
+
+pdk::ihp-sg13g2:
+  STD_CELL_LIBRARY: sg13g2_stdcell
+  RT_MAX_LAYER: Metal5
+  CLOCK_PERIOD: 25
