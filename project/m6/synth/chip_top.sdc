@@ -21,4 +21,4 @@ set_output_delay -clock clk -min 0.0                         [get_ports {spi_mis
 set_false_path -from [get_ports rst_n_PAD]
 
 # Pad timing — no timing through the pad cells themselves
-set_false_path -through [get_cells -hierarchical -filter {IS_SEQUENTIAL == 0 && REF_NAME =~ sg13g2_IOPad*}]
+set_false_path -from [get_ports *] -to [get_ports *]
