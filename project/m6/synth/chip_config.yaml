@@ -6,7 +6,6 @@ meta:
     KLayout.Antenna: null
     Checker.KLayoutAntenna: null
     OpenROAD.IRDropReport: null
-    KLayout.Filler: null
     Odb.SetPowerConnections: null
     Magic.DRC: null
 
