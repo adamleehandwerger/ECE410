@@ -11,6 +11,7 @@ meta:
 DESIGN_NAME: chip_top
 
 VERILOG_FILES:
+  - pdk_dir::libs.ref/sg13g2_io/verilog/sg13g2_io.v
   - dir::../rt1/chip_top.sv
   - dir::../rt1/top.sv
   - dir::../rt1/compute_core_bb.v
