@@ -103,8 +103,8 @@ SIGNOFF_SDC_FILE: dir::chip_top.sdc
 FALLBACK_SDC:     dir::chip_top.sdc
 
 # ── Power nets ─────────────────────────────────────────────────────
-VDD_NETS: ["VDD"]
-GND_NETS: ["VSS"]
+VDD_NETS: ["VDD", "IOVDD"]
+GND_NETS: ["VSS", "IOVSS"]
 
 # ── Clock (through pad) ────────────────────────────────────────────
 CLOCK_PORT:   clk_PAD
@@ -129,6 +129,8 @@ PDN_CORE_RING_CONNECT_TO_PADS: true
 PDN_ENABLE_PINS:            false
 PDN_MACRO_CONNECTIONS:
   - "u_svm_top.u_svm VDD VSS VPWR VGND"
+  - "* iovdd IOVDD iovss IOVSS"
+  - "* vdd VDD vss VSS"
 MAGIC_EXT_UNIQUE: notopports
 
 # ── Bondpads ───────────────────────────────────────────────────────
