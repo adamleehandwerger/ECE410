@@ -49,6 +49,18 @@ cp $ARTIFACTS/svm_compute_core.lef $GDS_STAGE/
 echo "--- git pull ---"
 git -C $SVM_M6 pull --ff-only || echo "WARNING: git pull failed, using local state"
 
+# Restore bondpad GDS from artifacts (git-lfs not available on Orca;
+# git pull replaces the real GDS with the LFS pointer stub)
+BONDPAD_GDS=$SVM_M6/project/m6/ip/sg13g2_ip__bondpad_70x70/final/gds/sg13g2_ip__bondpad_70x70.gds
+BONDPAD_CACHE=$ARTIFACTS/sg13g2_ip__bondpad_70x70.gds
+if [ -f "$BONDPAD_CACHE" ]; then
+    cp $BONDPAD_CACHE $BONDPAD_GDS
+    echo "Restored bondpad GDS from artifacts cache ($(ls -lh $BONDPAD_GDS | awk '{print $5}'))"
+else
+    echo "ERROR: bondpad GDS not in artifacts cache — run: scp <local>/sg13g2_ip__bondpad_70x70.gds orca:$BONDPAD_CACHE"
+    exit 1
+fi
+
 # ── Verify chip_config.yaml and chip_top.sv exist ─────────────────────
 ls -lh $DESIGN_DIR/chip_config.yaml
 ls -lh $DESIGN_DIR/chip_top.sdc
@@ -70,11 +82,18 @@ apptainer exec --bind /scratch,/tmp $LIBRELANE_SIF librelane --version 2>/dev/nu
 # ── Run LibreLane Chip flow ────────────────────────────────────────────
 RUN_DIR=$DESIGN_DIR/runs/chip_harden
 echo "--- Running chip_top Chip flow ---"
+RESUME_FLAG=""
+if [ -d "$RUN_DIR" ]; then
+    echo "Existing run found — resuming from last successful step"
+    RESUME_FLAG="--from-last-checkpoint"
+fi
+
 apptainer exec --bind /scratch,/tmp $LIBRELANE_SIF \
     librelane \
     --pdk ihp-sg13g2 \
     --run-tag chip_harden \
     --jobs $SLURM_CPUS_PER_TASK \
+    $RESUME_FLAG \
     $DESIGN_DIR/chip_config.yaml 2>&1
 
 echo "=== Chip harden done at $(date) ==="
