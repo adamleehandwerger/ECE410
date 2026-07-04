@@ -8,6 +8,7 @@ meta:
     OpenROAD.IRDropReport: null
     KLayout.Filler: null
     Odb.SetPowerConnections: null
+    Magic.DRC: null
 
 DESIGN_NAME: chip_top
 
