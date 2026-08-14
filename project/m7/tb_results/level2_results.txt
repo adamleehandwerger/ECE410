@@ -1,0 +1,9 @@
+Level-2 cocotb (direct RTL, TOPLEVEL=svm_compute_core) — recoded RTL (feature+alpha SRAM)
+test_reset_outputs      PASS
+test_param_programming  PASS
+test_sv_counts_flat     PASS
+test_default_gamma      PASS
+test_full_pipeline      PASS
+test_kernel_range       PASS
+test_multi_sample       PASS
+TESTS=7 PASS=7 FAIL=0
