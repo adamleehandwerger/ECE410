@@ -41,15 +41,16 @@ memory swap did not alter functional timing.
 
 ---
 
-## Pending (require cocotb — run in ORCA SIF)
+## Level 2 — cocotb Integration (complete) — 7/7 PASS
 
-Local run blocked by an arm64/x86 mismatch between Homebrew `iverilog` and the arm64 cocotb VPI
-(`libcocotbvpi_icarus.vpl` dlopen failure). These run in the librelane SIF on ORCA (`make sim`):
+Run locally against a **matched x86 cocotb 2.0.1 + iverilog** toolchain built under Rosetta — this
+resolves the arm64/x86 VPI `libcocotbvpi_icarus.vpl` dlopen failure that previously forced these to
+the ORCA SIF (timescale forced to 1ns/1ps via prepended `\`timescale` + COCOTB_HDL_TIMEUNIT).
 
-| Level | Suite | Status |
+| Level | Suite | Result |
 |-------|-------|--------|
-| L2 | `test_svm_compute_core.py` (direct RTL) | **7/7 PASS** (x86 cocotb 2.0.1 + matched iverilog, timescale 1ns/1ps) |
-| L4/5 | `tb_spi_cosim.py` (SPI cosim of `svm_top_ihp`) | **N/A for GF180** — tests the IHP top wrapper, not our `chip_core` bridge |
+| L2 | `test_svm_compute_core.py` (direct RTL, SRAM core) | **7/7 PASS** |
+| L4/5 | `tb_spi_cosim.py` (SPI cosim of `svm_top_ihp`) | **N/A for GF180** — IHP top wrapper; superseded by `test_chip_core_spi.py` below |
 
 **Top-level SPI for GF180 — `chip_core` bridge (new cocotb test `test_chip_core_spi.py`): 3/3 PASS.**
 The m6 `tb_spi_cosim`/`svm_top_ihp` is IHP-only and irrelevant. Wrote a dedicated cocotb test for
@@ -69,9 +70,22 @@ Note: `tb_top` (full-pipeline classification) needs regenerated trained vectors 
 
 ---
 
-## Summary
+## Summary — 24/24 PASS
 
-**14/14 iverilog tests pass** on the recoded RTL, including the two most sensitive to the memory
-swap (`tb_dist_zero` pipeline drain, `svm_ram_latency_tb` LAT=3). The `feature_bank`→SRAM and
-`alpha_table`→SRAM conversions are **functionally verified at the unit level with no timing change**.
-Remaining cocotb levels to be run in the ORCA SIF environment.
+| Level | Suite | Result |
+|-------|-------|--------|
+| L1 unit (iverilog) | 13 testbenches | **13/13 PASS** |
+| L2 integration (cocotb) | `test_svm_compute_core.py` | **7/7 PASS** |
+| L3 RAM latency (iverilog) | `svm_ram_latency_tb`, LAT=3 | **PASS** (208 cyc/beat, identical to m6) |
+| Top-level SPI (cocotb) | `test_chip_core_spi.py` | **3/3 PASS** |
+
+The `feature_bank`→SRAM and `alpha_table`→SRAM conversions are **fully verified**: functional at the
+unit and integration levels (L1+L2), timing-invariant (L3 — the 208 cyc/beat pacing is identical to
+the m6 register version), and the GF180 `chip_core` SPI bridge (byte protocol + register read/write +
+param path) is verified end-to-end (`test_chip_core_spi.py`). No functional regression from the memory
+swap.
+
+**SRAM selected (verified against the enabled `gf180mcuD` PDK):** 6× `gf180mcu_fd_ip_sram__sram512x8m8wm1`
+— alpha 4 (2 banks × 2 lanes), feature 2 (1 bank × 2 lanes). It is the only 5 V-characterized SRAM in
+the PDK (the denser `gf180mcu_ocd_ip_sram` 1024×8 is 3.3 V-only → no 5 V sign-off corner). Cycle time
+11.89 ns @ ss_125C_4v50 (5 V slow) vs the 40 ns / 25 MHz clock, so the LAT=3 `ram_beat` pacing is margin.
