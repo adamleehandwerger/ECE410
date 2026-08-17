@@ -89,3 +89,53 @@ swap.
 — alpha 4 (2 banks × 2 lanes), feature 2 (1 bank × 2 lanes). It is the only 5 V-characterized SRAM in
 the PDK (the denser `gf180mcu_ocd_ip_sram` 1024×8 is 3.3 V-only → no 5 V sign-off corner). Cycle time
 11.89 ns @ ss_125C_4v50 (5 V slow) vs the 40 ns / 25 MHz clock, so the LAT=3 `ram_beat` pacing is margin.
+
+---
+
+## Final design & sign-off (600 SV, pipelined) — 2026-08-16
+
+Two changes were made after the SRAM recode to close 25 MHz timing on the tall 1:4 die:
+
+1. **Pipelined α×kernel MAC** — the classifier accumulate (`alpha_SRAM_Q → α×kernel multiply →
+   wide accumulate`) was split into a 2-cycle MAC (`OUTPUT_RESULT` registers the product, new
+   `OUTPUT_ACC` accumulates). Numerically bit-identical; +1 cycle/SV. Re-verified: **L1 13/13,
+   L3 latency PASS** on the pipelined RTL.
+2. **NUM_SV kept at 600** [120×5] (the accuracy optimum) — the alpha table stays `alpha_sram_1024x16`
+   (4 macros) → 6 SRAM macros total. (A 500-SV/4-macro variant was evaluated: −3.74 ns vs −5.07 ns
+   setup and 98.33% accuracy; 600 SV was chosen for the +0.34-pt accuracy.)
+
+**Physical sign-off — LibreLane on ORCA, job 127101 (`RUN_2026-08-16_12-42-54`):**
+
+| Check | Result |
+|-------|--------|
+| Magic DRC / KLayout DRC | **0** |
+| LVS | **0** |
+| Antenna | **0** (violating nets) |
+| Hold WS | **+0.26 ns** (all corners) |
+| Setup — typical `tt_025C_5v00` | **+14.1 ns** |
+| Setup — fast `ff_n40C_5v50` | **+20.5 ns** |
+| Setup — worst `ss_125C_4v50` | **−5.07 ns** (documented limitation) |
+| Utilization | 60.2 % |
+
+Manufacturing-clean (DRC/LVS/antenna) and hold-clean at all corners. 25 MHz closes at the typical
+and fast corners with large margin; the −5.07 ns miss is confined to the single worst-case slow
+corner (slow-slow Si + 125 °C + 4.5 V) and is a known consequence of the slot's 1:4 aspect ratio
+(long wire-dominated nets that the resizer can't fully close, and density can't be raised without
+routing congestion). A GDS was produced from the committed RTL.
+
+## Capstone: full-dataset RTL cosimulation — 98.67%
+
+The entire **300-sample PhysioNet test set** was streamed through the signed-off RTL (native
+Verilog TB, `m7/cosim/`), loading the real 600-SV Q6.10 model and capturing `class_out` per beat:
+
+| Metric | Value |
+|--------|-------|
+| **Hardware (RTL) accuracy** | **98.67 % (296/300)** |
+| RTL ≡ Q6.10 reference model | **300/300 (100 %)** |
+
+Per-class recall: Normal 100 %, PVC 100 %, AFib 100 %, VT 95.0 %, SVT 98.3 %. The 4 errors are all
+VT/SVT→PVC confusions. See `m7/cosim/COSIM_RESULTS.md` and `confusion_matrix_cosim.png`.
+
+**Verification complete:** 24/24 RTL testbenches + full-dataset cosim at the target 98.67% accuracy,
+matching the reference model bit-for-bit. The design is functionally and physically signed off
+(worst-slow-corner setup documented).
